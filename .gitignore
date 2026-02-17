@@ -97,3 +97,16 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+
+# Additional crash and memory files
+*.mem
+*.blob
+*.dmp
+
+# Unity specific crash files
+mono_crash.*.json
+mono_crash.mem.*
+
+# Additional Unity generated files
+*.unitypackage.tmp
