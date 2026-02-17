@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
 
 [System.Serializable]
 public class DamageObject : MonoBehaviour
@@ -224,6 +226,9 @@ public class DamageObject : MonoBehaviour
             playerMovement.TakeDamageFromObject(damageAmount);
             lastDamageTime = Time.time;
             
+            // Create damage number
+            CreateDamageNumber(damageAmount, playerTransform.position + Vector3.up * 1.5f);
+            
             // Trigger callback for fire particle effects
             if (onPlayerHit != null)
             {
@@ -240,6 +245,9 @@ public class DamageObject : MonoBehaviour
             currentEnemy.TakeDamage(damageAmount);
             lastEnemyDamageTime = Time.time;
             
+            // Create damage number
+            CreateDamageNumber(damageAmount, currentEnemy.transform.position + Vector3.up * 1.5f);
+            
             // Trigger callback for weapon passives
             onEnemyHit?.Invoke();
         }
@@ -251,6 +259,9 @@ public class DamageObject : MonoBehaviour
         {
             currentPlayerSummon.TakeDamage(damageAmount);
             lastPlayerSummonDamageTime = Time.time;
+            
+            // Create damage number
+            CreateDamageNumber(damageAmount, currentPlayerSummon.transform.position + Vector3.up * 1.5f);
             
             Debug.Log($"DamageObject: Dealt {damageAmount} damage to PlayerSummon {currentPlayerSummon.name}");
             
@@ -289,5 +300,106 @@ public class DamageObject : MonoBehaviour
     public void SetDamageRate(float newRate)
     {
         damageRate = newRate;
+    }
+    
+    /// <summary>
+    /// Create floating damage number at the target position
+    /// </summary>
+    public static void CreateDamageNumber(int damage, Vector3 worldPosition)
+    {
+        // Create canvas for the damage number
+        GameObject damageNumberObj = new GameObject("DamageNumber");
+        damageNumberObj.transform.position = worldPosition;
+        
+        // Add Canvas component
+        Canvas canvas = damageNumberObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.worldCamera = Camera.main;
+        canvas.sortingLayerName = "UI";
+        canvas.sortingOrder = 1000; // Very high to appear above everything
+        
+        // Scale the canvas appropriately for world space
+        RectTransform canvasRect = damageNumberObj.GetComponent<RectTransform>();
+        canvasRect.sizeDelta = new Vector2(200, 100);
+        canvasRect.localScale = Vector3.one * 0.01f; // Scale down for world space
+        
+        // Create the text object
+        GameObject textObj = new GameObject("DamageText");
+        textObj.transform.SetParent(damageNumberObj.transform, false);
+        
+        // Add Text component
+        Text damageText = textObj.AddComponent<Text>();
+        damageText.text = damage.ToString();
+        damageText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        damageText.fontSize = 60; // Large size for visibility
+        damageText.color = Color.red; // Red damage numbers
+        damageText.alignment = TextAnchor.MiddleCenter;
+        damageText.fontStyle = FontStyle.Bold;
+        
+        // Add white outline using Outline component
+        Outline outline = textObj.AddComponent<Outline>();
+        outline.effectColor = Color.white;
+        outline.effectDistance = new Vector2(3, 3); // Thick white stroke
+        
+        // Set the text RectTransform
+        RectTransform textRect = textObj.GetComponent<RectTransform>();
+        textRect.sizeDelta = new Vector2(200, 100);
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+        
+        // Start the animation coroutine
+        MonoBehaviour coroutineRunner = Camera.main?.GetComponent<MonoBehaviour>();
+        if (coroutineRunner == null)
+        {
+            // Fallback: find any MonoBehaviour in scene
+            coroutineRunner = Object.FindObjectOfType<MonoBehaviour>();
+        }
+        
+        if (coroutineRunner != null)
+        {
+            coroutineRunner.StartCoroutine(AnimateDamageNumber(damageNumberObj, damageText));
+        }
+        else
+        {
+            // Fallback: just destroy after delay
+            Object.Destroy(damageNumberObj, 0.8f);
+        }
+    }
+    
+    /// <summary>
+    /// Animate the damage number with fade out and upward movement
+    /// </summary>
+    private static System.Collections.IEnumerator AnimateDamageNumber(GameObject damageObj, Text damageText)
+    {
+        float duration = 0.8f;
+        float elapsedTime = 0f;
+        
+        Vector3 startPos = damageObj.transform.position;
+        Vector3 endPos = startPos + Vector3.up * 1.5f; // Move up 1.5 units
+        
+        Color startColor = damageText.color;
+        Outline outline = damageText.GetComponent<Outline>();
+        Color startOutlineColor = outline.effectColor;
+        
+        while (elapsedTime < duration)
+        {
+            float t = elapsedTime / duration;
+            
+            // Move upward
+            damageObj.transform.position = Vector3.Lerp(startPos, endPos, t);
+            
+            // Fade out
+            float alpha = 1f - t;
+            damageText.color = new Color(startColor.r, startColor.g, startColor.b, alpha);
+            outline.effectColor = new Color(startOutlineColor.r, startOutlineColor.g, startOutlineColor.b, alpha);
+            
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+        
+        // Destroy the damage number
+        Object.Destroy(damageObj);
     }
 }

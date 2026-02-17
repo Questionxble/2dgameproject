@@ -594,15 +594,16 @@ public class AttackDummy : MonoBehaviour
         
         Debug.Log($"AttackDummy: Attack damage setup - can hit enemies on Entities layer, excludes Player/PlayerSummon layers");
         
-        // Visual indicator (red damage box like enemies)
+        // Visual indicator (red damage box like enemies) - COMMENTED OUT FOR INVISIBILITY
         SpriteRenderer attackRenderer = attack.AddComponent<SpriteRenderer>();
         
-        // Create red attack sprite
+        // Create red attack sprite - COMMENTED OUT FOR INVISIBILITY
         Texture2D attackTexture = new Texture2D(32, 32);
         Color[] pixels = new Color[32 * 32];
         for (int i = 0; i < pixels.Length; i++)
         {
-            pixels[i] = new Color(0f, 0.8f, 1f, 0.7f); // Blue color to distinguish from enemy attacks
+            // pixels[i] = new Color(0f, 0.8f, 1f, 0.7f); // Blue color to distinguish from enemy attacks - VISIBLE
+            pixels[i] = new Color(0f, 0.8f, 1f, 0f); // Fully transparent (invisible)
         }
         attackTexture.SetPixels(pixels);
         attackTexture.Apply();

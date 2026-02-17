@@ -1291,17 +1291,18 @@ public class WeaponClassController : MonoBehaviour
         // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
         damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
         
-        // Visual indicator (temporary - will be replaced with graphics later)
+        // Visual indicator (temporary - will be replaced with graphics later) - COMMENTED OUT FOR INVISIBILITY
         SpriteRenderer swordRenderer = swordAttack.AddComponent<SpriteRenderer>();
         
-        // Create larger red rectangle sprite for sword attack (scaled to match collider)
+        // Create larger red rectangle sprite for sword attack (scaled to match collider) - COMMENTED OUT FOR INVISIBILITY
         int textureWidth = Mathf.RoundToInt(swordWidth * 64); // Scale texture based on collider width
         int textureHeight = Mathf.RoundToInt(swordHeight * 32); // Scale texture based on collider height
         Texture2D swordTexture = new Texture2D(textureWidth, textureHeight);
         Color[] pixels = new Color[textureWidth * textureHeight];
         for (int i = 0; i < pixels.Length; i++)
         {
-            pixels[i] = new Color(1f, 0f, 0f, 0.7f); // Semi-transparent red, more visible
+            // pixels[i] = new Color(1f, 0f, 0f, 0.7f); // Semi-transparent red, more visible - VISIBLE
+            pixels[i] = new Color(1f, 0f, 0f, 0f); // Fully transparent (invisible)
         }
         swordTexture.SetPixels(pixels);
         swordTexture.Apply();
@@ -1452,13 +1453,14 @@ public class WeaponClassController : MonoBehaviour
             // Fallback: Use sprite renderer for static sprite
             SpriteRenderer blockRenderer = waveBlock.AddComponent<SpriteRenderer>();
             
-            // Fallback: Create texture scaled to match collider size
+            // Fallback: Create texture scaled to match collider size - COMMENTED OUT FOR INVISIBILITY
             int textureSize = Mathf.RoundToInt(waveBlockSize * 80);
             Texture2D blockTexture = new Texture2D(textureSize, textureSize);
             Color[] pixels = new Color[textureSize * textureSize];
             for (int i = 0; i < pixels.Length; i++)
             {
-                pixels[i] = new Color(1f, 0.8f, 0f, 0.9f); // Golden yellow
+                // pixels[i] = new Color(1f, 0.8f, 0f, 0.9f); // Golden yellow - VISIBLE
+                pixels[i] = new Color(1f, 0.8f, 0f, 0f); // Fully transparent (invisible)
             }
             blockTexture.SetPixels(pixels);
             blockTexture.Apply();
@@ -1717,17 +1719,18 @@ public class WeaponClassController : MonoBehaviour
         // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
         damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
         
-        // Visual indicator (blue for dagger)
+        // Visual indicator (blue for dagger) - COMMENTED OUT FOR INVISIBILITY
         SpriteRenderer daggerRenderer = daggerAttack.AddComponent<SpriteRenderer>();
         
-        // Create larger texture scaled to match collider size
+        // Create larger texture scaled to match collider size - COMMENTED OUT FOR INVISIBILITY
         int textureWidth = Mathf.RoundToInt(daggerWidth * 64);
         int textureHeight = Mathf.RoundToInt(daggerHeight * 64);
         Texture2D daggerTexture = new Texture2D(textureWidth, textureHeight);
         Color[] pixels = new Color[textureWidth * textureHeight];
         for (int i = 0; i < pixels.Length; i++)
         {
-            pixels[i] = new Color(0f, 0.5f, 1f, 0.8f); // Blue color for dagger, more visible
+            // pixels[i] = new Color(0f, 0.5f, 1f, 0.8f); // Blue color for dagger, more visible - VISIBLE
+            pixels[i] = new Color(0f, 0.5f, 1f, 0f); // Fully transparent (invisible)
         }
         daggerTexture.SetPixels(pixels);
         daggerTexture.Apply();
@@ -2214,14 +2217,15 @@ public class WeaponClassController : MonoBehaviour
         }
         else
         {
-            // Fallback: Create texture scaled to match collider size
+            // Fallback: Create texture scaled to match collider size - COMMENTED OUT FOR INVISIBILITY
             int textureWidth = Mathf.RoundToInt(projectileWidth * 80);
             int textureHeight = Mathf.RoundToInt(projectileHeight * 80);
             Texture2D projectileTexture = new Texture2D(textureWidth, textureHeight);
             Color[] pixels = new Color[textureWidth * textureHeight];
             for (int i = 0; i < pixels.Length; i++)
             {
-                pixels[i] = new Color(0f, 0.7f, 1f, 0.9f); // Bright blue for projectile
+                // pixels[i] = new Color(0f, 0.7f, 1f, 0.9f); // Bright blue for projectile - VISIBLE
+                pixels[i] = new Color(0f, 0.7f, 1f, 0f); // Fully transparent (invisible)
             }
             projectileTexture.SetPixels(pixels);
             projectileTexture.Apply();
@@ -2740,13 +2744,14 @@ public class WeaponClassController : MonoBehaviour
             }
             else
         {
-            // Fallback: Create texture scaled to impact area
+            // Fallback: Create texture scaled to impact area - COMMENTED OUT FOR INVISIBILITY
             int impactTextureSize = Mathf.RoundToInt(2f * 80);
             Texture2D impactTexture = new Texture2D(impactTextureSize, impactTextureSize);
             Color[] pixels = new Color[impactTextureSize * impactTextureSize];
             for (int i = 0; i < pixels.Length; i++)
             {
-                pixels[i] = new Color(1f, 1f, 0f, 0.8f); // Yellow impact
+                // pixels[i] = new Color(1f, 1f, 0f, 0.8f); // Yellow impact - VISIBLE
+                pixels[i] = new Color(1f, 1f, 0f, 0f); // Fully transparent (invisible)
             }
             impactTexture.SetPixels(pixels);
             impactTexture.Apply();
@@ -3578,14 +3583,15 @@ public class WeaponClassController : MonoBehaviour
         // Visual indicator (semi-transparent gold for thrust attack)
         SpriteRenderer thrustRenderer = damageZone.AddComponent<SpriteRenderer>();
         
-        // Create gold rectangle sprite for thrust attack (scaled to match collider)
+        // Create gold rectangle sprite for thrust attack (scaled to match collider) - COMMENTED OUT FOR INVISIBILITY
         int textureWidth = Mathf.RoundToInt(thrustDamageWidth * 64); 
         int textureHeight = Mathf.RoundToInt(thrustDamageHeight * 64); 
         Texture2D thrustTexture = new Texture2D(textureWidth, textureHeight);
         Color[] pixels = new Color[textureWidth * textureHeight];
         for (int i = 0; i < pixels.Length; i++)
         {
-            pixels[i] = new Color(1f, 0.8f, 0f, 0.7f); // Golden color for thrust attack
+            // pixels[i] = new Color(1f, 0.8f, 0f, 0.7f); // Golden color for thrust attack - VISIBLE
+            pixels[i] = new Color(1f, 0.8f, 0f, 0f); // Fully transparent (invisible)
         }
         thrustTexture.SetPixels(pixels);
         thrustTexture.Apply();

@@ -1701,6 +1701,9 @@ public class DragonBoss : MonoBehaviour
         currentHealth -= damage;
         currentHealth = Mathf.Max(0, currentHealth);
         
+        // Create damage number
+        DamageObject.CreateDamageNumber(damage, transform.position + Vector3.up * 2f);
+        
         // Update health bar target
         targetFillAmount = (float)currentHealth / maxHealth;
         
@@ -1871,6 +1874,10 @@ public class DragonBoss : MonoBehaviour
         lastFireBreathTime = 0f;
         lastFlyingAttackTime = 0f;
         lastJumpTime = 0f;
+        
+        // Reset flyover count to original value
+        flyOverCount = baseFlyOverCount;
+        Debug.Log($"DragonBoss: Respawned - flyover count reset to original value {baseFlyOverCount}");
         
         // Restore original appearance
         if (spriteRenderer != null)

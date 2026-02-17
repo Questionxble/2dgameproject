@@ -612,15 +612,16 @@ public class EnemyBehavior : MonoBehaviour
         
         damageComponent.excludeLayers = excludeMask;
         
-        // Visual indicator (temporary - will be replaced with graphics later)
+        // Visual indicator (temporary - will be replaced with graphics later) - COMMENTED OUT FOR INVISIBILITY
         SpriteRenderer attackRenderer = attack.AddComponent<SpriteRenderer>();
         
-        // Create red attack sprite
+        // Create red attack sprite - COMMENTED OUT FOR INVISIBILITY
         Texture2D attackTexture = new Texture2D(32, 32);
         Color[] pixels = new Color[32 * 32];
         for (int i = 0; i < pixels.Length; i++)
         {
-            pixels[i] = new Color(1f, 0.3f, 0f, 0.7f); // Orange-red color
+            // pixels[i] = new Color(1f, 0.3f, 0f, 0.7f); // Orange-red color - VISIBLE
+            pixels[i] = new Color(1f, 0.3f, 0f, 0f); // Fully transparent (invisible)
         }
         attackTexture.SetPixels(pixels);
         attackTexture.Apply();
@@ -675,6 +676,9 @@ public class EnemyBehavior : MonoBehaviour
         
         currentHealth -= damage;
         currentHealth = Mathf.Max(0, currentHealth);
+        
+        // Create damage number
+        DamageObject.CreateDamageNumber(damage, transform.position + Vector3.up * 1.5f);
         
         // Update health bar display
         UpdateHealthBar();
