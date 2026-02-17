@@ -1,0 +1,654 @@
+fileFormatVersion: 2
+guid: 49d69d9b2cd5849b3a3c3bf8cbd339a5
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -1792888629317134145
+    second: Electric_Explosion_0
+  - first:
+      213: 6847289609114090438
+    second: Electric_Explosion_1
+  - first:
+      213: -2377969269469492126
+    second: Electric_Explosion_2
+  - first:
+      213: 2133978654509973639
+    second: Electric_Explosion_3
+  - first:
+      213: -534103200005170200
+    second: Electric_Explosion_4
+  - first:
+      213: 6355077335953433797
+    second: Electric_Explosion_5
+  - first:
+      213: -754658946683514544
+    second: Electric_Explosion_6
+  - first:
+      213: 4192276162097734572
+    second: Electric_Explosion_7
+  - first:
+      213: 8626354530874692196
+    second: Electric_Explosion_8
+  - first:
+      213: 5008193042559279001
+    second: Electric_Explosion_9
+  - first:
+      213: 4024227018524498286
+    second: Electric_Explosion_10
+  - first:
+      213: -1270567789708843782
+    second: Electric_Explosion_11
+  - first:
+      213: -5691751667087080213
+    second: Electric_Explosion_12
+  - first:
+      213: -5815851842300936459
+    second: Electric_Explosion_13
+  - first:
+      213: -8502414494457919834
+    second: Electric_Explosion_14
+  - first:
+      213: -4709323936842866732
+    second: Electric_Explosion_15
+  - first:
+      213: 4746248106320406314
+    second: Electric_Explosion_16
+  - first:
+      213: 4591871128973620772
+    second: Electric_Explosion_17
+  - first:
+      213: 8013580528537144160
+    second: Electric_Explosion_18
+  - first:
+      213: -3009227764275005093
+    second: Electric_Explosion_19
+  - first:
+      213: -4490547068902866786
+    second: Electric_Explosion_20
+  - first:
+      213: 8322477864283467182
+    second: Electric_Explosion_21
+  - first:
+      213: 39845255107465132
+    second: Electric_Explosion_22
+  - first:
+      213: -987390985259207428
+    second: Electric_Explosion_23
+  - first:
+      213: -4136645111627758558
+    second: Electric_Explosion_24
+  - first:
+      213: -1709229316519758727
+    second: Electric_Explosion_25
+  - first:
+      213: 4697692775535455699
+    second: Electric_Explosion_26
+  - first:
+      213: 8859255135232338883
+    second: Electric_Explosion_27
+  - first:
+      213: 8135158414260044928
+    second: Electric_Explosion_28
+  - first:
+      213: 8236799090537898567
+    second: Electric_Explosion_29
+  - first:
+      213: 106384797620726716
+    second: Electric_Explosion_30
+  - first:
+      213: 6315642479060952969
+    second: Electric_Explosion_31
+  - first:
+      213: -8046350046900049999
+    second: Electric_Explosion_32
+  - first:
+      213: 627044706488773377
+    second: Electric_Explosion_33
+  - first:
+      213: 6097103796748823856
+    second: Electric_Explosion_34
+  - first:
+      213: 5148000389100622180
+    second: Electric_Explosion_35
+  - first:
+      213: 8770068045796814587
+    second: Electric_Explosion_36
+  - first:
+      213: -5184340611029356697
+    second: Electric_Explosion_37
+  - first:
+      213: 3440411883665060669
+    second: Electric_Explosion_38
+  - first:
+      213: -7321174873196382603
+    second: Electric_Explosion_39
+  - first:
+      213: -2372077785756215319
+    second: Electric_Explosion_40
+  - first:
+      213: -2311346128875142506
+    second: Electric_Explosion_41
+  - first:
+      213: 6981293888430548419
+    second: Electric_Explosion_42
+  - first:
+      213: -8650325226314656694
+    second: Electric_Explosion_43
+  - first:
+      213: 5312759049087100433
+    second: Electric_Explosion_44
+  - first:
+      213: 444150877486481174
+    second: Electric_Explosion_45
+  - first:
+      213: -6577300040349654720
+    second: Electric_Explosion_46
+  - first:
+      213: -8441037085326030421
+    second: Electric_Explosion_47
+  - first:
+      213: 8459160708748270120
+    second: Electric_Explosion_48
+  - first:
+      213: 6968716937832161649
+    second: Electric_Explosion_49
+  - first:
+      213: -8348519059640348123
+    second: Electric_Explosion_50
+  - first:
+      213: 8865639736427109309
+    second: Electric_Explosion_51
+  - first:
+      213: 7882913182565334310
+    second: Electric_Explosion_52
+  - first:
+      213: 913833133461591430
+    second: Electric_Explosion_53
+  - first:
+      213: 2162488626369582103
+    second: Electric_Explosion_54
+  - first:
+      213: -3625101803395500286
+    second: Electric_Explosion_55
+  - first:
+      213: -8536052290239485743
+    second: Electric_Explosion_56
+  - first:
+      213: -926791379241664708
+    second: Electric_Explosion_57
+  - first:
+      213: 6274273841887549205
+    second: Electric_Explosion_58
+  - first:
+      213: -3938316336384480874
+    second: Electric_Explosion_59
+  - first:
+      213: 8737796335567136694
+    second: Electric_Explosion_60
+  - first:
+      213: -6098514677507493176
+    second: Electric_Explosion_61
+  - first:
+      213: -3845106537045968986
+    second: Electric_Explosion_62
+  - first:
+      213: -8215864772676481523
+    second: Electric_Explosion_63
+  - first:
+      213: 3318454757998932521
+    second: Electric_Explosion_64
+  - first:
+      213: -3804015973211086605
+    second: Electric_Explosion_65
+  - first:
+      213: -3015994015251729190
+    second: Electric_Explosion_66
+  - first:
+      213: -4087163368904954489
+    second: Electric_Explosion_67
+  - first:
+      213: -214275846347890874
+    second: Electric_Explosion_68
+  - first:
+      213: 937861393890781244
+    second: Electric_Explosion_69
+  - first:
+      213: 7669979749567243883
+    second: Electric_Explosion_70
+  - first:
+      213: 5190352974114200537
+    second: Electric_Explosion_71
+  - first:
+      213: 4405703399538598921
+    second: Electric_Explosion_72
+  - first:
+      213: -7976911152288203128
+    second: Electric_Explosion_73
+  - first:
+      213: 275123558552734951
+    second: Electric_Explosion_74
+  - first:
+      213: -4519211223045526632
+    second: Electric_Explosion_75
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 0
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 37
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: Electric_Explosion_2
+      rect:
+        serializedVersion: 2
+        x: 1562
+        y: 75
+        width: 185
+        height: 100
+      alignment: 9
+      pivot: {x: 0.49248508, y: 0.5556076}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 26cc9766c81cffed0800000000000000
+      internalID: -2377969269469492126
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_8
+      rect:
+        serializedVersion: 2
+        x: 671
+        y: 94
+        width: 95
+        height: 57
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4621e5fcdb7f6b770800000000000000
+      internalID: 8626354530874692196
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_12
+      rect:
+        serializedVersion: 2
+        x: 1092
+        y: 77
+        width: 153
+        height: 85
+      alignment: 9
+      pivot: {x: 0.4999992, y: 0.56542104}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: be48985d306d201b0800000000000000
+      internalID: -5691751667087080213
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_14
+      rect:
+        serializedVersion: 2
+        x: 1312
+        y: 75
+        width: 170
+        height: 90
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5926795}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6a604b4a01b510a80800000000000000
+      internalID: -8502414494457919834
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_16
+      rect:
+        serializedVersion: 2
+        x: 1806
+        y: 67
+        width: 200
+        height: 110
+      alignment: 9
+      pivot: {x: 0.5, y: 0.56319064}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a272919818f0ed140800000000000000
+      internalID: 4746248106320406314
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_19
+      rect:
+        serializedVersion: 2
+        x: 2048
+        y: 65
+        width: 200
+        height: 110
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5631905}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b59352eba431d36d0800000000000000
+      internalID: -3009227764275005093
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_22
+      rect:
+        serializedVersion: 2
+        x: 97
+        y: 105
+        width: 33
+        height: 30
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: caf4aa46c0f8d8000800000000000000
+      internalID: 39845255107465132
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_23
+      rect:
+        serializedVersion: 2
+        x: 284
+        y: 100
+        width: 53
+        height: 36
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cf4b33d51251c42f0800000000000000
+      internalID: -987390985259207428
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_25
+      rect:
+        serializedVersion: 2
+        x: 457
+        y: 100
+        width: 75
+        height: 41
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 974f7251ef89748e0800000000000000
+      internalID: -1709229316519758727
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Electric_Explosion_28
+      rect:
+        serializedVersion: 2
+        x: 883
+        y: 85
+        width: 110
+        height: 66
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0840081d973e5e070800000000000000
+      internalID: 8135158414260044928
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 44fa8e1d49f494c01a5f88d5b0b4c6ef
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      Electric_Explosion_0: -1792888629317134145
+      Electric_Explosion_1: 6847289609114090438
+      Electric_Explosion_10: 4024227018524498286
+      Electric_Explosion_11: -1270567789708843782
+      Electric_Explosion_12: -5691751667087080213
+      Electric_Explosion_13: -5815851842300936459
+      Electric_Explosion_14: -8502414494457919834
+      Electric_Explosion_15: -4709323936842866732
+      Electric_Explosion_16: 4746248106320406314
+      Electric_Explosion_17: 4591871128973620772
+      Electric_Explosion_18: 8013580528537144160
+      Electric_Explosion_19: -3009227764275005093
+      Electric_Explosion_2: -2377969269469492126
+      Electric_Explosion_20: -4490547068902866786
+      Electric_Explosion_21: 8322477864283467182
+      Electric_Explosion_22: 39845255107465132
+      Electric_Explosion_23: -987390985259207428
+      Electric_Explosion_24: -4136645111627758558
+      Electric_Explosion_25: -1709229316519758727
+      Electric_Explosion_26: 4697692775535455699
+      Electric_Explosion_27: 8859255135232338883
+      Electric_Explosion_28: 8135158414260044928
+      Electric_Explosion_29: 8236799090537898567
+      Electric_Explosion_3: 2133978654509973639
+      Electric_Explosion_30: 106384797620726716
+      Electric_Explosion_31: 6315642479060952969
+      Electric_Explosion_32: -8046350046900049999
+      Electric_Explosion_33: 627044706488773377
+      Electric_Explosion_34: 6097103796748823856
+      Electric_Explosion_35: 5148000389100622180
+      Electric_Explosion_36: 8770068045796814587
+      Electric_Explosion_37: -5184340611029356697
+      Electric_Explosion_38: 3440411883665060669
+      Electric_Explosion_39: -7321174873196382603
+      Electric_Explosion_4: -534103200005170200
+      Electric_Explosion_40: -2372077785756215319
+      Electric_Explosion_41: -2311346128875142506
+      Electric_Explosion_42: 6981293888430548419
+      Electric_Explosion_43: -8650325226314656694
+      Electric_Explosion_44: 5312759049087100433
+      Electric_Explosion_45: 444150877486481174
+      Electric_Explosion_46: -6577300040349654720
+      Electric_Explosion_47: -8441037085326030421
+      Electric_Explosion_48: 8459160708748270120
+      Electric_Explosion_49: 6968716937832161649
+      Electric_Explosion_5: 6355077335953433797
+      Electric_Explosion_50: -8348519059640348123
+      Electric_Explosion_51: 8865639736427109309
+      Electric_Explosion_52: 7882913182565334310
+      Electric_Explosion_53: 913833133461591430
+      Electric_Explosion_54: 2162488626369582103
+      Electric_Explosion_55: -3625101803395500286
+      Electric_Explosion_56: -8536052290239485743
+      Electric_Explosion_57: -926791379241664708
+      Electric_Explosion_58: 6274273841887549205
+      Electric_Explosion_59: -3938316336384480874
+      Electric_Explosion_6: -754658946683514544
+      Electric_Explosion_60: 8737796335567136694
+      Electric_Explosion_61: -6098514677507493176
+      Electric_Explosion_62: -3845106537045968986
+      Electric_Explosion_63: -8215864772676481523
+      Electric_Explosion_64: 3318454757998932521
+      Electric_Explosion_65: -3804015973211086605
+      Electric_Explosion_66: -3015994015251729190
+      Electric_Explosion_67: -4087163368904954489
+      Electric_Explosion_68: -214275846347890874
+      Electric_Explosion_69: 937861393890781244
+      Electric_Explosion_7: 4192276162097734572
+      Electric_Explosion_70: 7669979749567243883
+      Electric_Explosion_71: 5190352974114200537
+      Electric_Explosion_72: 4405703399538598921
+      Electric_Explosion_73: -7976911152288203128
+      Electric_Explosion_74: 275123558552734951
+      Electric_Explosion_75: -4519211223045526632
+      Electric_Explosion_8: 8626354530874692196
+      Electric_Explosion_9: 5008193042559279001
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

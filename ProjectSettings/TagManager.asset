@@ -1,0 +1,70 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!78 &1
+TagManager:
+  serializedVersion: 3
+  tags:
+  - OneWayPlatform
+  - Water
+  - Door
+  - FallingPlatform
+  - Switch
+  - Trigger
+  - Teleporter
+  - Checkpoint
+  - WhisperShard
+  - StormShard
+  - ValorShard
+  - Enemy
+  - PlayerSummon
+  layers:
+  - Default
+  - TransparentFX
+  - Ignore Raycast
+  - Ground
+  - Water
+  - UI
+  - Player
+  - Entities
+  - NPC
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  m_SortingLayers:
+  - name: Background
+    uniqueID: 489980507
+    locked: 0
+  - name: Default
+    uniqueID: 0
+    locked: 1
+  - name: Entities
+    uniqueID: 3336826925
+    locked: 0
+  - name: Player
+    uniqueID: 3322507321
+    locked: 0
+  - name: Foreground
+    uniqueID: 1617858225
+    locked: 0
+  m_RenderingLayers:
+  - Default
