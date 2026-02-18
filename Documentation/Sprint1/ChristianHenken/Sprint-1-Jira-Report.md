@@ -2,31 +2,32 @@ Sprint 1
 
 | Metric                           | Count |
 |----------------------------------|-------|
-| Issues committed at sprint start |   0   |
+| Issues committed at sprint start |   5   |
 | Issues completed                 |   2   |
-| Issues not completed             |   _   |
-| Issues added mid-sprint          |   _   |
+| Issues not completed             |   12  |
+| Issues added mid-sprint          |   9   |
 
 Issue Breakdown By Type:
 |  Type    |  To Do  |  In Progress  |   Done   |
 |----------|---------|---------------|----------|
-|  Story   |    _    |       _       |    _     |
-|  Task    |    _    |       _       |    _     |
-|  Bug     |    _    |       _       |    _     |
-|  Feature |    _    |       _       |    _     |
+|  Story   |    2    |       3       |    1     |
+|  Task    |    0    |       0       |    0     |
+|  Bug     |    1    |       1       |    0     |
+|  Feature |    3    |       2       |    1     |
 
 Per-Student Work Allocation:
 |  Student.    |  Issues Assigned  |  Issues Completed  |
 |--------------|-------------------|--------------------|
-| Chris Henk   |         _         |         _          |
-| Chris Hern   |         _         |         _          |
+| Chris Henk   |         0         |         0          |
+| Chris Hern   |         1         |         1          |
+(The boss, nor any of Christian Henken's other features, weren't issues recorded in the jira because we were uncertain of which jira we were gonna be using due to ownership transfer)(Christian Hernandez's game menu issue was created before this sprint, and it wasn't properly updated, so I marked it done since it is complete in-game).
 
 Estimation and Accuracy:
 | Metric                           | Value |
 |----------------------------------|-------|
-| Total story points committed     |   0   |
+| Total story points committed     |   6   |
 | Total story points completed     |   2   |
-| Completion %                     |   _   |
+| Completion %                     |  33%  |
 
 Workflow Discipline:
 

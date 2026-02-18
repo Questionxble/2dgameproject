@@ -39,7 +39,8 @@ Why: Because testing these would require complex UI prefabs, which is too comple
 Why: Similarly to above, these tests would require animator prefabs and sprite assets which I would need to import externally. Too complex for the worth of the tests.
 
 --  Evidence --
-Link: 
+Edit mode tests report: https://github.com/Questionxble/2dgameproject/blob/main/Documentation/Sprint1/ChristianHenken/EditModeTests.html
+Play mode tests report: https://github.com/Questionxble/2dgameproject/blob/main/Documentation/Sprint1/ChristianHenken/PlayModeTests.html
 
 --  Statement of Integrity --
 This coverage was generated from automated tests executed during this sprint.
