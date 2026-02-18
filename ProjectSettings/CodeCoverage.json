@@ -1,0 +1,19 @@
+{
+  "enableCodeCoverage": true,
+  "generateAdditionalMetrics": true,
+  "generateBadgeReport": true,
+  "generateHtmlReport": true,
+  "pathFilters": [
+    "+Assets/Scripts/**",
+    "+Assets/*.cs",
+    "-Assets/Tests/**",
+    "-Assets/**/Tests/**",
+    "-**/Editor/**",
+    "-**/Plugins/**"
+  ],
+  "assemblyFilters": [
+    "+Assembly-CSharp",
+    "+Tests.*",
+    "-Unity.*"
+  ]
+}

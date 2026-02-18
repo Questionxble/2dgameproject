@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CoverageReport scope="Summary">
+  <Summary>
+    <Generatedon>2/17/2026 - 6:55:04 PM</Generatedon>
+    <Parser>MultiReportParser (4x OpenCoverParser)</Parser>
+    <Assemblies>4</Assemblies>
+    <Classes>45</Classes>
+    <Files>24</Files>
+    <Coveredlines>1541</Coveredlines>
+    <Uncoveredlines>7462</Uncoveredlines>
+    <Coverablelines>9003</Coverablelines>
+    <Totallines>15013</Totallines>
+    <Linecoverage>17.1</Linecoverage>
+    <Coveredbranches>0</Coveredbranches>
+    <Totalbranches>0</Totalbranches>
+    <Coveredmethods>146</Coveredmethods>
+    <Totalmethods>615</Totalmethods>
+    <Methodcoverage>23.7</Methodcoverage>
+  </Summary>
+  <Coverage>
+    <Assembly name="Game" classes="33" coverage="12.4" coveredlines="1040" coverablelines="8321" totallines="63588" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="54" totalmethods="493" methodcoverage="10.9">
+      <Class name="AttackDummy" coverage="23.4" coveredlines="141" coverablelines="602" totallines="1017" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="8" totalmethods="33" methodcoverage="24.2" />
+      <Class name="AttackTrigger" coverage="47.6" coveredlines="10" coverablelines="21" totallines="1017" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="2" totalmethods="2" methodcoverage="100" />
+      <Class name="BuffTooltipHandler" coverage="0" coveredlines="0" coverablelines="19" totallines="2464" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="3" methodcoverage="0" />
+      <Class name="CameraFollow" coverage="11.2" coveredlines="12" coverablelines="107" totallines="179" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="1" totalmethods="8" methodcoverage="12.5" />
+      <Class name="DaggerCleanup" coverage="0" coveredlines="0" coverablelines="6" totallines="4535" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="1" methodcoverage="0" />
+      <Class name="DaggerGroundCollision" coverage="0" coveredlines="0" coverablelines="33" totallines="4535" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="5" methodcoverage="0" />
+      <Class name="DaggerRotationController" coverage="0" coveredlines="0" coverablelines="10" totallines="4535" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="2" methodcoverage="0" />
+      <Class name="DamageObject" coverage="5.5" coveredlines="14" coverablelines="252" totallines="405" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="1" totalmethods="15" methodcoverage="6.6" />
+      <Class name="DragonBoss" coverage="14.3" coveredlines="182" coverablelines="1270" totallines="2129" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="11" totalmethods="64" methodcoverage="17.1" />
+      <Class name="EnemyBehavior" coverage="5.3" coveredlines="33" coverablelines="615" totallines="978" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="2" totalmethods="32" methodcoverage="6.2" />
+      <Class name="EnemyThrustAnchor" coverage="0" coveredlines="0" coverablelines="1" totallines="4535" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="1" methodcoverage="0" />
+      <Class name="EnvironmentCheckpoint" coverage="0" coveredlines="0" coverablelines="17" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="3" methodcoverage="0" />
+      <Class name="EnvironmentDoor" coverage="0" coveredlines="0" coverablelines="158" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="10" methodcoverage="0" />
+      <Class name="EnvironmentFallingPlatform" coverage="0" coveredlines="0" coverablelines="310" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="12" methodcoverage="0" />
+      <Class name="EnvironmentSwitch" coverage="0" coveredlines="0" coverablelines="18" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="3" methodcoverage="0" />
+      <Class name="EnvironmentTeleporter" coverage="0" coveredlines="0" coverablelines="17" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="3" methodcoverage="0" />
+      <Class name="EnvironmentTrigger" coverage="0" coveredlines="0" coverablelines="18" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="3" methodcoverage="0" />
+      <Class name="FallingPlatformTrigger" coverage="0" coveredlines="0" coverablelines="12" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="2" methodcoverage="0" />
+      <Class name="FireBlockFollower" coverage="0" coveredlines="0" coverablelines="21" totallines="2129" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="3" methodcoverage="0" />
+      <Class name="FireBreathParticleSpawner" coverage="0" coveredlines="0" coverablelines="101" totallines="178" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="7" methodcoverage="0" />
+      <Class name="FixedBackground" coverage="0" coveredlines="0" coverablelines="119" totallines="177" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="8" methodcoverage="0" />
+      <Class name="FlyingDamageFollower" coverage="0" coveredlines="0" coverablelines="21" totallines="2129" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="3" methodcoverage="0" />
+      <Class name="GameController" coverage="3.4" coveredlines="1" coverablelines="29" totallines="63" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="1" totalmethods="9" methodcoverage="11.1" />
+      <Class name="IndividualBuffTooltipHandler" coverage="0" coveredlines="0" coverablelines="16" totallines="2464" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="3" methodcoverage="0" />
+      <Class name="Ladder" coverage="3.6" coveredlines="4" coverablelines="109" totallines="223" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="1" totalmethods="13" methodcoverage="7.6" />
+      <Class name="ObjectBehaviorController" coverage="4" coveredlines="5" coverablelines="122" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="1" totalmethods="17" methodcoverage="5.8" />
+      <Class name="OneWayPlatform" coverage="0" coveredlines="0" coverablelines="14" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="2" methodcoverage="0" />
+      <Class name="PlayerMovement" coverage="33.1" coveredlines="483" coverablelines="1455" totallines="2464" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="25" totalmethods="83" methodcoverage="30.1" />
+      <Class name="ThrustDamageObject" coverage="0" coveredlines="0" coverablelines="6" totallines="4535" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="1" methodcoverage="0" />
+      <Class name="Water" coverage="0" coveredlines="0" coverablelines="71" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="7" methodcoverage="0" />
+      <Class name="WaterProperties" coverage="0" coveredlines="0" coverablelines="9" totallines="1257" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="1" methodcoverage="0" />
+      <Class name="WaveBlockComponent" coverage="0" coveredlines="0" coverablelines="44" totallines="4535" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="1" methodcoverage="0" />
+      <Class name="WeaponClassController" coverage="5.7" coveredlines="155" coverablelines="2698" totallines="4535" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="1" totalmethods="133" methodcoverage="0.7" />
+    </Assembly>
+    <Assembly name="Tests.EditMode" classes="6" coverage="98" coveredlines="360" coverablelines="367" totallines="727" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="67" totalmethods="67" methodcoverage="100">
+      <Class name="Tests.EditMode.BasicTests" coverage="100" coveredlines="58" coverablelines="58" totallines="108" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="10" totalmethods="10" methodcoverage="100" />
+      <Class name="Tests.EditMode.CameraFollowTests" coverage="100" coveredlines="63" coverablelines="63" totallines="129" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="11" totalmethods="11" methodcoverage="100" />
+      <Class name="Tests.EditMode.DamageObjectTests" coverage="98.2" coveredlines="56" coverablelines="57" totallines="110" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="12" totalmethods="12" methodcoverage="100" />
+      <Class name="Tests.EditMode.GameControllerTests" coverage="100" coveredlines="57" coverablelines="57" totallines="118" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="10" totalmethods="10" methodcoverage="100" />
+      <Class name="Tests.EditMode.ObjectBehaviorControllerTests" coverage="95.2" coveredlines="60" coverablelines="63" totallines="121" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="12" totalmethods="12" methodcoverage="100" />
+      <Class name="Tests.EditMode.WeaponClassControllerTests" coverage="95.6" coveredlines="66" coverablelines="69" totallines="141" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="12" totalmethods="12" methodcoverage="100" />
+    </Assembly>
+    <Assembly name="Tests.Editor" classes="1" coverage="0" coveredlines="0" coverablelines="11" totallines="40" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="2" methodcoverage="0">
+      <Class name="Tests.Editor.CodeCoverageTestRunner" coverage="0" coveredlines="0" coverablelines="11" totallines="40" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="0" totalmethods="2" methodcoverage="0" />
+    </Assembly>
+    <Assembly name="Tests.PlayMode" classes="5" coverage="46.3" coveredlines="141" coverablelines="304" totallines="641" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="25" totalmethods="53" methodcoverage="47.1">
+      <Class name="Tests.PlayMode.AttackDummyTests" coverage="82.3" coveredlines="56" coverablelines="68" totallines="140" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="10" totalmethods="12" methodcoverage="83.3" />
+      <Class name="Tests.PlayMode.DragonBossTests" coverage="100" coveredlines="47" coverablelines="47" totallines="99" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="9" totalmethods="9" methodcoverage="100" />
+      <Class name="Tests.PlayMode.EnemyBehaviorTests" coverage="19.7" coveredlines="14" coverablelines="71" totallines="143" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="2" totalmethods="11" methodcoverage="18.1" />
+      <Class name="Tests.PlayMode.LadderTests" coverage="22.8" coveredlines="13" coverablelines="57" totallines="118" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="2" totalmethods="10" methodcoverage="20" />
+      <Class name="Tests.PlayMode.PlayerMovementTests" coverage="18" coveredlines="11" coverablelines="61" totallines="141" branchcoverage="" coveredbranches="0" totalbranches="0" coveredmethods="2" totalmethods="11" methodcoverage="18.1" />
+    </Assembly>
+  </Coverage>
+</CoverageReport>

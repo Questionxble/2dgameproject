@@ -37,6 +37,6 @@ Blockers and Scope Changes:
 - Work on the blocking mechanic and fixing the fire particle attachment system spilled over into the next sprint, but that's the only spilled over work. I plan to work on mostly new features/stories/bugs this upcoming sprint. The reason the blocking spilled over is because I have to refactor attacks (to be blockable/unblockable) and there were some timing issues with activation. The fire attachment bug spilled over because tilemap colliders are treated differently in the unity engine from other 2d colliders (box, capsule, etc) and they aren't detected the same either. I'll have to research why.
 
 Jira Evidence Links:
-Report: 
+Report: https://github.com/Questionxble/2dgameproject/blob/main/Documentation/Sprint1/ChristianHenken/Sprint-1-Jira-Report.md
 Backlog: https://soulful-journey.atlassian.net/jira/software/projects/SJOURNEY/boards/1/backlog
 Board: https://soulful-journey.atlassian.net/jira/software/projects/SJOURNEY/boards/1?jql=Sprint%20%3D%20134&sprints=134
