@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: fde7d8ab93d0882d08bdc67b4c36b5ba
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 292443
+  packageName: Fantastic Medieval Castle Pixel Art Set
+  packageVersion: 1.1
+  assetPath: Assets/PistonMedia/Scripts/FantasticParallaxBackground.cs
+  uploadId: 688657

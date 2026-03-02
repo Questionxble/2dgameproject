@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 0d48613b2678e059a90e27d78c65370c
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 292443
+  packageName: Fantastic Medieval Castle Pixel Art Set
+  packageVersion: 1.1
+  assetPath: Assets/PistonMedia/Scripts/FantasticSceneManager.cs
+  uploadId: 688657
