@@ -30,12 +30,6 @@ public class AttackDummy : MonoBehaviour
     [SerializeField] private Color deathColor = new Color(0.5f, 0.5f, 0.5f, 0.7f); // Gray and semi-transparent
     [SerializeField] private float deathAnimationDuration = 2f; // How long death animation plays before destruction
     
-    [Header("Burning Status Effect")]
-    [SerializeField] private float burnDamageRate = 2f; // Damage per second while burning
-    [SerializeField] private float burnDamageInterval = 1f; // Time between burn damage applications
-    [SerializeField] private float baseBurnDuration = 5f; // Base duration of burning effect
-    [SerializeField] private Sprite burnEffectSprite; // Sprite for burning visual effect
-    
     // Components and references
     private float currentHealth;
     private GameObject player;
@@ -66,12 +60,6 @@ public class AttackDummy : MonoBehaviour
     
     // Death System
     private Color originalColor;
-    
-    // Burning Status Effect System
-    private bool isBurning = false;
-    private float burnEndTime = 0f;
-    private float nextBurnDamageTime = 0f;
-    private GameObject burnVisualEffect;
     
     // Track active attacks for cleanup
     private System.Collections.Generic.List<GameObject> activeAttackObjects = new System.Collections.Generic.List<GameObject>();
@@ -195,9 +183,6 @@ public class AttackDummy : MonoBehaviour
         
         // Clean up null coroutine references periodically
         CleanupNullCoroutines();
-        
-        // Handle burning status effect
-        HandleBurningEffect();
         
         // Update state machine
         UpdateStateMachine();
@@ -485,26 +470,9 @@ public class AttackDummy : MonoBehaviour
         
         foreach (Collider2D collider in colliders)
         {
-            // Check for regular enemies with EnemyBehavior
+            // ONLY target actual enemies - never player or other dummies
             EnemyBehavior enemyBehavior = collider.GetComponent<EnemyBehavior>();
-            DragonBoss dragonBoss = collider.GetComponent<DragonBoss>();
-            
-            // Target regular enemies OR the dragon boss
-            bool isValidTarget = false;
-            bool isDead = false;
-            
-            if (enemyBehavior != null)
-            {
-                isValidTarget = true;
-                isDead = enemyBehavior.IsDead;
-            }
-            else if (dragonBoss != null)
-            {
-                isValidTarget = true;
-                isDead = dragonBoss.IsDead; // Assuming DragonBoss has an IsDead property
-            }
-            
-            if (isValidTarget && !isDead)
+            if (enemyBehavior != null && !enemyBehavior.IsDead)
             {
                 // Extra safety check - don't attack player or other summons
                 if (collider.gameObject.tag != "Player" && collider.gameObject.tag != "PlayerSummon")
@@ -582,28 +550,25 @@ public class AttackDummy : MonoBehaviour
         // Set that this should ONLY damage enemies (not player or other dummies)
         damageComponent.canDamageEnemies = true;
         
-        // Exclude Player and PlayerSummon layers, but allow Entities layer for dragon
+        // Exclude Player, PlayerSummon, and Entities layers
         int playerLayer = LayerMask.NameToLayer("Player");
-        int playerSummonLayer = LayerMask.NameToLayer("PlayerSummon");
+        int entitiesLayer = LayerMask.NameToLayer("Entities");
         LayerMask excludeMask = 0;
         
         if (playerLayer != -1) excludeMask |= (1 << playerLayer);
-        if (playerSummonLayer != -1) excludeMask |= (1 << playerSummonLayer);
+        if (entitiesLayer != -1) excludeMask |= (1 << entitiesLayer);
         
         damageComponent.excludeLayers = excludeMask;
         
-        Debug.Log($"AttackDummy: Attack damage setup - can hit enemies on Entities layer, excludes Player/PlayerSummon layers");
-        
-        // Visual indicator (red damage box like enemies) - COMMENTED OUT FOR INVISIBILITY
+        // Visual indicator (red damage box like enemies)
         SpriteRenderer attackRenderer = attack.AddComponent<SpriteRenderer>();
         
-        // Create red attack sprite - COMMENTED OUT FOR INVISIBILITY
+        // Create red attack sprite
         Texture2D attackTexture = new Texture2D(32, 32);
         Color[] pixels = new Color[32 * 32];
         for (int i = 0; i < pixels.Length; i++)
         {
-            // pixels[i] = new Color(0f, 0.8f, 1f, 0.7f); // Blue color to distinguish from enemy attacks - VISIBLE
-            pixels[i] = new Color(0f, 0.8f, 1f, 0f); // Fully transparent (invisible)
+            pixels[i] = new Color(0f, 0.8f, 1f, 0.7f); // Blue color to distinguish from enemy attacks
         }
         attackTexture.SetPixels(pixels);
         attackTexture.Apply();
@@ -634,83 +599,6 @@ public class AttackDummy : MonoBehaviour
         if (currentHealth <= 0f)
         {
             Die();
-        }
-    }
-
-    // Apply burning status effect to the ally
-    public void ApplyBurningEffect(float duration = -1f)
-    {
-        if (isDead) return; // Don't apply burning to dead allies
-        
-        float burnDuration = duration > 0 ? duration : baseBurnDuration;
-        
-        if (isBurning)
-        {
-            // If already burning, extend the duration (duration stacking)
-            float timeRemaining = burnEndTime - Time.time;
-            float newDuration = Mathf.Max(timeRemaining, 0f) + burnDuration;
-            burnEndTime = Time.time + newDuration;
-            Debug.Log($"AttackDummy burning effect extended. New duration: {newDuration:F1}s");
-        }
-        else
-        {
-            // Start new burning effect
-            isBurning = true;
-            burnEndTime = Time.time + burnDuration;
-            nextBurnDamageTime = Time.time + burnDamageInterval;
-            CreateBurnVisualEffect();
-            Debug.Log($"AttackDummy burning effect applied. Duration: {burnDuration:F1}s");
-        }
-    }
-    
-    private void HandleBurningEffect()
-    {
-        if (!isBurning) return;
-        
-        // Check if burning effect should end
-        if (Time.time >= burnEndTime)
-        {
-            StopBurningEffect();
-            return;
-        }
-        
-        // Apply burn damage at intervals
-        if (Time.time >= nextBurnDamageTime)
-        {
-            TakeDamage(burnDamageRate);
-            nextBurnDamageTime = Time.time + burnDamageInterval;
-            Debug.Log($"AttackDummy burn damage applied: -{burnDamageRate}, Health remaining: {currentHealth}/{maxHealth}");
-        }
-    }
-    
-    private void StopBurningEffect()
-    {
-        if (!isBurning) return;
-        
-        isBurning = false;
-        if (burnVisualEffect != null)
-        {
-            Destroy(burnVisualEffect);
-            burnVisualEffect = null;
-        }
-        Debug.Log("AttackDummy burning effect ended");
-    }
-    
-    private void CreateBurnVisualEffect()
-    {
-        if (burnEffectSprite != null && !isDead)
-        {
-            // Create visual effect similar to player
-            GameObject burnEffect = new GameObject("BurnEffect");
-            burnEffect.transform.SetParent(transform);
-            burnEffect.transform.localPosition = Vector3.up * 0.5f; // Above the dummy
-            
-            SpriteRenderer burnRenderer = burnEffect.AddComponent<SpriteRenderer>();
-            burnRenderer.sprite = burnEffectSprite;
-            burnRenderer.sortingLayerName = "Player"; // Same as player
-            burnRenderer.sortingOrder = 1;
-            
-            burnVisualEffect = burnEffect;
         }
     }
     
@@ -745,9 +633,6 @@ public class AttackDummy : MonoBehaviour
         
         isDead = true;
         Debug.Log("Attack Dummy dying - playing death animation");
-        
-        // Stop burning effect when dead
-        StopBurningEffect();
         
         // Stop all movement when dead
         if (rb != null)

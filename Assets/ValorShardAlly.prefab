@@ -149,8 +149,6 @@ MonoBehaviour:
   groundLayerMask:
     serializedVersion: 2
     m_Bits: 1
-  deathColor: {r: 0.5, g: 0.5, b: 0.5, a: 0.7}
-  deathAnimationDuration: 2
 --- !u!95 &4440877675735573460
 Animator:
   serializedVersion: 7
