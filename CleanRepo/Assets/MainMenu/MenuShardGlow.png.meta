@@ -1,0 +1,559 @@
+fileFormatVersion: 2
+guid: bba251b26b46dd84d8da26a8786d77ed
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 5856498145038038334
+    second: MenuShardGlow_0
+  - first:
+      213: -8092828496003162383
+    second: MenuShardGlow_1
+  - first:
+      213: 4460852706364690298
+    second: MenuShardGlow_2
+  - first:
+      213: -7518050773950504559
+    second: MenuShardGlow_3
+  - first:
+      213: -7852382378465817955
+    second: MenuShardGlow_4
+  - first:
+      213: -5645314587869042169
+    second: MenuShardGlow_5
+  - first:
+      213: 6929467812416757216
+    second: MenuShardGlow_6
+  - first:
+      213: -504431474870075843
+    second: MenuShardGlow_7
+  - first:
+      213: -1830590217063257782
+    second: MenuShardGlow_8
+  - first:
+      213: 312221045342536002
+    second: MenuShardGlow_9
+  - first:
+      213: 1170007323323872083
+    second: MenuShardGlow_10
+  - first:
+      213: 8073658151249945892
+    second: MenuShardGlow_11
+  - first:
+      213: -2268942506881924830
+    second: MenuShardGlow_12
+  - first:
+      213: -1737350557361109734
+    second: MenuShardGlow_13
+  - first:
+      213: -4238747454888871910
+    second: MenuShardGlow_14
+  - first:
+      213: -1220300163221358313
+    second: MenuShardGlow_15
+  - first:
+      213: 576002928110877317
+    second: MenuShardGlow_16
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: MenuShardGlow_0
+      rect:
+        serializedVersion: 2
+        x: 873
+        y: 248
+        width: 241
+        height: 283
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e35f9baa806764150800000000000000
+      internalID: 5856498145038038334
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_1
+      rect:
+        serializedVersion: 2
+        x: 1112
+        y: 303
+        width: 10
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1fe929b4c5f70bf80800000000000000
+      internalID: -8092828496003162383
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_2
+      rect:
+        serializedVersion: 2
+        x: 1146
+        y: 265
+        width: 63
+        height: 76
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a7f053ed6e128ed30800000000000000
+      internalID: 4460852706364690298
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_3
+      rect:
+        serializedVersion: 2
+        x: 777
+        y: 277
+        width: 10
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 191645747a48aa790800000000000000
+      internalID: -7518050773950504559
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_4
+      rect:
+        serializedVersion: 2
+        x: 806
+        y: 290
+        width: 11
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d9a020b94dbb60390800000000000000
+      internalID: -7852382378465817955
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_5
+      rect:
+        serializedVersion: 2
+        x: 816
+        y: 288
+        width: 8
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 70a2cb0ea40d7a1b0800000000000000
+      internalID: -5645314587869042169
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_6
+      rect:
+        serializedVersion: 2
+        x: 849
+        y: 280
+        width: 38
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0ed9a91f24a6a2060800000000000000
+      internalID: 6929467812416757216
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_7
+      rect:
+        serializedVersion: 2
+        x: 1108
+        y: 278
+        width: 16
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d3eb7d60f36eff8f0800000000000000
+      internalID: -504431474870075843
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_8
+      rect:
+        serializedVersion: 2
+        x: 784
+        y: 271
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a49a3ae75ef6896e0800000000000000
+      internalID: -1830590217063257782
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_9
+      rect:
+        serializedVersion: 2
+        x: 815
+        y: 263
+        width: 13
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2410b03f26b355400800000000000000
+      internalID: 312221045342536002
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_10
+      rect:
+        serializedVersion: 2
+        x: 834
+        y: 257
+        width: 16
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 353335b2673bc3010800000000000000
+      internalID: 1170007323323872083
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_11
+      rect:
+        serializedVersion: 2
+        x: 1066
+        y: 247
+        width: 12
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 425a03fff456b0070800000000000000
+      internalID: 8073658151249945892
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_12
+      rect:
+        serializedVersion: 2
+        x: 794
+        y: 237
+        width: 34
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 221c485bfc81380e0800000000000000
+      internalID: -2268942506881924830
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_13
+      rect:
+        serializedVersion: 2
+        x: 838
+        y: 241
+        width: 25
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a150a2a7fd0b3e7e0800000000000000
+      internalID: -1737350557361109734
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_14
+      rect:
+        serializedVersion: 2
+        x: 868
+        y: 239
+        width: 13
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a18f1cac5a1fc25c0800000000000000
+      internalID: -4238747454888871910
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_15
+      rect:
+        serializedVersion: 2
+        x: 840
+        y: 227
+        width: 19
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 719f6db877f901fe0800000000000000
+      internalID: -1220300163221358313
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MenuShardGlow_16
+      rect:
+        serializedVersion: 2
+        x: 955
+        y: 228
+        width: 48
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 58a32af7c9f5ef700800000000000000
+      internalID: 576002928110877317
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      MenuShardGlow_0: 5856498145038038334
+      MenuShardGlow_1: -8092828496003162383
+      MenuShardGlow_10: 1170007323323872083
+      MenuShardGlow_11: 8073658151249945892
+      MenuShardGlow_12: -2268942506881924830
+      MenuShardGlow_13: -1737350557361109734
+      MenuShardGlow_14: -4238747454888871910
+      MenuShardGlow_15: -1220300163221358313
+      MenuShardGlow_16: 576002928110877317
+      MenuShardGlow_2: 4460852706364690298
+      MenuShardGlow_3: -7518050773950504559
+      MenuShardGlow_4: -7852382378465817955
+      MenuShardGlow_5: -5645314587869042169
+      MenuShardGlow_6: 6929467812416757216
+      MenuShardGlow_7: -504431474870075843
+      MenuShardGlow_8: -1830590217063257782
+      MenuShardGlow_9: 312221045342536002
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

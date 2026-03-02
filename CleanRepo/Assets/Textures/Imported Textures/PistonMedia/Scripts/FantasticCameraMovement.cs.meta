@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 4b22c8e3ee4663f198e9e83d763682aa
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 292443
+  packageName: Fantastic Medieval Castle Pixel Art Set
+  packageVersion: 1.1
+  assetPath: Assets/PistonMedia/Scripts/FantasticCameraMovement.cs
+  uploadId: 688657

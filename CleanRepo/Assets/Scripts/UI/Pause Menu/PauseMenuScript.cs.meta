@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: d33f8bdeb2a6c134fae4c753a4c14f9b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - pauseMenuUI: {instanceID: 0}
+  - mainPanel: {instanceID: 0}
+  - optionsPanel: {instanceID: 0}
+  - slotPanel: {instanceID: 0}
+  - overwritePopup: {instanceID: 0}
+  - slotInfoText: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
