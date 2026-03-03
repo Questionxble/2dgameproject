@@ -51,20 +51,32 @@ TagManager:
   - 
   - 
   m_SortingLayers:
-  - name: Background
+  - name: 'Furthest '
     uniqueID: 489980507
     locked: 0
   - name: Default
     uniqueID: 0
     locked: 1
-  - name: Entities
+  - name: 'b2 '
     uniqueID: 3336826925
     locked: 0
-  - name: Player
+  - name: backgroun
     uniqueID: 3322507321
     locked: 0
-  - name: Foreground
+  - name: middle
     uniqueID: 1617858225
+    locked: 0
+  - name: 'player '
+    uniqueID: 475557053
+    locked: 0
+  - name: 'f1 '
+    uniqueID: 256988333
+    locked: 0
+  - name: foreground 2
+    uniqueID: 2482945783
+    locked: 0
+  - name: '"over the camera"'
+    uniqueID: 834512633
     locked: 0
   m_RenderingLayers:
   - Default

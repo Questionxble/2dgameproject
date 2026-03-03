@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: cd71300e75dfedf1416a96fa915ad361
+timeCreated: 1711800558
+licenseType: Store
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 292443
+  packageName: Fantastic Medieval Castle Pixel Art Set
+  packageVersion: 1.1
+  assetPath: Assets/PistonMedia/FantasticCastle/Tiles/FantasticDungeon_01_37.asset
+  uploadId: 688657
