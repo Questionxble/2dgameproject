@@ -44,6 +44,10 @@ public class PlayerMovement : MonoBehaviour
     [Header("Animation System")]
     [SerializeField] private RuntimeAnimatorController defaultPlayerAnimController = null; // Default animation when no shards equipped
     
+    [Header("Buff Icon Fire Animation")]
+    [SerializeField] private Sprite[] fireAnimationSprites; // Array of fire animation frames
+    [SerializeField] private float fireAnimationSpeed = 0.1f; // Time between frames (seconds)
+    
     [Header("Legacy Sprite Animation (Fallback)")]
     [SerializeField] private Sprite idleSprite;
     [SerializeField] private Sprite walkingSprite1;
@@ -1944,7 +1948,7 @@ public class PlayerMovement : MonoBehaviour
         
         // Add horizontal layout group for side-by-side buff icons
         HorizontalLayoutGroup layoutGroup = buffIconGO.AddComponent<HorizontalLayoutGroup>();
-        layoutGroup.spacing = 5f;
+        layoutGroup.spacing = 20f; // Increased spacing to prevent hover area overlap
         layoutGroup.childAlignment = TextAnchor.MiddleCenter;
         layoutGroup.childControlHeight = true;
         layoutGroup.childControlWidth = false;
@@ -2102,14 +2106,15 @@ public class PlayerMovement : MonoBehaviour
         }
         activeBuffUI.Clear();
         
-        // Add aegis shield as a "buff" if active
-        List<ActiveBuff> allBuffsIncludingAegis = new List<ActiveBuff>(activeBuffs);
+        // Add aegis shield as a "buff" if active - insert at beginning so it appears first
+        List<ActiveBuff> allBuffsIncludingAegis = new List<ActiveBuff>();
         if (currentAegisShield > 0f)
         {
             // Create a virtual aegis buff for display purposes
             ActiveBuff aegisBuff = new ActiveBuff(BuffType.Aegis, (currentAegisShield/maxAegisShield) * 100f, 999f, "Aegis Shield Protection");
             allBuffsIncludingAegis.Add(aegisBuff);
         }
+        allBuffsIncludingAegis.AddRange(activeBuffs);
         
         // Show individual buff instances instead of grouping by type
         foreach (ActiveBuff buff in allBuffsIncludingAegis)
@@ -2120,41 +2125,136 @@ public class PlayerMovement : MonoBehaviour
     
     private void CreateIndividualBuffIcon(ActiveBuff buff)
     {
-        // Create buff icon
-        GameObject buffIconGO = new GameObject($"BuffIcon_{buff.type}_{Time.time}");
+        // Create fire-animated buff icon
+        GameObject buffIconGO = new GameObject($"FireBuffIcon_{buff.type}_{Time.time}");
         buffIconGO.transform.SetParent(buffListPanel, false);
         
         RectTransform iconRect = buffIconGO.AddComponent<RectTransform>();
-        iconRect.sizeDelta = new Vector2(40f, 40f); // Square icons
+        iconRect.sizeDelta = new Vector2(120f, 120f); // 3x larger icons (40f * 3 = 120f)
+        iconRect.localScale = Vector3.one * 3.0f; // Much larger scale multiplier for big fire sprites (1.5 * 2 = 3.0)
         
-        // Icon background
-        Image iconBG = buffIconGO.AddComponent<Image>();
-        iconBG.color = GetBuffColor(buff.type);
-        iconBG.raycastTarget = true; // Enable pointer events for tooltips
+        // Anchor to bottom of icon area so it scales upward from the healthbar top
+        iconRect.anchorMin = new Vector2(0f, 0f);
+        iconRect.anchorMax = new Vector2(0f, 0f);
+        iconRect.pivot = new Vector2(0.5f, 0f); // Pivot at bottom center so it grows upward
         
-        // Icon text
-        GameObject textGO = new GameObject("BuffIconText");
+        Debug.Log($"Creating fire buff icon for {buff.type}. Fire sprites available: {fireAnimationSprites != null && fireAnimationSprites.Length > 0}");
+        
+        // Fire image with colored tint for buff type
+        Image fireImage = buffIconGO.AddComponent<Image>();
+        fireImage.raycastTarget = false; // Disable raycast - using invisible hover area instead
+        fireImage.type = Image.Type.Simple;
+        fireImage.preserveAspect = true;
+        fireImage.color = GetFireColorForBuff(buff.type);
+        
+        // Set up fire animation or fallback
+        if (fireAnimationSprites != null && fireAnimationSprites.Length > 0)
+        {
+            // Set initial sprite
+            fireImage.sprite = fireAnimationSprites[0];
+            
+            // Add fire animation component
+            FireSpriteAnimator fireAnimator = buffIconGO.AddComponent<FireSpriteAnimator>();
+            fireAnimator.Initialize(fireImage, fireAnimationSprites, fireAnimationSpeed);
+            
+            Debug.Log($"Fire sprite animation added for {buff.type} with {fireAnimationSprites.Length} frames");
+        }
+        else
+        {
+            // Fallback: colored box (original system)
+            fireImage.color = GetBuffColor(buff.type);
+            Debug.LogWarning($"No fire animation sprites - using colored box for {buff.type}");
+        }
+        
+        // Add small duration text overlay - positioned ON TOP of the fire icon
+        GameObject textGO = new GameObject("BuffDurationText");
         textGO.transform.SetParent(buffIconGO.transform, false);
         
-        Text iconText = textGO.AddComponent<Text>();
-        iconText.text = GetBuffIcon(buff.type);
-        iconText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        iconText.fontSize = 18;
-        iconText.color = Color.white;
-        iconText.alignment = TextAnchor.MiddleCenter;
-        iconText.fontStyle = FontStyle.Bold;
+        Text durationText = textGO.AddComponent<Text>();
+        float remainingTime = buff.duration - (Time.time - buff.startTime);
         
-        RectTransform textRect = iconText.GetComponent<RectTransform>();
+        // Handle special display for aegis (show percentage instead of duration)
+        if (buff.type == BuffType.Aegis)
+        {
+            durationText.text = Mathf.RoundToInt(buff.value).ToString(); // Show percentage without % sign
+        }
+        else
+        {
+            durationText.text = Mathf.Ceil(remainingTime).ToString(); // Show duration
+        }
+        
+        durationText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        durationText.fontSize = 18; // Smaller, sharper text (reduced from 24 for better clarity)
+        durationText.color = Color.white;
+        durationText.alignment = TextAnchor.MiddleCenter; // Center the text
+        durationText.fontStyle = FontStyle.Bold;
+        
+        // Add text outline/shadow for better visibility on fire background
+        Outline textOutline = textGO.AddComponent<Outline>();
+        textOutline.effectColor = Color.black;
+        textOutline.effectDistance = new Vector2(1, -1);
+        
+        // Position duration text to be centered on top of the fire icon
+        RectTransform textRect = durationText.GetComponent<RectTransform>();
         textRect.anchorMin = Vector2.zero;
         textRect.anchorMax = Vector2.one;
         textRect.sizeDelta = Vector2.zero;
         textRect.anchoredPosition = Vector2.zero;
         
-        // Add hover tooltip functionality with individual buff data
-        IndividualBuffTooltipHandler tooltipHandler = buffIconGO.AddComponent<IndividualBuffTooltipHandler>();
-        tooltipHandler.Initialize(this, buff);
+        // Add auto-updating component for duration text
+        BuffDurationTextUpdater textUpdater = textGO.AddComponent<BuffDurationTextUpdater>();
+        textUpdater.Initialize(durationText, buff);
+        
+        // Add hover tooltip functionality with individual buff data and debug
+        // Only add to the invisible hover area to prevent duplicate events
+        // IndividualBuffTooltipHandler tooltipHandler = buffIconGO.AddComponent<IndividualBuffTooltipHandler>();
+        // tooltipHandler.Initialize(this, buff);
+        
+        // Create larger invisible hover area to improve mouse detection
+        GameObject hoverArea = new GameObject("HoverArea");
+        hoverArea.transform.SetParent(buffIconGO.transform, false);
+        
+        // Add Canvas to ensure proper layering and event handling
+        Canvas hoverCanvas = hoverArea.AddComponent<Canvas>();
+        hoverCanvas.overrideSorting = true;
+        hoverCanvas.sortingOrder = 300 + activeBuffUI.Count; // Ensure each hover area has unique sorting order
+        
+        Image hoverImage = hoverArea.AddComponent<Image>();
+        hoverImage.color = new Color(1f, 0f, 0f, 0.1f); // Very transparent red for debugging
+        hoverImage.raycastTarget = true; // Detects mouse events
+        
+        RectTransform hoverRect = hoverArea.GetComponent<RectTransform>();
+        hoverRect.anchorMin = Vector2.zero;
+        hoverRect.anchorMax = Vector2.one;
+        hoverRect.sizeDelta = Vector2.zero;
+        hoverRect.anchoredPosition = Vector2.zero;
+        hoverRect.localScale = new Vector3(0.2f, 0.6f, 1f); // Your working values that fit perfectly around icons
+        
+        // Add the tooltip handler only to the hover area (prevents duplicate events)
+        IndividualBuffTooltipHandler hoverTooltipHandler = hoverArea.AddComponent<IndividualBuffTooltipHandler>();
+        hoverTooltipHandler.Initialize(this, buff);
+        
+        Debug.Log($"Added tooltip handler for {buff.type} to hover area. Hover area scale: {hoverRect.localScale}");
+        Debug.Log($"Buff icon {buff.type} position: {buffIconGO.transform.position}, localPosition: {buffIconGO.transform.localPosition}");
+        
+        Debug.Log($"Created fire buff icon for {buff.type} at scale {iconRect.localScale} with size {iconRect.sizeDelta}. Raycast target: {fireImage.raycastTarget}");
         
         activeBuffUI.Add(buffIconGO);
+    }
+    
+    private Color GetFireColorForBuff(BuffType buffType)
+    {
+        switch (buffType)
+        {
+            case BuffType.Attack: return new Color(1f, 0.3f, 0.3f, 1f); // Red fire
+            case BuffType.Strength: return new Color(1f, 0.6f, 0f, 1f); // Orange fire  
+            case BuffType.Vitality: return new Color(0.3f, 1f, 0.3f, 1f); // Green fire
+            case BuffType.Flux: return new Color(0.8f, 0.3f, 1f, 1f); // Purple fire
+            case BuffType.Durability: return new Color(0.5f, 0.8f, 0.5f, 1f); // Forest Green fire
+            case BuffType.Swiftness: return new Color(1f, 1f, 0.3f, 1f); // Yellow fire
+            case BuffType.Aegis: return new Color(0.4f, 0.7f, 1f, 1f); // Blue fire
+            default: return Color.white; // White fire
+        }
     }
     
     private Color GetBuffColor(BuffType buffType)
@@ -2267,26 +2367,64 @@ public class PlayerMovement : MonoBehaviour
     
     public void ShowIndividualBuffTooltip(ActiveBuff buff, Vector2 position)
     {
+        Debug.Log($"ShowIndividualBuffTooltip called for {buff.type} at position {position}");
+        
         string tooltipKey = $"{buff.type}_{buff.startTime}";
         
         // If this tooltip is already showing for this specific buff instance, update it
         if (isTooltipVisible && currentTooltipType == tooltipKey)
         {
+            Debug.Log($"Updating existing tooltip for {buff.type}");
             UpdateTooltipContent(buff);
             return;
         }
         
         if (tooltipPanel == null) 
         {
+            Debug.Log($"Creating new tooltip panel for {buff.type}");
             CreateTooltipPanel();
+        }
+        else
+        {
+            Debug.Log($"Using existing tooltip panel for {buff.type}");
         }
         
         UpdateTooltipContent(buff);
         
+        Debug.Log($"Setting tooltip panel active for {buff.type}. Panel exists: {tooltipPanel != null}");
         tooltipPanel.SetActive(true);
+        
+        // Check if panel is actually active and visible
+        Debug.Log($"Panel state after SetActive(true): active={tooltipPanel.activeSelf}, activeInHierarchy={tooltipPanel.activeInHierarchy}");
+        
+        // Check canvas and sorting
+        Canvas panelCanvas = tooltipPanel.GetComponent<Canvas>();
+        if (panelCanvas != null)
+        {
+            Debug.Log($"Panel has Canvas component: enabled={panelCanvas.enabled}, sortingOrder={panelCanvas.sortingOrder}, renderMode={panelCanvas.renderMode}");
+        }
+        else
+        {
+            Debug.Log("Panel does not have Canvas component - checking parent canvas");
+            Canvas parentCanvas = tooltipPanel.GetComponentInParent<Canvas>();
+            if (parentCanvas != null)
+            {
+                Debug.Log($"Parent canvas found: {parentCanvas.name}, enabled={parentCanvas.enabled}, sortingOrder={parentCanvas.sortingOrder}");
+                
+                // Ensure tooltip renders on top, especially when there's only one buff
+                if (activeBuffs.Count == 1)
+                {
+                    parentCanvas.sortingOrder = 200; // Higher than normal UI
+                    Debug.Log($"Single buff detected - increased canvas sorting order to 200");
+                }
+            }
+        }
+        
         isTooltipVisible = true;
         currentTooltipType = tooltipKey;
         tooltipShowTime = Time.time;
+        
+        Debug.Log($"Tooltip visibility set: isTooltipVisible={isTooltipVisible}, currentTooltipType={currentTooltipType}");
         
         // Position tooltip higher up than before
         RectTransform tooltipRect = tooltipPanel.GetComponent<RectTransform>();
@@ -2297,11 +2435,31 @@ public class PlayerMovement : MonoBehaviour
         
         // Position tooltip higher above the buff area
         float tooltipX = Mathf.Clamp(normalizedPosition.x, 0.1f, 0.9f);
-        float tooltipY = 0.22f; // Much higher than buff icons area
+        float tooltipY = activeBuffs.Count == 1 ? 0.4f : 0.22f; // Much higher for single buffs
+        
+        Debug.Log($"Positioning tooltip for {buff.type}: screen={screenSize}, mousePos={position}, normalizedPos={normalizedPosition}, finalPos=({tooltipX}, {tooltipY}), buffCount={activeBuffs.Count}");
         
         tooltipRect.anchorMin = new Vector2(tooltipX, tooltipY);
         tooltipRect.anchorMax = new Vector2(tooltipX, tooltipY);
         tooltipRect.anchoredPosition = Vector2.zero;
+        
+        // Check final tooltip state
+        Debug.Log($"Tooltip final state: position=({tooltipRect.anchoredPosition.x}, {tooltipRect.anchoredPosition.y}), size=({tooltipRect.sizeDelta.x}, {tooltipRect.sizeDelta.y}), scale=({tooltipRect.localScale.x}, {tooltipRect.localScale.y}, {tooltipRect.localScale.z})");
+        Debug.Log($"Tooltip anchors: min=({tooltipRect.anchorMin.x}, {tooltipRect.anchorMin.y}), max=({tooltipRect.anchorMax.x}, {tooltipRect.anchorMax.y})");
+        Debug.Log($"Canvas sorting and transform: parent={tooltipRect.parent?.name}, activeInHierarchy={tooltipPanel.activeInHierarchy}");
+        
+        // Check if tooltip text component exists and has content
+        Text tooltipTextComponent = tooltipText;
+        if (tooltipTextComponent != null)
+        {
+            Debug.Log($"Tooltip text component found: enabled={tooltipTextComponent.enabled}, text length={tooltipTextComponent.text.Length}, color={tooltipTextComponent.color}, fontSize={tooltipTextComponent.fontSize}");
+        }
+        else
+        {
+            Debug.Log("No tooltip text component found!");
+        }
+        
+        Debug.Log($"Tooltip positioned. Starting countdown coroutine for {buff.type}");
         
         // Start updating the tooltip content every frame for live countdown
         StartCoroutine(UpdateTooltipCountdown(buff));
@@ -2309,6 +2467,8 @@ public class PlayerMovement : MonoBehaviour
     
     private void UpdateTooltipContent(ActiveBuff buff)
     {
+        Debug.Log($"UpdateTooltipContent called for {buff.type}. TooltipText exists: {tooltipText != null}");
+        
         if (tooltipText == null) return;
         
         string title = buff.type.ToString();
@@ -2322,10 +2482,13 @@ public class PlayerMovement : MonoBehaviour
         
         string description = GetBuffDescription(buff.type);
         
-        tooltipText.text = $"<b>{title}</b>\n" +
+        string tooltipContent = $"<b>{title}</b>\n" +
                           $"{statBonus}\n" +
                           $"Duration: {duration}\n" +
                           $"{description}";
+        
+        Debug.Log($"Setting tooltip text for {buff.type}: '{tooltipContent}'");
+        tooltipText.text = tooltipContent;
     }
     
     private System.Collections.IEnumerator UpdateTooltipCountdown(ActiveBuff buff)
@@ -2354,7 +2517,7 @@ public class PlayerMovement : MonoBehaviour
         tooltipGO.transform.SetParent(screenUICanvas.transform, false);
         
         RectTransform tooltipRect = tooltipGO.AddComponent<RectTransform>();
-        tooltipRect.sizeDelta = new Vector2(240f, 85f); // Good size for buff tooltips
+        tooltipRect.sizeDelta = new Vector2(480f, 170f); // 2x larger tooltip (240f * 2 = 480f, 85f * 2 = 170f)
         tooltipRect.anchorMin = new Vector2(0, 0);
         tooltipRect.anchorMax = new Vector2(0, 0);
         tooltipRect.pivot = new Vector2(0.5f, 0.5f); // Center pivot for easier positioning
@@ -2381,7 +2544,7 @@ public class PlayerMovement : MonoBehaviour
         
         tooltipText = textGO.AddComponent<Text>();
         tooltipText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        tooltipText.fontSize = 14; // Bigger text for visibility
+        tooltipText.fontSize = 28; // 2x larger text (14 * 2 = 28)
         tooltipText.color = Color.white;
         tooltipText.alignment = TextAnchor.UpperLeft;
         
@@ -2487,10 +2650,12 @@ public class IndividualBuffTooltipHandler : MonoBehaviour, IPointerEnterHandler,
     {
         playerMovement = player;
         buff = buffInstance;
+        Debug.Log($"IndividualBuffTooltipHandler initialized for {buff.type} with player: {player != null}");
     }
     
     public void OnPointerEnter(PointerEventData eventData)
     {
+        Debug.Log($"IndividualBuffTooltipHandler: Mouse entered buff icon for {buff.type} at position {eventData.position}");
         if (playerMovement != null)
         {
             playerMovement.ShowIndividualBuffTooltip(buff, eventData.position);
@@ -2499,9 +2664,94 @@ public class IndividualBuffTooltipHandler : MonoBehaviour, IPointerEnterHandler,
     
     public void OnPointerExit(PointerEventData eventData)
     {
+        Debug.Log($"IndividualBuffTooltipHandler: Mouse exited buff icon for {buff.type}");
         if (playerMovement != null)
         {
             playerMovement.HideBuffTooltip();
+        }
+    }
+}
+
+/// <summary>
+/// Component that automatically animates UI Image sprites by cycling through frames
+/// </summary>
+public class FireSpriteAnimator : MonoBehaviour
+{
+    private Image targetImage;
+    private Sprite[] animationFrames;
+    private float frameTime;
+    private int currentFrame = 0;
+    private float lastFrameTime;
+    
+    public void Initialize(Image image, Sprite[] sprites, float animationSpeed)
+    {
+        targetImage = image;
+        animationFrames = sprites;
+        frameTime = animationSpeed;
+        lastFrameTime = Time.time;
+        
+        // Start with random frame for visual variety
+        currentFrame = UnityEngine.Random.Range(0, animationFrames.Length);
+        UpdateSprite();
+    }
+    
+    private void Update()
+    {
+        if (targetImage == null || animationFrames == null || animationFrames.Length == 0)
+            return;
+            
+        // Check if it's time to advance to next frame
+        if (Time.time - lastFrameTime >= frameTime)
+        {
+            currentFrame = (currentFrame + 1) % animationFrames.Length;
+            UpdateSprite();
+            lastFrameTime = Time.time;
+        }
+    }
+    
+    private void UpdateSprite()
+    {
+        if (targetImage != null && animationFrames != null && currentFrame < animationFrames.Length)
+        {
+            targetImage.sprite = animationFrames[currentFrame];
+        }
+    }
+}
+
+/// <summary>
+/// Component that automatically updates buff duration text display
+/// </summary>
+public class BuffDurationTextUpdater : MonoBehaviour
+{
+    private Text durationText;
+    private PlayerMovement.ActiveBuff buff;
+    
+    public void Initialize(Text text, PlayerMovement.ActiveBuff buffInstance)
+    {
+        durationText = text;
+        buff = buffInstance;
+    }
+    
+    void Update()
+    {
+        if (durationText == null || buff == null) return;
+        
+        // Handle special display for aegis (show percentage instead of duration)
+        if (buff.type == PlayerMovement.BuffType.Aegis)
+        {
+            durationText.text = Mathf.RoundToInt(buff.value).ToString(); // Show percentage without % sign
+        }
+        else
+        {
+            float remainingTime = buff.duration - (Time.time - buff.startTime);
+            if (remainingTime <= 0)
+            {
+                durationText.text = "0";
+            }
+            else
+            {
+                durationText.text = Mathf.Ceil(remainingTime).ToString();
+            }
         }
     }
 }
