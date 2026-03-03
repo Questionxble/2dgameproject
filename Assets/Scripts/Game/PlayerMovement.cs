@@ -60,6 +60,10 @@ public class PlayerMovement : MonoBehaviour
     ParticleSystem waterParticlesInstance;
     [SerializeField] private float minFallSpeedForSplash = 4f; // Minimum downwards speed needed to make a splash
 
+    [Header("Storm Shard System")]
+    [SerializeField] private ParticleSystem lightningArcParticles; // Lightning particles for Storm Shard attacks
+    [SerializeField] private float lightningParticleDuration = 2f; // How long lightning particles should play
+
     [Header("Ultimate System")]
     [SerializeField] private float maxUltimateCharge = 100f;
     private float currentUltimateCharge = 0f;
@@ -1357,6 +1361,135 @@ public class PlayerMovement : MonoBehaviour
     }
     
     /// <summary>
+    /// Animation Event: Trigger lightning particles at arc point 1 (Storm Shard Attack 1)
+    /// </summary>
+    public void OnStormArcPoint1()
+    {
+        TriggerLightningParticles(1);
+        Debug.Log("Storm Shard lightning particles triggered at arc point 1");
+    }
+    
+    /// <summary>
+    /// Animation Event: Trigger lightning particles at arc point 2 (Storm Shard Attack 2)
+    /// </summary>
+    public void OnStormArcPoint2()
+    {
+        TriggerLightningParticles(2);
+        Debug.Log("Storm Shard lightning particles triggered at arc point 2");
+    }
+    
+    /// <summary>
+    /// Spawn lightning particles at the specified arc point
+    /// </summary>
+    private void TriggerLightningParticles(int arcPoint)
+    {
+        if (lightningArcParticles == null)
+        {
+            Debug.LogWarning("Lightning arc particles not assigned!");
+            return;
+        }
+        
+        // Get the weapon controller to access particle point positions
+        WeaponClassController weaponController = GetComponent<WeaponClassController>();
+        if (weaponController == null)
+        {
+            Debug.LogWarning("WeaponClassController not found for lightning particles!");
+            return;
+        }
+        
+        // Use reflection to get the particle points (assuming they exist in WeaponClassController)
+        var particlePointsField = typeof(WeaponClassController).GetField("particlePoints", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (particlePointsField != null)
+        {
+            Transform[] particlePoints = particlePointsField.GetValue(weaponController) as Transform[];
+            if (particlePoints != null && arcPoint > 0 && arcPoint <= particlePoints.Length)
+            {
+                Vector3 spawnPosition = particlePoints[arcPoint - 1].position; // arcPoint is 1-based, array is 0-based
+                
+                // Instantiate lightning particles at the arc point
+                ParticleSystem lightningInstance = Instantiate(lightningArcParticles, spawnPosition, particlePoints[arcPoint - 1].rotation);
+                
+                // Force the particle system settings to ensure visibility
+                var main = lightningInstance.main;
+                main.startLifetime = lightningParticleDuration; // Use configurable duration
+                main.playOnAwake = true;
+                
+                // Start playing immediately
+                lightningInstance.Play();
+                
+                // Force emission burst if particles aren't visible
+                var emission = lightningInstance.emission;
+                emission.enabled = true;
+                if (emission.burstCount == 0)
+                {
+                    // Add a burst if there isn't one configured
+                    emission.SetBursts(new ParticleSystem.Burst[] {
+                        new ParticleSystem.Burst(0f, 50) // Emit 50 particles immediately
+                    });
+                }
+                
+                // Auto-destroy the particle system after the configured duration
+                StartCoroutine(DestroyParticleSystemAfterDuration(lightningInstance, lightningParticleDuration + 1f));
+                
+                Debug.Log($"Lightning particles spawned at arc point {arcPoint} - Position: {spawnPosition}, Duration: {lightningParticleDuration}s");
+            }
+            else
+            {
+                Debug.LogWarning($"Invalid arc point {arcPoint} or particle points not found! Available points: {particlePoints?.Length ?? 0}");
+            }
+        }
+        else
+        {
+            Debug.LogWarning("Particle points not found in WeaponClassController!");
+            
+            // Fallback: spawn at player position if particle points aren't found
+            Vector3 fallbackPosition = transform.position + Vector3.up * 0.5f;
+            ParticleSystem lightningInstance = Instantiate(lightningArcParticles, fallbackPosition, Quaternion.identity);
+            
+            var main = lightningInstance.main;
+            main.startLifetime = lightningParticleDuration;
+            
+            lightningInstance.Play();
+            StartCoroutine(DestroyParticleSystemAfterDuration(lightningInstance, lightningParticleDuration + 1f));
+            
+            Debug.Log($"Lightning particles spawned at fallback position (player) - Position: {fallbackPosition}");
+        }
+    }
+    
+    /// <summary>
+    /// Coroutine to destroy particle system after a specified duration
+    /// </summary>
+    private System.Collections.IEnumerator DestroyParticleSystemAfterDuration(ParticleSystem particles, float duration)
+    {
+        // Wait for the specified duration
+        yield return new WaitForSeconds(duration);
+        
+        // Destroy the particle system
+        if (particles != null)
+        {
+            Destroy(particles.gameObject);
+        }
+    }
+    
+    /// <summary>
+    /// Coroutine to destroy particle system after it finishes playing (backup method)
+    /// </summary>
+    private System.Collections.IEnumerator DestroyParticleSystemWhenDone(ParticleSystem particles)
+    {
+        // Wait until the particle system stops playing
+        while (particles != null && particles.isPlaying)
+        {
+            yield return null;
+        }
+        
+        // Destroy the particle system
+        if (particles != null)
+        {
+            Destroy(particles.gameObject);
+        }
+    }
+    
+    /// <summary>
     /// Reset attack animation state
     /// </summary>
     private System.Collections.IEnumerator ResetAttackState(float duration)
@@ -1948,7 +2081,7 @@ public class PlayerMovement : MonoBehaviour
         
         // Add horizontal layout group for side-by-side buff icons
         HorizontalLayoutGroup layoutGroup = buffIconGO.AddComponent<HorizontalLayoutGroup>();
-        layoutGroup.spacing = 20f; // Increased spacing to prevent hover area overlap
+        layoutGroup.spacing = 5f; // Tighter spacing for closer buff icons
         layoutGroup.childAlignment = TextAnchor.MiddleCenter;
         layoutGroup.childControlHeight = true;
         layoutGroup.childControlWidth = false;
@@ -2184,15 +2317,16 @@ public class PlayerMovement : MonoBehaviour
         }
         
         durationText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        durationText.fontSize = 18; // Smaller, sharper text (reduced from 24 for better clarity)
+        durationText.fontSize = 16; // Slightly smaller text for better proportions
         durationText.color = Color.white;
         durationText.alignment = TextAnchor.MiddleCenter; // Center the text
         durationText.fontStyle = FontStyle.Bold;
         
-        // Add text outline/shadow for better visibility on fire background
+        // Add black outline for better visibility on fire background
         Outline textOutline = textGO.AddComponent<Outline>();
         textOutline.effectColor = Color.black;
         textOutline.effectDistance = new Vector2(1, -1);
+        textOutline.useGraphicAlpha = true;
         
         // Position duration text to be centered on top of the fire icon
         RectTransform textRect = durationText.GetComponent<RectTransform>();
@@ -2220,7 +2354,7 @@ public class PlayerMovement : MonoBehaviour
         hoverCanvas.sortingOrder = 300 + activeBuffUI.Count; // Ensure each hover area has unique sorting order
         
         Image hoverImage = hoverArea.AddComponent<Image>();
-        hoverImage.color = new Color(1f, 0f, 0f, 0.1f); // Very transparent red for debugging
+        hoverImage.color = new Color(1f, 0f, 0f, 0f); // Fully transparent (invisible) hover area
         hoverImage.raycastTarget = true; // Detects mouse events
         
         RectTransform hoverRect = hoverArea.GetComponent<RectTransform>();
