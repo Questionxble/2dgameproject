@@ -354,7 +354,7 @@ public class DamageObject : MonoBehaviour
         if (coroutineRunner == null)
         {
             // Fallback: find any MonoBehaviour in scene
-            coroutineRunner = Object.FindObjectOfType<MonoBehaviour>();
+            coroutineRunner = Object.FindFirstObjectByType<MonoBehaviour>();
         }
         
         if (coroutineRunner != null)
