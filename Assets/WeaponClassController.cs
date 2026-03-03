@@ -196,6 +196,14 @@ public class WeaponClassController : MonoBehaviour
         
         Debug.Log("Animation Event: ValorAttack1Start triggered");
         
+        // Safety check: prevent duplicate damage objects during fast clicking
+        if (activeValorMeleeAttack != null)
+        {
+            Debug.Log("ValorAttack1Start: Cleaning up existing damage object before creating new one");
+            Destroy(activeValorMeleeAttack);
+            activeValorMeleeAttack = null;
+        }
+        
         // Get player's facing direction
         SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
         if (playerSprite == null)
@@ -240,6 +248,14 @@ public class WeaponClassController : MonoBehaviour
         if (playerTransform == null) return;
         
         Debug.Log("Animation Event: ValorAttack2Start triggered");
+        
+        // Safety check: prevent duplicate damage objects during fast clicking
+        if (activeValorMeleeAttack != null)
+        {
+            Debug.Log("ValorAttack2Start: Cleaning up existing damage object before creating new one");
+            Destroy(activeValorMeleeAttack);
+            activeValorMeleeAttack = null;
+        }
         
         // Get player's facing direction
         SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
@@ -286,6 +302,14 @@ public class WeaponClassController : MonoBehaviour
         
         Debug.Log("Animation Event: ValorThrustStart triggered");
         
+        // Safety check: prevent duplicate damage objects during fast clicking
+        if (activeValorMeleeAttack != null)
+        {
+            Debug.Log("ValorThrustStart: Cleaning up existing damage object before creating new one");
+            Destroy(activeValorMeleeAttack);
+            activeValorMeleeAttack = null;
+        }
+        
         // Get player's facing direction
         SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
         if (playerSprite == null)
@@ -330,6 +354,14 @@ public class WeaponClassController : MonoBehaviour
         if (playerTransform == null) return;
         
         Debug.Log("Animation Event: WhisperMeleeAttackStart triggered");
+        
+        // Safety check: prevent duplicate damage objects during fast clicking
+        if (activeWhisperMeleeAttack != null)
+        {
+            Debug.Log("WhisperMeleeAttackStart: Cleaning up existing damage object before creating new one");
+            Destroy(activeWhisperMeleeAttack);
+            activeWhisperMeleeAttack = null;
+        }
         
         // Get player's facing direction
         SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
@@ -3775,6 +3807,14 @@ public class WeaponClassController : MonoBehaviour
     
     private void CreateThrustDamageZone()
     {
+        // Safety check: prevent duplicate thrust damage zones during fast clicking
+        if (thrustDamageZone != null)
+        {
+            Debug.Log("CreateThrustDamageZone: Cleaning up existing thrust damage zone before creating new one");
+            Destroy(thrustDamageZone);
+            thrustDamageZone = null;
+        }
+        
         // Create damage zone in front of the player for sword thrust
         GameObject damageZone = new GameObject("ValorThrustDamage");
         damageZone.transform.SetParent(transform);
