@@ -1310,6 +1310,49 @@ public class PlayerMovement : MonoBehaviour
     }
     
     /// <summary>
+    /// Trigger attack animation with specific attack type (animation events control duration)
+    /// </summary>
+    public void TriggerAttackAnimation(int attackType)
+    {
+        if (playerAnimator == null) return;
+        
+        isPlayerAttacking = true;
+        currentAttackType = attackType;
+        playerAnimator.SetBool("isAttacking", true);
+        playerAnimator.SetInteger("attackType", attackType);
+        
+        Debug.Log($"Triggered attack animation (event-based): Type {attackType}");
+    }
+    
+    /// <summary>
+    /// Animation Event: End attack animation (called by animation events)
+    /// </summary>
+    public void OnAttackAnimationEnd()
+    {
+        isPlayerAttacking = false;
+        currentAttackType = 0;
+        
+        if (playerAnimator != null)
+        {
+            playerAnimator.SetBool("isAttacking", false);
+        }
+        
+        // Notify weapon controller that animation ended
+        WeaponClassController weaponController = GetComponent<WeaponClassController>();
+        if (weaponController != null)
+        {
+            // Use reflection to call the private EndAttackAnimation method
+            var method = typeof(WeaponClassController).GetMethod("EndAttackAnimation", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (method != null)
+            {
+                method.Invoke(weaponController, null);
+            }
+        }
+        
+        Debug.Log("Attack animation ended via animation event");
+    }
+    
+    /// <summary>
     /// Reset attack animation state
     /// </summary>
     private System.Collections.IEnumerator ResetAttackState(float duration)

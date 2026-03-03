@@ -27,11 +27,11 @@ public class WeaponClassController : MonoBehaviour
     [SerializeField] private float swordRange = 0.8f; // Closer to player
     [SerializeField] private float swordWidth = 1.2f; // Wider to match player
     [SerializeField] private float swordHeight = 2.0f; // Taller to ensure coverage
-    [SerializeField] private float swordDuration = 0.25f; // Halved from 0.5f
+    // swordDuration removed - now controlled by animation events
     [SerializeField] private int swordDamage = 25;
     [SerializeField] private float swordCooldown = 0.5f; // Cooldown between sword attacks
     [SerializeField] private float waveCooldown = 1.0f; // Cooldown between wave attacks
-    [SerializeField] private float swordAnimationDelay = 0.1f; // Delay before sword damage is applied after animation starts
+    // swordAnimationDelay removed - now controlled by animation events
     
     [Header("Valor Shard - Wave Attack Settings")]
     [SerializeField] private float waveBlockSize = 1f; // Size of each wave block
@@ -77,10 +77,10 @@ public class WeaponClassController : MonoBehaviour
     [SerializeField] private float daggerRange = 0.6f; // Closer than sword
     [SerializeField] private float daggerWidth = 0.8f; // Smaller than sword
     [SerializeField] private float daggerHeight = 1.5f; // Smaller than sword
-    [SerializeField] private float daggerDuration = 0.2f; // Quick attack
+    // daggerDuration removed - now controlled by animation events
     [SerializeField] private int daggerDamage = 20;
     [SerializeField] private float daggerCooldown = 0.3f; // Cooldown between dagger melee attacks
-    [SerializeField] private float daggerAnimationDelay = 0.1f; // Delay before dagger damage is applied after animation starts
+    // daggerAnimationDelay removed - now controlled by animation events
     
     [Header("Whisper Shard - Projectile Attack Settings")]
     [SerializeField] private float projectileSpeed = 15f; // Increased speed for longer horizontal flight
@@ -172,11 +172,409 @@ public class WeaponClassController : MonoBehaviour
     private float firstClickTime = 0f;
     private float multiClickWindow = 1.5f; // Extended window for easier multi-click detection (increased for thrust attack)
     private bool isPerformingSpecialAttack = false;
-    private bool isPerformingBasicAttack = false; // Track if basic sword attack is in progress
     private Queue<int> attackQueue = new Queue<int>(); // Queue for sequential attacks (1=basic, 2=dash, 3=thrust)
     private Coroutine attackQueueProcessor = null; // Track the queue processing coroutine
     
-    // ========== PRIVATE TRACKING VARIABLES ==========
+    // ========== ANIMATION EVENT SYSTEM ==========
+    
+    // Animation state tracking
+    private bool isPlayingAttackAnimation = false;
+    private Coroutine currentAttackAnimationCoroutine = null;
+    
+    // Melee attack tracking - stores active damage objects that can be toggled
+    private GameObject activeValorMeleeAttack = null;
+    private GameObject activeWhisperMeleeAttack = null;
+    
+    // Animation Event Methods (called by Unity Animation Events)
+    
+    /// <summary>
+    /// Animation Event: Valor Shard first attack (attackType=0) damage box appears
+    /// </summary>
+    public void ValorAttack1Start()
+    {
+        if (playerTransform == null) return;
+        
+        Debug.Log("Animation Event: ValorAttack1Start triggered");
+        
+        // Get player's facing direction
+        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
+        if (playerSprite == null)
+            playerSprite = GetComponentInChildren<SpriteRenderer>();
+        
+        bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
+        Vector3 attackPosition = playerTransform.position + (Vector3.right * (facingLeft ? -swordRange : swordRange));
+        
+        // Create and store the melee attack damage object
+        activeValorMeleeAttack = CreateMeleeDamageObject(attackPosition, swordWidth, swordHeight, swordDamage, "ValorAttack1");
+        
+        // Generate ultimate charge for valor left click attack
+        GenerateUltimateCharge(valorLeftClickCharge);
+    }
+    
+    /// <summary>
+    /// Animation Event: Valor Shard first attack (attackType=0) damage box disappears
+    /// </summary>
+    public void ValorAttack1End()
+    {
+        Debug.Log("Animation Event: ValorAttack1End triggered");
+        
+        // Destroy the active melee attack damage object
+        if (activeValorMeleeAttack != null)
+        {
+            Destroy(activeValorMeleeAttack);
+            activeValorMeleeAttack = null;
+        }
+        
+        // Reset attack animation state
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+    
+    /// <summary>
+    /// Animation Event: Valor Shard second attack (attackType=1) damage box appears
+    /// </summary>
+    public void ValorAttack2Start()
+    {
+        if (playerTransform == null) return;
+        
+        Debug.Log("Animation Event: ValorAttack2Start triggered");
+        
+        // Get player's facing direction
+        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
+        if (playerSprite == null)
+            playerSprite = GetComponentInChildren<SpriteRenderer>();
+        
+        bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
+        Vector3 attackPosition = playerTransform.position + (Vector3.right * (facingLeft ? -swordRange : swordRange));
+        
+        // Create and store the melee attack damage object
+        activeValorMeleeAttack = CreateMeleeDamageObject(attackPosition, swordWidth, swordHeight, swordDamage, "ValorAttack2");
+        
+        // Generate ultimate charge for valor left click attack
+        GenerateUltimateCharge(valorLeftClickCharge);
+    }
+    
+    /// <summary>
+    /// Animation Event: Valor Shard second attack (attackType=1) damage box disappears
+    /// </summary>
+    public void ValorAttack2End()
+    {
+        Debug.Log("Animation Event: ValorAttack2End triggered");
+        
+        // Destroy the active melee attack damage object
+        if (activeValorMeleeAttack != null)
+        {
+            Destroy(activeValorMeleeAttack);
+            activeValorMeleeAttack = null;
+        }
+        
+        // Reset attack animation state
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+    
+    /// <summary>
+    /// Animation Event: Valor Shard thrust attack (attackType=2) damage box appears
+    /// </summary>
+    public void ValorThrustStart()
+    {
+        if (playerTransform == null) return;
+        
+        Debug.Log("Animation Event: ValorThrustStart triggered");
+        
+        // Get player's facing direction
+        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
+        if (playerSprite == null)
+            playerSprite = GetComponentInChildren<SpriteRenderer>();
+        
+        bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
+        Vector3 attackPosition = playerTransform.position + (Vector3.right * (facingLeft ? -swordRange : swordRange));
+        
+        // Create and store the thrust attack damage object (potentially larger/different stats)
+        activeValorMeleeAttack = CreateMeleeDamageObject(attackPosition, swordWidth, swordHeight, swordDamage, "ValorThrust");
+        
+        // Generate ultimate charge for valor left click attack
+        GenerateUltimateCharge(valorLeftClickCharge);
+    }
+    
+    /// <summary>
+    /// Animation Event: Valor Shard thrust attack (attackType=2) damage box disappears
+    /// </summary>
+    public void ValorThrustEnd()
+    {
+        Debug.Log("Animation Event: ValorThrustEnd triggered");
+        
+        // Destroy the active melee attack damage object
+        if (activeValorMeleeAttack != null)
+        {
+            Destroy(activeValorMeleeAttack);
+            activeValorMeleeAttack = null;
+        }
+        
+        // Reset attack animation state
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+    
+    /// <summary>
+    /// Animation Event: Whisper Shard melee attack damage box appears
+    /// </summary>
+    public void WhisperMeleeAttackStart()
+    {
+        if (playerTransform == null) return;
+        
+        Debug.Log("Animation Event: WhisperMeleeAttackStart triggered");
+        
+        // Get player's facing direction
+        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
+        if (playerSprite == null)
+            playerSprite = GetComponentInChildren<SpriteRenderer>();
+        
+        bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
+        Vector3 attackPosition = playerTransform.position + (Vector3.right * (facingLeft ? -daggerRange : daggerRange));
+        
+        // Create and store the melee attack damage object
+        activeWhisperMeleeAttack = CreateMeleeDamageObject(attackPosition, daggerWidth, daggerHeight, daggerDamage, "WhisperMeleeAttack");
+        
+        // Generate ultimate charge for whisper left click attack
+        GenerateUltimateCharge(whisperLeftClickCharge);
+    }
+    
+    /// <summary>
+    /// Animation Event: Whisper Shard melee attack damage box disappears
+    /// </summary>
+    public void WhisperMeleeAttackEnd()
+    {
+        Debug.Log("Animation Event: WhisperMeleeAttackEnd triggered");
+        
+        // Destroy the active melee attack damage object
+        if (activeWhisperMeleeAttack != null)
+        {
+            Destroy(activeWhisperMeleeAttack);
+            activeWhisperMeleeAttack = null;
+        }
+        
+        // Reset attack animation state
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+    
+    /// <summary>
+    /// Animation Event: Storm Shard attack event 1 (first projectile spawn point)
+    /// </summary>
+    public void StormShardAttackEvent1()
+    {
+        Debug.Log("Animation Event: StormShardAttackEvent1 triggered");
+        
+        // Execute storm attack using the first particle point (attack type 0)
+        ExecuteStormAttack(0, stormParticlePoint1);
+        
+        // Reset attack animation state (this completes the attack)
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+    
+    /// <summary>
+    /// Animation Event: Storm Shard attack event 2 (second projectile spawn point)
+    /// </summary>
+    public void StormShardAttackEvent2()
+    {
+        Debug.Log("Animation Event: StormShardAttackEvent2 triggered");
+        
+        // Execute storm attack using the second particle point (attack type 1)
+        ExecuteStormAttack(1, stormParticlePoint2);
+        
+        // Reset attack animation state (this is the final event for Storm attacks)
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+    
+    // Helper method to create melee damage objects for animation events
+    private GameObject CreateMeleeDamageObject(Vector3 position, float width, float height, int damage, string objectName)
+    {
+        GameObject meleeAttack = new GameObject(objectName);
+        meleeAttack.transform.position = position;
+        
+        // Add collider for damage detection
+        BoxCollider2D meleeCollider = meleeAttack.AddComponent<BoxCollider2D>();
+        meleeCollider.size = new Vector2(width, height);
+        meleeCollider.isTrigger = true;
+        
+        // Add damage object component
+        DamageObject damageComponent = meleeAttack.AddComponent<DamageObject>();
+        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(damage);
+        damageComponent.damageRate = 0.1f; // Fast damage rate for melee
+        
+        // Configure damage object to exclude player and include enemies
+        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (excludeField != null)
+        {
+            excludeField.SetValue(damageComponent, true);
+        }
+        
+        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (enemyDamageField != null)
+        {
+            enemyDamageField.SetValue(damageComponent, true);
+        }
+        
+        // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
+        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
+        
+        // Add appropriate passive callbacks based on weapon type
+        if (objectName.Contains("Valor"))
+        {
+            // Note: Valor shard passive effects are handled elsewhere in the multi-click system
+            // No immediate callback needed for basic attacks
+        }
+        else if (objectName.Contains("Whisper"))
+        {
+            damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
+        }
+        
+        // Make the damage object follow the player
+        StartCoroutine(UpdateMeleeAttackPosition(meleeAttack, objectName.Contains("Valor") ? swordRange : daggerRange));
+        
+        return meleeAttack;
+    }
+    
+    // Helper method to execute storm attacks via animation events
+    private void ExecuteStormAttack(int attackType, GameObject particlePoint)
+    {
+        if (playerTransform == null || particlePoint == null) return;
+        
+        // Generate ultimate charge for storm left click attack
+        GenerateUltimateCharge(stormLeftClickCharge);
+        
+        // Execute the lightning attack immediately (no delay since animation event handles timing)
+        StartCoroutine(ExecuteStormLightningAttack(attackType, particlePoint));
+    }
+    
+    // Coroutine to update melee attack position to follow player
+    private IEnumerator UpdateMeleeAttackPosition(GameObject meleeAttack, float range)
+    {
+        while (meleeAttack != null && playerTransform != null)
+        {
+            // Get current facing direction
+            SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
+            if (playerSprite == null)
+                playerSprite = GetComponentInChildren<SpriteRenderer>();
+            
+            bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
+            Vector3 newPosition = playerTransform.position + (Vector3.right * (facingLeft ? -range : range));
+            
+            meleeAttack.transform.position = newPosition;
+            
+            yield return null; // Wait for next frame
+        }
+    }
+    
+    // Updated storm lightning execution method for animation events
+    private IEnumerator ExecuteStormLightningAttack(int attackAnimationType, GameObject currentParticlePoint)
+    {
+        // Trigger lightning spark effect at the particle point
+        if (lightningSparkPrefab != null && currentParticlePoint != null)
+        {
+            GameObject sparkEffect = Instantiate(lightningSparkPrefab, currentParticlePoint.transform.position, Quaternion.identity);
+            Debug.Log($"Lightning spark effect triggered at {currentParticlePoint.name}");
+            
+            // Auto-destroy the particle effect after a reasonable time
+            Destroy(sparkEffect, 3f);
+        }
+        
+        // Find nearest enemy within range
+        GameObject nearestEnemy = FindNearestEnemy(lightningRange);
+        if (nearestEnemy == null)
+        {
+            yield break;
+        }
+        
+        Vector3 startPos = currentParticlePoint.transform.position;
+        Vector3 endPos = nearestEnemy.transform.position;
+        
+        // Check for obstacles between player and enemy
+        if (IsPathBlocked(startPos, endPos))
+        {
+            yield break;
+        }
+        
+        StartCoroutine(CreateLightningArc(startPos, endPos, nearestEnemy));
+    }
+    
+    /// <summary>
+    /// Check if an attack animation is currently playing
+    /// </summary>
+    public bool IsPlayingAttackAnimation()
+    {
+        return isPlayingAttackAnimation;
+    }
+    
+    /// <summary>
+    /// Start attack animation tracking
+    /// </summary>
+    private void StartAttackAnimation()
+    {
+        isPlayingAttackAnimation = true;
+        
+        // Stop any previous animation tracking
+        if (currentAttackAnimationCoroutine != null)
+        {
+            StopCoroutine(currentAttackAnimationCoroutine);
+        }
+        
+        // Start safety timeout to prevent permanent animation blocking
+        currentAttackAnimationCoroutine = StartCoroutine(AttackAnimationSafetyTimeout());
+        
+        Debug.Log("Attack animation started - blocking new attacks");
+    }
+    
+    /// <summary>
+    /// Safety timeout to reset animation state if events don't fire
+    /// </summary>
+    private IEnumerator AttackAnimationSafetyTimeout()
+    {
+        yield return new WaitForSeconds(3.0f); // 3-second safety timeout
+        
+        if (isPlayingAttackAnimation)
+        {
+            Debug.LogWarning("Animation safety timeout triggered - resetting attack state (animation events may not be set up correctly)");
+            EndAttackAnimation();
+            if (playerMovement != null)
+            {
+                playerMovement.OnAttackAnimationEnd();
+            }
+        }
+    }
+    
+    /// <summary>
+    /// End attack animation tracking (called by animation events or manual override)
+    /// </summary>
+    private void EndAttackAnimation()
+    {
+        isPlayingAttackAnimation = false;
+        
+        if (currentAttackAnimationCoroutine != null)
+        {
+            StopCoroutine(currentAttackAnimationCoroutine);
+            currentAttackAnimationCoroutine = null;
+        }
+        
+        Debug.Log("Attack animation ended - allowing new attacks");
+    }
+
+    // ========== END ANIMATION EVENT SYSTEM ==========
     // Whisper Shard Tracking
     private GameObject currentThrownDagger = null;
     private int currentRedirectCount = 0;
@@ -934,33 +1332,23 @@ public class WeaponClassController : MonoBehaviour
     
     private void CreateSwordAttack(int attackAnimationType = 0)
     {
-        // Trigger melee attack animation
-        TriggerAttackAnimation(attackAnimationType, swordDuration);
+        // Check if already playing an attack animation
+        if (IsPlayingAttackAnimation())
+        {
+            Debug.Log("Valor Shard: Attack blocked - animation already playing");
+            return;
+        }
         
-        // Get player's sprite renderer to check facing direction
-        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
-        if (playerSprite == null)
-            playerSprite = GetComponentInChildren<SpriteRenderer>();
+        // Start attack animation tracking
+        StartAttackAnimation();
         
-        // Create sword attack damage object in front of player
-        bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
-        Vector3 attackPosition = playerTransform.position + (Vector3.right * (facingLeft ? -swordRange : swordRange));
+        // Trigger attack animation (animation events will handle damage timing)
+        TriggerAttackAnimation(attackAnimationType);
         
-        // Generate ultimate charge for valor left click attack
-        GenerateUltimateCharge(valorLeftClickCharge);
-        
-        // Add small delay to sync with animation start
-        StartCoroutine(DelayedSwordAttack(attackPosition));
+        Debug.Log($"Valor Shard: Started attack animation type {attackAnimationType}");
     }
     
-    private System.Collections.IEnumerator DelayedSwordAttack(Vector3 attackPosition)
-    {
-        // Wait for animation to start (adjust this value based on your animation controller transition time)
-        yield return new WaitForSeconds(swordAnimationDelay);
-        
-        // Now create the actual damage object
-        StartCoroutine(CreateSwordAttack(attackPosition));
-    }
+    // DelayedSwordAttack method removed - animation events now handle timing
     
     private void UseWhisperShard(bool isRightClick)
     {
@@ -1079,7 +1467,7 @@ public class WeaponClassController : MonoBehaviour
         Debug.Log("WhisperShard: TripleDaggerAttack coroutine started!");
         
         // Trigger ultimate attack animation (Type 2) 
-        TriggerAttackAnimation(2, 1.0f);
+        TriggerAttackAnimation(2);
         
         if (playerTransform == null) 
         {
@@ -1122,6 +1510,12 @@ public class WeaponClassController : MonoBehaviour
         }
         
         Debug.Log($"WhisperShard: Triple dagger attack launched! {activeDaggers.Count} active daggers");
+        
+        // Reset attack animation state since triple dagger attack is complete
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
     }
 
     private GameObject CreateTripleDagger(Vector3 startPosition, Vector3 direction, int index)
@@ -1143,7 +1537,7 @@ public class WeaponClassController : MonoBehaviour
         // Add damage component
         DamageObject damageComponent = projectile.AddComponent<DamageObject>();
         damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
-        damageComponent.damageRate = 0.1f;
+        damageComponent.damageRate = 0.3f; // Slower damage rate for thrown daggers
         
         // Add Whisper Shard passive callback
         damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
@@ -1258,86 +1652,7 @@ public class WeaponClassController : MonoBehaviour
         }
     }
     
-    private IEnumerator CreateSwordAttack(Vector3 startPosition)
-    {
-        // Create temporary damage object
-        GameObject swordAttack = new GameObject("SwordAttack");
-        swordAttack.transform.position = startPosition;
-        
-        // Add collider for damage detection - larger size spanning player height
-        BoxCollider2D attackCollider = swordAttack.AddComponent<BoxCollider2D>();
-        attackCollider.size = new Vector2(swordWidth, swordHeight);
-        attackCollider.isTrigger = true;
-        
-        // Add damage object component with player layer exclusion
-        DamageObject damageComponent = swordAttack.AddComponent<DamageObject>();
-        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(swordDamage);
-        damageComponent.damageRate = 0.1f; // Fast damage rate for sword
-        
-        // Use reflection to set the private excludePlayerLayer field
-        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (excludeField != null)
-        {
-            excludeField.SetValue(damageComponent, true);
-        }
-        
-        // Use reflection to set the private canDamageEnemies field
-        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (enemyDamageField != null)
-        {
-            enemyDamageField.SetValue(damageComponent, true);
-        }
-        
-        // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
-        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
-        
-        // Visual indicator (temporary - will be replaced with graphics later) - COMMENTED OUT FOR INVISIBILITY
-        SpriteRenderer swordRenderer = swordAttack.AddComponent<SpriteRenderer>();
-        
-        // Create larger red rectangle sprite for sword attack (scaled to match collider) - COMMENTED OUT FOR INVISIBILITY
-        int textureWidth = Mathf.RoundToInt(swordWidth * 64); // Scale texture based on collider width
-        int textureHeight = Mathf.RoundToInt(swordHeight * 32); // Scale texture based on collider height
-        Texture2D swordTexture = new Texture2D(textureWidth, textureHeight);
-        Color[] pixels = new Color[textureWidth * textureHeight];
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            // pixels[i] = new Color(1f, 0f, 0f, 0.7f); // Semi-transparent red, more visible - VISIBLE
-            pixels[i] = new Color(1f, 0f, 0f, 0f); // Fully transparent (invisible)
-        }
-        swordTexture.SetPixels(pixels);
-        swordTexture.Apply();
-        
-        swordRenderer.sprite = Sprite.Create(swordTexture, new Rect(0, 0, textureWidth, textureHeight), Vector2.one * 0.5f);
-        swordRenderer.sortingLayerName = "Player";
-        swordRenderer.sortingOrder = 0;
-        
-        // Store initial player position and facing direction
-        bool facingLeft = false;
-        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
-        if (playerSprite == null)
-            playerSprite = GetComponentInChildren<SpriteRenderer>();
-        if (playerSprite != null)
-            facingLeft = playerSprite.flipX;
-        
-        // Track sword attack duration
-        float elapsed = 0f;
-        
-        while (elapsed < swordDuration)
-        {
-            // Make sword follow player
-            if (playerTransform != null)
-            {
-                Vector3 newPosition = playerTransform.position + (Vector3.right * (facingLeft ? -swordRange : swordRange));
-                swordAttack.transform.position = newPosition;
-            }
-            
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-        
-        // Destroy attack object
-        Destroy(swordAttack);
-    }
+
     
     private void CreateWaveAttack()
     {
@@ -1658,116 +1973,31 @@ public class WeaponClassController : MonoBehaviour
     
     private void CreateDaggerStrike(int attackAnimationType = 0)
     {
-        if (playerTransform == null) return;
+        // Check if already playing an attack animation
+        if (IsPlayingAttackAnimation())
+        {
+            Debug.Log("Whisper Shard: Melee attack blocked - animation already playing");
+            return;
+        }
         
-        // Trigger melee attack animation
-        TriggerAttackAnimation(attackAnimationType, daggerDuration);
+        // Start attack animation tracking
+        StartAttackAnimation();
         
-        // Get player's facing direction
-        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
-        if (playerSprite == null)
-            playerSprite = GetComponentInChildren<SpriteRenderer>();
+        // Trigger attack animation (animation events will handle damage timing)
+        TriggerAttackAnimation(attackAnimationType);
         
-        bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
-        Vector3 attackPosition = playerTransform.position + (Vector3.right * (facingLeft ? -daggerRange : daggerRange));
-        
-        // Add small delay to sync with animation start
-        StartCoroutine(DelayedDaggerAttack(attackPosition));
+        Debug.Log($"Whisper Shard: Started melee attack animation type {attackAnimationType}");
     }
     
-    private System.Collections.IEnumerator DelayedDaggerAttack(Vector3 attackPosition)
-    {
-        // Wait for animation to start
-        yield return new WaitForSeconds(daggerAnimationDelay);
-        
-        // Now create the actual damage object
-        StartCoroutine(CreateDaggerAttack(attackPosition));
-    }
-    
-    private IEnumerator CreateDaggerAttack(Vector3 startPosition)
-    {
-        // Create temporary dagger damage object (smaller than sword)
-        GameObject daggerAttack = new GameObject("DaggerAttack");
-        daggerAttack.transform.position = startPosition;
-        
-        // Add collider for damage detection
-        BoxCollider2D attackCollider = daggerAttack.AddComponent<BoxCollider2D>();
-        attackCollider.size = new Vector2(daggerWidth, daggerHeight);
-        attackCollider.isTrigger = true;
-        
-        // Add damage object component
-        DamageObject damageComponent = daggerAttack.AddComponent<DamageObject>();
-        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(daggerDamage);
-        damageComponent.damageRate = 0.1f;
-        
-        // Add Whisper Shard passive callback
-        damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
-        
-        // Configure damage object
-        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (excludeField != null)
-        {
-            excludeField.SetValue(damageComponent, true);
-        }
-        
-        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (enemyDamageField != null)
-        {
-            enemyDamageField.SetValue(damageComponent, true);
-        }
-        
-        // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
-        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
-        
-        // Visual indicator (blue for dagger) - COMMENTED OUT FOR INVISIBILITY
-        SpriteRenderer daggerRenderer = daggerAttack.AddComponent<SpriteRenderer>();
-        
-        // Create larger texture scaled to match collider size - COMMENTED OUT FOR INVISIBILITY
-        int textureWidth = Mathf.RoundToInt(daggerWidth * 64);
-        int textureHeight = Mathf.RoundToInt(daggerHeight * 64);
-        Texture2D daggerTexture = new Texture2D(textureWidth, textureHeight);
-        Color[] pixels = new Color[textureWidth * textureHeight];
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            // pixels[i] = new Color(0f, 0.5f, 1f, 0.8f); // Blue color for dagger, more visible - VISIBLE
-            pixels[i] = new Color(0f, 0.5f, 1f, 0f); // Fully transparent (invisible)
-        }
-        daggerTexture.SetPixels(pixels);
-        daggerTexture.Apply();
-        
-        daggerRenderer.sprite = Sprite.Create(daggerTexture, new Rect(0, 0, textureWidth, textureHeight), Vector2.one * 0.5f);
-        daggerRenderer.sortingLayerName = "Player";
-        daggerRenderer.sortingOrder = 0;
-        
-        // Store facing direction
-        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
-        if (playerSprite == null)
-            playerSprite = GetComponentInChildren<SpriteRenderer>();
-        bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
-        
-        // Track attack duration and follow player
-        float elapsed = 0f;
-        while (elapsed < daggerDuration)
-        {
-            if (playerTransform != null)
-            {
-                Vector3 newPosition = playerTransform.position + (Vector3.right * (facingLeft ? -daggerRange : daggerRange));
-                daggerAttack.transform.position = newPosition;
-            }
-            
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-        
-        Destroy(daggerAttack);
-    }
+    // DelayedDaggerAttack method removed - animation events now handle timing
+    // CreateDaggerAttack method removed - replaced by CreateMeleeDamageObject in animation events
     
     private void ThrowDaggerProjectile()
     {
         if (playerTransform == null) return;
         
         // Trigger projectile attack animation (Type 2)
-        TriggerAttackAnimation(2, 0.4f);
+        TriggerAttackAnimation(2);
         
         // Get mouse position in world space
         Vector3 mousePosition = Vector3.zero;
@@ -2186,7 +2416,7 @@ public class WeaponClassController : MonoBehaviour
         // Add damage object component
         DamageObject damageComponent = projectile.AddComponent<DamageObject>();
         damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
-        damageComponent.damageRate = 0.1f;
+        damageComponent.damageRate = 0.3f; // Slower damage rate for thrown daggers
         
         // Add Whisper Shard passive callback
         damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
@@ -2266,14 +2496,20 @@ public class WeaponClassController : MonoBehaviour
     
     private void CreateElectricArc(int attackAnimationType = 0)
     {
-        GameObject currentParticlePoint = attackAnimationType == 0 ? stormParticlePoint1 : stormParticlePoint2;
-        if (playerTransform == null || currentParticlePoint == null) return;
+        // Check if already playing an attack animation
+        if (IsPlayingAttackAnimation())
+        {
+            Debug.Log("Storm Shard: Attack blocked - animation already playing");
+            return;
+        }
         
-        // Trigger magic attack animation
-        TriggerAttackAnimation(attackAnimationType, lightningDuration);
+        // Start attack animation tracking
+        StartAttackAnimation();
         
-        // Add small delay to sync with animation start
-        StartCoroutine(DelayedElectricArc(attackAnimationType, currentParticlePoint));
+        // Trigger magic attack animation (animation events will handle projectile spawning)
+        TriggerAttackAnimation(attackAnimationType);
+        
+        Debug.Log($"Storm Shard: Started attack animation type {attackAnimationType}");
     }
     
     private System.Collections.IEnumerator DelayedElectricArc(int attackAnimationType, GameObject currentParticlePoint)
@@ -2315,7 +2551,7 @@ public class WeaponClassController : MonoBehaviour
         if (playerTransform == null) return;
         
         // Trigger ultimate attack animation (Type 2)
-        TriggerAttackAnimation(2, boltDuration);
+        TriggerAttackAnimation(2);
         
         // Add small delay to sync with animation start
         StartCoroutine(DelayedLightningBolt());
@@ -2467,7 +2703,7 @@ public class WeaponClassController : MonoBehaviour
         glowRenderer.endWidth = 0.2f;
         glowRenderer.positionCount = 10;
         glowRenderer.sortingLayerName = "Player";
-        glowRenderer.sortingOrder = 0;
+        glowRenderer.sortingOrder = 1;
         
         // Create main (foreground) LineRenderer
         GameObject mainLightning = new GameObject("MainElectricArc");
@@ -2480,7 +2716,7 @@ public class WeaponClassController : MonoBehaviour
         lineRenderer.endWidth = 0.05f;
         lineRenderer.positionCount = 10; // More points for bending effect
         lineRenderer.sortingLayerName = "Player";
-        lineRenderer.sortingOrder = 0;
+        lineRenderer.sortingOrder = 1;
         
         // Create bending arc points
         Vector3[] arcPoints = CreateBendingArc(startPos, endPos, 10);
@@ -2539,7 +2775,7 @@ public class WeaponClassController : MonoBehaviour
         chainGlowRenderer.endWidth = 0.16f;
         chainGlowRenderer.positionCount = 8;
         chainGlowRenderer.sortingLayerName = "Player";
-        chainGlowRenderer.sortingOrder = 0;
+        chainGlowRenderer.sortingOrder = 1;
         
         // Create main chain LineRenderer
         GameObject mainChain = new GameObject("MainChainArc");
@@ -2564,7 +2800,7 @@ public class WeaponClassController : MonoBehaviour
         lineRenderer.endWidth = 0.04f;
         lineRenderer.positionCount = 8; // Fewer points for quicker creation
         lineRenderer.sortingLayerName = "Player";
-        lineRenderer.sortingOrder = 0;
+        lineRenderer.sortingOrder = 1;
         
         // Create bending arc points for chain lightning
         Vector3[] arcPoints = CreateBendingArc(startPos, endPos, 8);
@@ -2652,7 +2888,7 @@ public class WeaponClassController : MonoBehaviour
         boltGlowRenderer.endWidth = 0.3f;
         boltGlowRenderer.positionCount = 6;
         boltGlowRenderer.sortingLayerName = "Player";
-        boltGlowRenderer.sortingOrder = 0;
+        boltGlowRenderer.sortingOrder = 1;
         
         // Create main lightning bolt LineRenderer
         GameObject mainBolt = new GameObject("MainLightningBolt");
@@ -2665,7 +2901,7 @@ public class WeaponClassController : MonoBehaviour
         lineRenderer.endWidth = 0.1f;
         lineRenderer.positionCount = 6; // More points for subtle bending
         lineRenderer.sortingLayerName = "Player";
-        lineRenderer.sortingOrder = 0;
+        lineRenderer.sortingOrder = 1;
         
         // Create slightly squiggly lightning bolt path
         Vector3[] boltPoints = CreateBendingBolt(startPos, endPos, 6);
@@ -3079,24 +3315,20 @@ public class WeaponClassController : MonoBehaviour
     
     private void HandleLeftClickInput(ShardType activeWeapon)
     {
-        // For ValorShard, allow additional clicks during basic attack execution to enable multi-click combos
-        // Only block clicks during special attacks that shouldn't be interrupted
+        // Block all attacks if any attack animation is currently playing (universal rule)
+        if (IsPlayingAttackAnimation())
+        {
+            Debug.Log($"{activeWeapon}: Attack blocked - animation currently playing");
+            return;
+        }
+        
+        // Handle multi-click detection for ValorShard
         if (activeWeapon == ShardType.ValorShard)
         {
             // Allow clicks during basic attacks for multi-click system, but block during special attacks
             if (isPerformingSpecialAttack || isPerformingThrust)
                 return;
-        }
-        else
-        {
-            // For other shards, don't process clicks if already performing any attack
-            if (isPerformingSpecialAttack || isPerformingThrust || isPerformingBasicAttack)
-                return;
-        }
-            
-        // Handle multi-click detection for ValorShard
-        if (activeWeapon == ShardType.ValorShard)
-        {
+                
             float currentTime = Time.time;
             
             // Check if we should start a new sequence or continue existing one
@@ -3221,22 +3453,22 @@ public class WeaponClassController : MonoBehaviour
         }
         attackQueue.Clear();
         clickCount = 0;
-        isPerformingBasicAttack = false;
         Debug.Log("Attack queue cleared");
     }
 
     private System.Collections.IEnumerator PerformBasicValorAttack()
     {
-        isPerformingBasicAttack = true;
         Debug.Log("Starting basic valor attack");
         
         // Trigger basic sword attack
         CreateSwordAttack(0); // Attack type 0 for basic attack
         
-        // Wait for the attack duration plus a small buffer
-        yield return new WaitForSeconds(swordDuration + 0.1f);
+        // Wait for the attack animation to complete (animation events control timing)
+        while (IsPlayingAttackAnimation())
+        {
+            yield return null;
+        }
         
-        isPerformingBasicAttack = false;
         Debug.Log("Basic valor attack completed");
     }
     
@@ -3247,8 +3479,8 @@ public class WeaponClassController : MonoBehaviour
         // Use the existing dash attack but wait for completion
         PerformValorDashAttack();
         
-        // Wait for dash movement and sword attack to complete
-        yield return new WaitForSeconds(dashMovementDisableDuration + swordDuration + 0.2f);
+        // Wait for dash movement and animation to complete
+        yield return new WaitForSeconds(dashMovementDisableDuration + 0.5f); // Base animation time
         
         Debug.Log("Sequential dash attack completed");
     }
@@ -3447,7 +3679,7 @@ public class WeaponClassController : MonoBehaviour
         thrustStartTime = Time.time;
         
         // Trigger thrust attack animation (Type 2)
-        TriggerAttackAnimation(2, thrustDuration);
+        TriggerAttackAnimation(2);
         
         Debug.Log("ValorShard: Sword thrust attack initiated!");
         
@@ -3777,13 +4009,14 @@ public class WeaponClassController : MonoBehaviour
     }
     
     /// <summary>
-    /// Trigger attack animation with specific type and duration
+    /// Trigger attack animation with specific type (animation events will handle duration)
     /// </summary>
-    private void TriggerAttackAnimation(int attackType, float duration = 0.5f)
+    private void TriggerAttackAnimation(int attackType)
     {
         if (playerMovement == null) return;
         
-        playerMovement.TriggerAttackAnimation(attackType, duration);
+        // Don't pass duration - animation events will control the timing
+        playerMovement.TriggerAttackAnimation(attackType);
         
         Debug.Log($"Triggered {GetActiveWeaponName()} attack animation: Type {attackType}");
     }
