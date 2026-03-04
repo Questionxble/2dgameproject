@@ -10,9 +10,7 @@ Excluded parts: I tried to exclude build html (and code coverage report) files, 
 Reason: The previous code coverage files and build html files are not even the main programming of the game, it's the C# files, so they shouldn't ever be considered in code analysis, but I didn't know how to exclude them from SonarQube before I analyzed the repo.
 
 --  Coverage Trend  --
-| Sprint   | Line Coverage |
-|----------|---------------|
-| Sprint 7 |    17%        |
+Not applicable (different code coverage software)
 
 --  Reflection  --
 - UI/Canvas methods (CreateScreenUI(), UpdateHealthBar(), etc)
@@ -21,7 +19,7 @@ Why: Because testing these would require complex UI prefabs, which is too comple
 Why: Similarly to above, these tests would require animator prefabs and sprite assets which I would need to import externally. Too complex for the worth of the tests.
 
 --  Evidence --
-SonarQube and Trivy report: 
+SonarQube and Trivy report: https://github.com/Questionxble/2dgameproject/blob/weapon-rework/Documentation/Sprint2/ChristianHenken/SonarQubeTrivyReports.pdf
 
 --  Statement of Integrity --
 This coverage was generated from automated tests executed during this sprint.
