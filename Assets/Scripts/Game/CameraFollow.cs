@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Netcode;
 
 public class CameraFollow : MonoBehaviour
 {
@@ -30,21 +31,59 @@ public class CameraFollow : MonoBehaviour
     {
         cam = GetComponent<Camera>();
         
-        // If no target assigned, try to find player
+        // Find the local player (the one owned by this client)
         if (target == null)
         {
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null)
-                target = player.transform;
+            FindLocalPlayer();
         }
         
         // Initialize target position to current camera position
         targetPosition = transform.position;
     }
     
+    private void FindLocalPlayer()
+    {
+        // Wait for network to be ready
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsClient)
+        {
+            // If not in multiplayer, fallback to finding any player with "Player" tag
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null)
+            {
+                target = player.transform;
+                Debug.Log($"CameraFollow: Found single-player target: {player.name}");
+            }
+            return;
+        }
+        
+        // In multiplayer, find the local player (owned by this client)
+        PlayerMovement[] allPlayers = FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None);
+        
+        foreach (PlayerMovement player in allPlayers)
+        {
+            if (player.IsOwner) // This is the local player
+            {
+                target = player.transform;
+                Debug.Log($"CameraFollow: Found local player target: {player.name} (Owner: {player.OwnerClientId})");
+                return;
+            }
+        }
+        
+        // If no local player found yet, retry in a moment (players might still be spawning)
+        if (target == null)
+        {
+            Invoke(nameof(FindLocalPlayer), 0.5f);
+        }
+    }
+    
     void LateUpdate()
     {
-        if (target == null) return;
+        // Continuously try to find local player if we don't have a target yet
+        if (target == null)
+        {
+            FindLocalPlayer();
+            return;
+        }
         
         CheckScreenBounds();
         
@@ -148,6 +187,14 @@ public class CameraFollow : MonoBehaviour
     public void SetTarget(Transform newTarget)
     {
         target = newTarget;
+        Debug.Log($"CameraFollow: Target manually set to {(newTarget != null ? newTarget.name : "null")}");
+    }
+    
+    // Method to refresh local player search (useful for multiplayer)
+    public void RefreshLocalPlayer()
+    {
+        target = null;
+        FindLocalPlayer();
     }
     
     // Gizmos to visualize bounds in Scene view

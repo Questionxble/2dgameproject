@@ -224,12 +224,12 @@ public class WeaponClassController : NetworkBehaviour
     {
         if (playerTransform == null) return;
         
-        Debug.Log("Animation Event: ValorAttack1Start triggered");
+        // Debug.Log("Animation Event: ValorAttack1Start triggered"); // Reduced logging
         
         // Safety check: prevent duplicate damage objects during fast clicking
         if (activeValorMeleeAttack != null)
         {
-            Debug.Log("ValorAttack1Start: Cleaning up existing damage object before creating new one");
+            // Debug.Log("ValorAttack1Start: Cleaning up existing damage object before creating new one"); // Reduced logging
             Destroy(activeValorMeleeAttack);
             activeValorMeleeAttack = null;
         }
@@ -275,7 +275,7 @@ public class WeaponClassController : NetworkBehaviour
     
     private void ProcessValorAttack1End()
     {
-        Debug.Log("Animation Event: ValorAttack1End triggered");
+        // Debug.Log("Animation Event: ValorAttack1End triggered"); // Reduced logging
         
         // Destroy the active melee attack damage object
         if (activeValorMeleeAttack != null)
@@ -372,12 +372,34 @@ public class WeaponClassController : NetworkBehaviour
     {
         if (playerTransform == null) return;
         
-        Debug.Log("Animation Event: ValorThrustStart triggered");
+        // Only process on the owner's client, then sync to network
+        if (!IsOwner) return;
+        
+        ValorThrustStartServerRpc();
+    }
+    
+    [ServerRpc]
+    private void ValorThrustStartServerRpc()
+    {
+        ValorThrustStartClientRpc();
+    }
+    
+    [ClientRpc]
+    private void ValorThrustStartClientRpc()
+    {
+        ProcessValorThrustStart();
+    }
+    
+    private void ProcessValorThrustStart()
+    {
+        if (playerTransform == null) return;
+        
+        // Debug.Log("Animation Event: ValorThrustStart triggered"); // Reduced logging
         
         // Safety check: prevent duplicate damage objects during fast clicking
         if (activeValorMeleeAttack != null)
         {
-            Debug.Log("ValorThrustStart: Cleaning up existing damage object before creating new one");
+            // Debug.Log("ValorThrustStart: Cleaning up existing damage object before creating new one"); // Reduced logging
             Destroy(activeValorMeleeAttack);
             activeValorMeleeAttack = null;
         }
@@ -393,8 +415,11 @@ public class WeaponClassController : NetworkBehaviour
         // Create and store the thrust attack damage object (potentially larger/different stats)
         activeValorMeleeAttack = CreateMeleeDamageObject(attackPosition, swordWidth, swordHeight, swordDamage, "ValorThrust");
         
-        // Generate ultimate charge for valor left click attack
-        GenerateUltimateCharge(valorLeftClickCharge);
+        // Generate ultimate charge for valor left click attack (only on owner)
+        if (IsOwner)
+        {
+            GenerateUltimateCharge(valorLeftClickCharge);
+        }
     }
     
     /// <summary>
@@ -402,7 +427,27 @@ public class WeaponClassController : NetworkBehaviour
     /// </summary>
     public void ValorThrustEnd()
     {
-        Debug.Log("Animation Event: ValorThrustEnd triggered");
+        // Only process on the owner's client, then sync to network
+        if (!IsOwner) return;
+        
+        ValorThrustEndServerRpc();
+    }
+    
+    [ServerRpc]
+    private void ValorThrustEndServerRpc()
+    {
+        ValorThrustEndClientRpc();
+    }
+    
+    [ClientRpc]
+    private void ValorThrustEndClientRpc()
+    {
+        ProcessValorThrustEnd();
+    }
+    
+    private void ProcessValorThrustEnd()
+    {
+        // Debug.Log("Animation Event: ValorThrustEnd triggered"); // Reduced logging
         
         // Destroy the active melee attack damage object
         if (activeValorMeleeAttack != null)
@@ -411,8 +456,8 @@ public class WeaponClassController : NetworkBehaviour
             activeValorMeleeAttack = null;
         }
         
-        // Reset attack animation state
-        if (playerMovement != null)
+        // Reset attack animation state (only on owner)
+        if (IsOwner && playerMovement != null)
         {
             playerMovement.OnAttackAnimationEnd();
         }
@@ -425,12 +470,34 @@ public class WeaponClassController : NetworkBehaviour
     {
         if (playerTransform == null) return;
         
-        Debug.Log("Animation Event: WhisperMeleeAttackStart triggered");
+        // Only process on the owner's client, then sync to network
+        if (!IsOwner) return;
+        
+        WhisperMeleeAttackStartServerRpc();
+    }
+    
+    [ServerRpc]
+    private void WhisperMeleeAttackStartServerRpc()
+    {
+        WhisperMeleeAttackStartClientRpc();
+    }
+    
+    [ClientRpc]
+    private void WhisperMeleeAttackStartClientRpc()
+    {
+        ProcessWhisperMeleeAttackStart();
+    }
+    
+    private void ProcessWhisperMeleeAttackStart()
+    {
+        if (playerTransform == null) return;
+        
+        // Debug.Log("Animation Event: WhisperMeleeAttackStart triggered"); // Reduced logging
         
         // Safety check: prevent duplicate damage objects during fast clicking
         if (activeWhisperMeleeAttack != null)
         {
-            Debug.Log("WhisperMeleeAttackStart: Cleaning up existing damage object before creating new one");
+            // Debug.Log("WhisperMeleeAttackStart: Cleaning up existing damage object before creating new one"); // Reduced logging
             Destroy(activeWhisperMeleeAttack);
             activeWhisperMeleeAttack = null;
         }
@@ -446,8 +513,11 @@ public class WeaponClassController : NetworkBehaviour
         // Create and store the melee attack damage object
         activeWhisperMeleeAttack = CreateMeleeDamageObject(attackPosition, daggerWidth, daggerHeight, daggerDamage, "WhisperMeleeAttack");
         
-        // Generate ultimate charge for whisper left click attack
-        GenerateUltimateCharge(whisperLeftClickCharge);
+        // Generate ultimate charge for whisper left click attack (only on owner)
+        if (IsOwner)
+        {
+            GenerateUltimateCharge(whisperLeftClickCharge);
+        }
     }
     
     /// <summary>
@@ -455,7 +525,27 @@ public class WeaponClassController : NetworkBehaviour
     /// </summary>
     public void WhisperMeleeAttackEnd()
     {
-        Debug.Log("Animation Event: WhisperMeleeAttackEnd triggered");
+        // Only process on the owner's client, then sync to network
+        if (!IsOwner) return;
+        
+        WhisperMeleeAttackEndServerRpc();
+    }
+    
+    [ServerRpc]
+    private void WhisperMeleeAttackEndServerRpc()
+    {
+        WhisperMeleeAttackEndClientRpc();
+    }
+    
+    [ClientRpc]
+    private void WhisperMeleeAttackEndClientRpc()
+    {
+        ProcessWhisperMeleeAttackEnd();
+    }
+    
+    private void ProcessWhisperMeleeAttackEnd()
+    {
+        // Debug.Log("Animation Event: WhisperMeleeAttackEnd triggered"); // Reduced logging
         
         // Destroy the active melee attack damage object
         if (activeWhisperMeleeAttack != null)
@@ -464,8 +554,8 @@ public class WeaponClassController : NetworkBehaviour
             activeWhisperMeleeAttack = null;
         }
         
-        // Reset attack animation state
-        if (playerMovement != null)
+        // Reset attack animation state (only on owner)
+        if (IsOwner && playerMovement != null)
         {
             playerMovement.OnAttackAnimationEnd();
         }
@@ -476,13 +566,33 @@ public class WeaponClassController : NetworkBehaviour
     /// </summary>
     public void StormShardAttackEvent1()
     {
-        Debug.Log("Animation Event: StormShardAttackEvent1 triggered");
+        // Only process on the owner's client, then sync to network
+        if (!IsOwner) return;
+        
+        StormShardAttackEvent1ServerRpc();
+    }
+    
+    [ServerRpc]
+    private void StormShardAttackEvent1ServerRpc()
+    {
+        StormShardAttackEvent1ClientRpc();
+    }
+    
+    [ClientRpc]
+    private void StormShardAttackEvent1ClientRpc()
+    {
+        ProcessStormShardAttackEvent1();
+    }
+    
+    private void ProcessStormShardAttackEvent1()
+    {
+        // Debug.Log("Animation Event: StormShardAttackEvent1 triggered"); // Reduced logging
         
         // Execute storm attack using the first particle point (attack type 0)
         ExecuteStormAttack(0, stormParticlePoint1);
         
-        // Reset attack animation state (this completes the attack)
-        if (playerMovement != null)
+        // Reset attack animation state (this completes the attack) - only on owner
+        if (IsOwner && playerMovement != null)
         {
             playerMovement.OnAttackAnimationEnd();
         }
@@ -493,13 +603,33 @@ public class WeaponClassController : NetworkBehaviour
     /// </summary>
     public void StormShardAttackEvent2()
     {
-        Debug.Log("Animation Event: StormShardAttackEvent2 triggered");
+        // Only process on the owner's client, then sync to network
+        if (!IsOwner) return;
+        
+        StormShardAttackEvent2ServerRpc();
+    }
+    
+    [ServerRpc]
+    private void StormShardAttackEvent2ServerRpc()
+    {
+        StormShardAttackEvent2ClientRpc();
+    }
+    
+    [ClientRpc]
+    private void StormShardAttackEvent2ClientRpc()
+    {
+        ProcessStormShardAttackEvent2();
+    }
+    
+    private void ProcessStormShardAttackEvent2()
+    {
+        // Debug.Log("Animation Event: StormShardAttackEvent2 triggered"); // Reduced logging
         
         // Execute storm attack using the second particle point (attack type 1)
         ExecuteStormAttack(1, stormParticlePoint2);
         
-        // Reset attack animation state (this is the final event for Storm attacks)
-        if (playerMovement != null)
+        // Reset attack animation state (this is the final event for Storm attacks) - only on owner
+        if (IsOwner && playerMovement != null)
         {
             playerMovement.OnAttackAnimationEnd();
         }
@@ -641,7 +771,7 @@ public class WeaponClassController : NetworkBehaviour
         // Start safety timeout to prevent permanent animation blocking
         currentAttackAnimationCoroutine = StartCoroutine(AttackAnimationSafetyTimeout());
         
-        Debug.Log("Attack animation started - blocking new attacks");
+        // Debug.Log("Attack animation started - blocking new attacks");
     }
     
     /// <summary>
@@ -675,7 +805,7 @@ public class WeaponClassController : NetworkBehaviour
             currentAttackAnimationCoroutine = null;
         }
         
-        Debug.Log("Attack animation ended - allowing new attacks");
+        // Debug.Log("Attack animation ended - allowing new attacks");
     }
 
     // ========== END ANIMATION EVENT SYSTEM ==========
@@ -1633,7 +1763,7 @@ public class WeaponClassController : NetworkBehaviour
         // Trigger attack animation (animation events will handle damage timing)
         TriggerAttackAnimation(attackAnimationType);
         
-        Debug.Log($"Valor Shard: Started attack animation type {attackAnimationType}");
+        // Debug.Log($"Valor Shard: Started attack animation type {attackAnimationType}");
     }
     
     // DelayedSwordAttack method removed - animation events now handle timing
@@ -2208,6 +2338,9 @@ public class WeaponClassController : NetworkBehaviour
     
     private void UpdatePlayerFacingForMouse()
     {
+        // Only process on owner - non-owners get facing updates via network
+        if (!IsOwner) return;
+        
         // Get mouse position in world space
         Vector3 mousePosition = Vector3.zero;
         if (Mouse.current != null && Camera.main != null)
@@ -2226,15 +2359,15 @@ public class WeaponClassController : NetworkBehaviour
         {
             // Determine if mouse is to the left or right of player
             bool mouseIsLeft = mousePosition.x < playerTransform.position.x;
-            bool previousFlipX = playerSprite.flipX;
             
-            // Update player facing direction
-            playerSprite.flipX = mouseIsLeft;
-            
-            // If facing direction changed, flip particle points
-            if (previousFlipX != playerSprite.flipX)
+            // Update network facing direction if it changed
+            if (playerMovement != null && playerMovement.networkFacingLeft.Value != mouseIsLeft)
             {
-                FlipParticlePoints(playerSprite.flipX);
+                playerMovement.networkFacingLeft.Value = mouseIsLeft;
+                playerSprite.flipX = mouseIsLeft;
+                
+                // Flip particle points
+                FlipParticlePoints(mouseIsLeft);
             }
         }
     }
@@ -3622,7 +3755,7 @@ public class WeaponClassController : NetworkBehaviour
             // Check if we should start a new sequence or continue existing one
             bool shouldStartNewSequence = (clickCount == 0 || currentTime - firstClickTime > multiClickWindow);
             
-            Debug.Log($"Click timing debug - clickCount: {clickCount}, timeSinceFirst: {currentTime - firstClickTime:F3}, multiClickWindow: {multiClickWindow}, shouldStartNew: {shouldStartNewSequence}");
+            // Debug.Log($"Click timing debug - clickCount: {clickCount}, timeSinceFirst: {currentTime - firstClickTime:F3}, multiClickWindow: {multiClickWindow}, shouldStartNew: {shouldStartNewSequence}");
             
             if (shouldStartNewSequence)
             {
@@ -3631,7 +3764,7 @@ public class WeaponClassController : NetworkBehaviour
                 firstClickTime = currentTime;
                 attackQueue.Clear(); // Clear any previous queue
                 
-                Debug.Log($"First click registered - clickCount: {clickCount}");
+                // Debug.Log($"First click registered - clickCount: {clickCount}");
                 
                 // Queue the first attack
                 attackQueue.Enqueue(1); // 1 = basic attack
@@ -3644,13 +3777,13 @@ public class WeaponClassController : NetworkBehaviour
             {
                 // Continue existing sequence
                 clickCount++;
-                Debug.Log($"Additional click registered - clickCount: {clickCount}, timeDiff: {currentTime - firstClickTime:F3}");
+                // Debug.Log($"Additional click registered - clickCount: {clickCount}, timeDiff: {currentTime - firstClickTime:F3}");
                 
                 if (clickCount == 2)
                 {
                     // Double click detected - queue dash attack
                     attackQueue.Enqueue(2); // 2 = dash attack
-                    Debug.Log("Double click detected - queued dash attack");
+                    // Debug.Log("Double click detected - queued dash attack");
                     
                     // Apply Valor Shard passive buffs for double-click
                     ApplyDoubleClickBuffs();
@@ -3692,7 +3825,7 @@ public class WeaponClassController : NetworkBehaviour
         while (attackQueue.Count > 0)
         {
             int attackType = attackQueue.Dequeue();
-            Debug.Log($"Processing queued attack type: {attackType}");
+            // Debug.Log($"Processing queued attack type: {attackType}");
             
             switch (attackType)
             {
@@ -3707,10 +3840,10 @@ public class WeaponClassController : NetworkBehaviour
                     break;
             }
             
-            Debug.Log($"Completed attack type: {attackType}. Remaining in queue: {attackQueue.Count}");
+            // Debug.Log($"Completed attack type: {attackType}. Remaining in queue: {attackQueue.Count}");
         }
         
-        Debug.Log("Attack queue processing complete");
+        // Debug.Log("Attack queue processing complete");
         attackQueueProcessor = null; // Clear the reference when processing is complete
     }
     
@@ -3718,7 +3851,7 @@ public class WeaponClassController : NetworkBehaviour
     {
         if (attackQueueProcessor == null)
         {
-            Debug.Log("Starting attack queue processing");
+            // Debug.Log("Starting attack queue processing");
             attackQueueProcessor = StartCoroutine(ProcessAttackQueue());
         }
     }
@@ -3727,7 +3860,7 @@ public class WeaponClassController : NetworkBehaviour
     {
         if (attackQueueProcessor == null && attackQueue.Count > 0)
         {
-            Debug.Log("Restarting attack queue processing for additional attacks");
+            // Debug.Log("Restarting attack queue processing for additional attacks");
             attackQueueProcessor = StartCoroutine(ProcessAttackQueue());
         }
     }
@@ -3746,7 +3879,7 @@ public class WeaponClassController : NetworkBehaviour
 
     private System.Collections.IEnumerator PerformBasicValorAttack()
     {
-        Debug.Log("Starting basic valor attack");
+        // Debug.Log("Starting basic valor attack");
         
         // Trigger basic sword attack
         CreateSwordAttack(0); // Attack type 0 for basic attack
@@ -3757,12 +3890,12 @@ public class WeaponClassController : NetworkBehaviour
             yield return null;
         }
         
-        Debug.Log("Basic valor attack completed");
+        // Debug.Log("Basic valor attack completed");
     }
     
     private System.Collections.IEnumerator PerformValorDashAttackSequential()
     {
-        Debug.Log("Starting sequential dash attack");
+        // Debug.Log("Starting sequential dash attack");
         
         // Use the existing dash attack but wait for completion
         PerformValorDashAttack();
@@ -3770,7 +3903,7 @@ public class WeaponClassController : NetworkBehaviour
         // Wait for dash movement and animation to complete
         yield return new WaitForSeconds(dashMovementDisableDuration + 0.5f); // Base animation time
         
-        Debug.Log("Sequential dash attack completed");
+        // Debug.Log("Sequential dash attack completed");
     }
     
     private System.Collections.IEnumerator PerformValorThrustAttackSequential()
@@ -3837,8 +3970,8 @@ public class WeaponClassController : NetworkBehaviour
         // Get facing direction - use multiple methods to determine direction
         bool facingRight = GetActualFacingDirection();
         Vector2 dashDirection = facingRight ? Vector2.right : Vector2.left;
-        Debug.Log("=== NEW DIRECTION DETECTION SYSTEM ACTIVE ===");
-        Debug.Log($"Facing Debug - ActualFacing: {facingRight}, IsFacingRight: {playerMovement.IsFacingRight()}, Direction Vector: {dashDirection}");
+        // Debug.Log("=== NEW DIRECTION DETECTION SYSTEM ACTIVE ===");
+        // Debug.Log($"Facing Debug - ActualFacing: {facingRight}, IsFacingRight: {playerMovement.IsFacingRight()}, Direction Vector: {dashDirection}");
         
         // Temporarily disable player movement to let physics take over
         StartCoroutine(TemporarilyDisableMovement());
@@ -3853,8 +3986,8 @@ public class WeaponClassController : NetworkBehaviour
             // Set velocity directly instead of adding force
             rb.linearVelocity = dashVelocity;
             
-            Debug.Log($"Dash Debug - Direction: {dashDirection}, DashForce: {dashForce}, SetVelocity: {dashVelocity}, RB Mass: {rb.mass}");
-            Debug.Log($"Dash Debug - RB Constraints: {rb.constraints}, Gravity Scale: {rb.gravityScale}, Drag: {rb.linearDamping}");
+            // Debug.Log($"Dash Debug - Direction: {dashDirection}, DashForce: {dashForce}, SetVelocity: {dashVelocity}, RB Mass: {rb.mass}");
+            // Debug.Log($"Dash Debug - RB Constraints: {rb.constraints}, Gravity Scale: {rb.gravityScale}, Drag: {rb.linearDamping}");
             
             // Check velocity after setting it
             StartCoroutine(CheckDashVelocity(rb));
@@ -3900,13 +4033,13 @@ public class WeaponClassController : NetworkBehaviour
     private System.Collections.IEnumerator CheckDashVelocity(Rigidbody2D rb)
     {
         yield return new WaitForFixedUpdate(); // Wait one physics frame
-        Debug.Log($"Dash Velocity Check - Immediately after force: {rb.linearVelocity}");
+        // Debug.Log($"Dash Velocity Check - Immediately after force: {rb.linearVelocity}");
         
         yield return new WaitForSeconds(0.1f); // Wait a bit more
-        Debug.Log($"Dash Velocity Check - After 0.1s: {rb.linearVelocity}");
+        // Debug.Log($"Dash Velocity Check - After 0.1s: {rb.linearVelocity}");
         
         yield return new WaitForSeconds(0.1f); // Wait a bit more
-        Debug.Log($"Dash Velocity Check - After 0.2s: {rb.linearVelocity}");
+        // Debug.Log($"Dash Velocity Check - After 0.2s: {rb.linearVelocity}");
     }
     
     private System.Collections.IEnumerator TemporarilyDisableMovement()
@@ -3949,7 +4082,7 @@ public class WeaponClassController : NetworkBehaviour
         if (playerSprite != null)
         {
             bool facingRight = !playerSprite.flipX;
-            Debug.Log($"Direction detected from sprite flip: {(facingRight ? "RIGHT" : "LEFT")} (flipX: {playerSprite.flipX})");
+            // Debug.Log($"Direction detected from sprite flip: {(facingRight ? "RIGHT" : "LEFT")} (flipX: {playerSprite.flipX})");
             return facingRight;
         }
         
@@ -4326,7 +4459,7 @@ public class WeaponClassController : NetworkBehaviour
         // Don't pass duration - animation events will control the timing
         playerMovement.TriggerAttackAnimation(attackType);
         
-        Debug.Log($"Triggered {GetActiveWeaponName()} attack animation: Type {attackType}");
+        // Debug.Log($"Triggered {GetActiveWeaponName()} attack animation: Type {attackType}");
     }
     
     // ===== WEAPON SHARD PASSIVE ABILITIES =====
@@ -4862,7 +4995,7 @@ public class WeaponClassController : NetworkBehaviour
         if (playerMovement != null)
         {
             playerMovement.AddUltimateCharge(chargeAmount);
-            Debug.Log($"Ultimate charge generated: +{chargeAmount}");
+            // Debug.Log($"Ultimate charge generated: +{chargeAmount}");
         }
         else
         {

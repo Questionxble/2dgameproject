@@ -8,16 +8,26 @@ public class MultiplayerGameManager : NetworkBehaviour
     [SerializeField] private Transform player2SpawnPoint;
     [SerializeField] private GameObject playerPrefab;
     
-    [Header("UI References")]
+    [Header("UI References (Optional - can be null)")]
     [SerializeField] private UnityEngine.UI.Button hostButton;
     [SerializeField] private UnityEngine.UI.Button clientButton;
     [SerializeField] private UnityEngine.UI.Button serverButton;
     [SerializeField] private GameObject networkUI;
     [SerializeField] private UnityEngine.UI.Text statusText;
     
+    [Header("Game Settings")]
+    [SerializeField] private int maxPlayers = 2; // Maximum players per session
+    
     private void Start()
     {
-        // Setup button listeners
+        // Disable NetworkManager auto-spawn to prevent duplicates
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.NetworkConfig.PlayerPrefab = null;
+            Debug.Log("[MultiplayerGameManager] Disabled NetworkManager auto-spawn to prevent duplicates");
+        }
+        
+        // Setup button listeners (optional UI)
         if (hostButton != null)
             hostButton.onClick.AddListener(StartHost);
         if (clientButton != null)
@@ -74,7 +84,15 @@ public class MultiplayerGameManager : NetworkBehaviour
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"Client {clientId} connected");
-        UpdateStatusText($"Client {clientId} connected");
+        UpdateStatusText($"Client {clientId} connected ({NetworkManager.Singleton.ConnectedClientsIds.Count}/{maxPlayers} players)");
+        
+        // Check if we've reached max players
+        if (NetworkManager.Singleton.ConnectedClientsIds.Count > maxPlayers)
+        {
+            Debug.LogWarning($"Max players ({maxPlayers}) exceeded. Disconnecting client {clientId}");
+            NetworkManager.Singleton.DisconnectClient(clientId);
+            return;
+        }
         
         // If we're the server, spawn the player
         if (IsServer)
@@ -135,9 +153,11 @@ public class MultiplayerGameManager : NetworkBehaviour
     
     private void UpdateStatusText(string message)
     {
+        // Update UI text if available (optional)
         if (statusText != null)
             statusText.text = message;
         
+        // Always log to console (works with or without UI)
         Debug.Log($"[MultiplayerGameManager] {message}");
     }
     
@@ -168,5 +188,50 @@ public class MultiplayerGameManager : NetworkBehaviour
         
         if (networkUI != null)
             networkUI.SetActive(true);
+    }
+    
+    // Respawn functionality for when players die
+    [ServerRpc(RequireOwnership = false)]
+    public void RespawnPlayerServerRpc(ulong clientId)
+    {
+        if (!IsServer) return;
+        
+        // Find the existing player to respawn
+        foreach (var player in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (player.ClientId == clientId && player.PlayerObject != null)
+            {
+                RespawnAtPosition(player.PlayerObject.gameObject, clientId);
+                break;
+            }
+        }
+    }
+    
+    private void RespawnAtPosition(GameObject playerObject, ulong clientId)
+    {
+        if (playerObject == null) return;
+        
+        // Determine spawn position based on client ID
+        Vector3 spawnPosition = Vector3.zero;
+        if (clientId == 0) // Host/Server
+        {
+            spawnPosition = player1SpawnPoint != null ? player1SpawnPoint.position : Vector3.zero;
+        }
+        else // First client
+        {
+            spawnPosition = player2SpawnPoint != null ? player2SpawnPoint.position : new Vector3(3, 0, 0);
+        }
+        
+        // Move player to spawn position and reset health
+        playerObject.transform.position = spawnPosition;
+        
+        // Reset player health and enable movement
+        PlayerMovement playerMovement = playerObject.GetComponent<PlayerMovement>();
+        if (playerMovement != null)
+        {
+            playerMovement.RespawnPlayer(); // We'll need to add this method to PlayerMovement
+        }
+        
+        Debug.Log($"Respawned player for client {clientId} at position {spawnPosition}");
     }
 }

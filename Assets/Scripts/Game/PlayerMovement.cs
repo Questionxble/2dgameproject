@@ -155,7 +155,9 @@ public class PlayerMovement : NetworkBehaviour
     private NetworkVariable<int> networkEquippedShardType = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<float> networkCurrentShield = new NetworkVariable<float>(0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<ulong> networkPlayerID = new NetworkVariable<ulong>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-    private NetworkVariable<bool> networkFacingLeft = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    public NetworkVariable<bool> networkFacingLeft = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<bool> networkIsWalking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<bool> networkIsAttacking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     
     // Health Regeneration System
     private float lastDamageTime;
@@ -313,7 +315,13 @@ public class PlayerMovement : NetworkBehaviour
                 networkEquippedShardType.Value = 0; // No shard equipped initially
                 networkCurrentShield.Value = 0f;
             }
+            
+            // Setup camera to follow this local player
+            SetupCameraFollow();
         }
+        
+        // Setup player collision ignoring to prevent players from colliding with each other
+        SetupPlayerCollisionIgnoring();
         
         // Subscribe to network variable changes for all clients
         networkHealth.OnValueChanged += OnHealthChanged;
@@ -322,6 +330,8 @@ public class PlayerMovement : NetworkBehaviour
         networkIsPlayerDead.OnValueChanged += OnDeathStatusChanged;
         networkEquippedShardType.OnValueChanged += OnShardEquipChanged;
         networkCurrentShield.OnValueChanged += OnShieldChanged;
+        networkIsWalking.OnValueChanged += OnWalkingStatusChanged;
+        networkIsAttacking.OnValueChanged += OnAttackingStatusChanged;
         
         // Sync current health with network variable
         currentHealth = networkHealth.Value;
@@ -340,6 +350,8 @@ public class PlayerMovement : NetworkBehaviour
             networkIsPlayerDead.OnValueChanged -= OnDeathStatusChanged;
             networkEquippedShardType.OnValueChanged -= OnShardEquipChanged;
             networkCurrentShield.OnValueChanged -= OnShieldChanged;
+            networkIsWalking.OnValueChanged -= OnWalkingStatusChanged;
+            networkIsAttacking.OnValueChanged -= OnAttackingStatusChanged;
         }
         
         base.OnNetworkDespawn();
@@ -420,10 +432,59 @@ public class PlayerMovement : NetworkBehaviour
         UpdateShieldVisuals();
     }
     
+    private void OnWalkingStatusChanged(bool previousValue, bool newValue)
+    {
+        isPlayerWalking = newValue;
+        if (playerAnimator != null)
+        {
+            playerAnimator.SetBool("isWalking", newValue);
+        }
+    }
+    
+    private void OnAttackingStatusChanged(bool previousValue, bool newValue)
+    {
+        isPlayerAttacking = newValue;
+        if (playerAnimator != null)
+        {
+            playerAnimator.SetBool("isAttacking", newValue);
+        }
+    }
+    
     private void UpdateShieldVisuals()
     {
         // Update aegis shield visual effects
         UpdateAegisOutline();
+    }
+    
+    private void SetupPlayerCollisionIgnoring()
+    {
+        // Find all other players and ignore collisions between them
+        PlayerMovement[] allPlayers = FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None);
+        
+        foreach (PlayerMovement otherPlayer in allPlayers)
+        {
+            if (otherPlayer != this && otherPlayer.playerCollider != null && playerCollider != null)
+            {
+                Physics2D.IgnoreCollision(playerCollider, otherPlayer.playerCollider, true);
+                Debug.Log($"PlayerCollision: Ignoring collision between {gameObject.name} and {otherPlayer.gameObject.name}");
+            }
+        }
+    }
+    
+    private void SetupCameraFollow()
+    {
+        // Find the main camera and set this player as the target
+        CameraFollow cameraFollow = Camera.main?.GetComponent<CameraFollow>();
+        if (cameraFollow != null)
+        {
+            cameraFollow.SetTarget(transform);
+            cameraFollow.CenterOnTarget();
+            Debug.Log($"CameraFollow: Set target to local player {gameObject.name} (Owner: {OwnerClientId})");
+        }
+        else
+        {
+            Debug.LogWarning("CameraFollow: Could not find CameraFollow component on main camera");
+        }
     }
 
     void Update()
@@ -483,7 +544,7 @@ public class PlayerMovement : NetworkBehaviour
                 UpdateAegisOutline();
                 UpdateHealthBar(); // Update health bar to reflect new values
                 
-                Debug.Log($"Max health changed: {previousMaxHealth} -> {newMaxHealth}. Health: {currentHealth}/{newMaxHealth}, Aegis: {currentAegisShield:F1}/{maxAegisShield:F1}");
+                // Debug.Log($"Max health changed: {previousMaxHealth} -> {newMaxHealth}. Health: {currentHealth}/{newMaxHealth}, Aegis: {currentAegisShield:F1}/{maxAegisShield:F1}");
             }
         }
     }
@@ -910,6 +971,29 @@ public class PlayerMovement : NetworkBehaviour
             {
                 enabled = false; // Disable this script's Update method
             }
+            
+            // Trigger respawn after delay (only on server)
+            if (IsServer)
+            {
+                StartCoroutine(RespawnAfterDelay());
+            }
+        }
+    }
+    
+    // Coroutine to handle respawn delay
+    private System.Collections.IEnumerator RespawnAfterDelay()
+    {
+        yield return new WaitForSeconds(3f); // Wait 3 seconds before respawning
+        
+        // Get the MultiplayerGameManager and trigger respawn
+        MultiplayerGameManager gameManager = FindObjectOfType<MultiplayerGameManager>();
+        if (gameManager != null)
+        {
+            gameManager.RespawnPlayerServerRpc(OwnerClientId);
+        }
+        else
+        {
+            Debug.LogError("MultiplayerGameManager not found! Cannot respawn player.");
         }
     }
     
@@ -1492,7 +1576,16 @@ public class PlayerMovement : NetworkBehaviour
     // Movement Detection Methods
     public bool IsMovingHorizontally()
     {
-        return Mathf.Abs(horizontalInput) > 0.1f;
+        // For owner: check input for immediate feedback
+        // For non-owners: check actual velocity since they don't have input
+        if (IsOwner)
+        {
+            return Mathf.Abs(horizontalInput) > 0.1f;
+        }
+        else
+        {
+            return rb != null && Mathf.Abs(rb.linearVelocity.x) > 0.1f;
+        }
     }
     
     // ===== ANIMATION CONTROLLER SYSTEM =====
@@ -1605,8 +1698,14 @@ public class PlayerMovement : NetworkBehaviour
         {
             isPlayerWalking = isMoving;
             playerAnimator.SetBool("isWalking", isPlayerWalking);
+            
+            // Sync to network if this is the owner
+            if (IsOwner)
+            {
+                networkIsWalking.Value = isPlayerWalking;
+            }
         }
-        
+
         // Update jumping state - should be true until player lands
         bool isJumping = !isGrounded;
         if (isPlayerJumping != isJumping)
@@ -1614,7 +1713,13 @@ public class PlayerMovement : NetworkBehaviour
             isPlayerJumping = isJumping;
             playerAnimator.SetBool("isJumping", isPlayerJumping);
         }
-        
+
+        // Update attacking state and sync to network
+        if (IsOwner && networkIsAttacking.Value != isPlayerAttacking)
+        {
+            networkIsAttacking.Value = isPlayerAttacking;
+        }
+
         // Update other parameters
         playerAnimator.SetBool("isDead", isPlayerDead);
         playerAnimator.SetBool("isAttacking", isPlayerAttacking);
@@ -1632,6 +1737,12 @@ public class PlayerMovement : NetworkBehaviour
         currentAttackType = attackType;
         playerAnimator.SetBool("isAttacking", true);
         playerAnimator.SetInteger("attackType", attackType);
+        
+        // Sync attack state to network if this is the owner
+        if (IsOwner)
+        {
+            networkIsAttacking.Value = true;
+        }
         
         // Reset attack state after duration
         StartCoroutine(ResetAttackState(duration));
@@ -1651,6 +1762,12 @@ public class PlayerMovement : NetworkBehaviour
         playerAnimator.SetBool("isAttacking", true);
         playerAnimator.SetInteger("attackType", attackType);
         
+        // Sync attack state to network if this is the owner
+        if (IsOwner)
+        {
+            networkIsAttacking.Value = true;
+        }
+        
         Debug.Log($"Triggered attack animation (event-based): Type {attackType}");
     }
     
@@ -1665,6 +1782,12 @@ public class PlayerMovement : NetworkBehaviour
         if (playerAnimator != null)
         {
             playerAnimator.SetBool("isAttacking", false);
+        }
+        
+        // Sync attack state to network if this is the owner
+        if (IsOwner)
+        {
+            networkIsAttacking.Value = false;
         }
         
         // Notify weapon controller that animation ended
@@ -1851,6 +1974,12 @@ public class PlayerMovement : NetworkBehaviour
             playerAnimator.SetBool("isAttacking", false);
             playerAnimator.SetInteger("attackType", 0);
         }
+        
+        // Sync attack state to network if this is the owner
+        if (IsOwner)
+        {
+            networkIsAttacking.Value = false;
+        }
     }
     
     /// <summary>
@@ -1892,7 +2021,7 @@ public class PlayerMovement : NetworkBehaviour
             Debug.Log("Ultimate already full! Triggering full effect from overflow charge.");
         }
         
-        Debug.Log($"Ultimate charge: {oldCharge:F1} + {charge:F1} = {currentUltimateCharge:F1} / {maxUltimateCharge:F1} ({(currentUltimateCharge/maxUltimateCharge)*100:F1}%)");
+        // Debug.Log($"Ultimate charge: {oldCharge:F1} + {charge:F1} = {currentUltimateCharge:F1} / {maxUltimateCharge:F1} ({(currentUltimateCharge/maxUltimateCharge)*100:F1}%)");
     }
     
     public float GetCurrentUltimateCharge()
@@ -2517,7 +2646,7 @@ public class PlayerMovement : NetworkBehaviour
             if (currentUltimateCharge != lastLoggedUltimateCharge)
             {
                 ultimateBarUpdateCount++;
-                Debug.Log($"Ultimate bar charge changed #{ultimateBarUpdateCount}: {currentUltimateCharge:F1}/{maxUltimateCharge:F1} = {ultimatePercent:F3} ({ultimatePercent*100:F1}%)");
+                // Debug.Log($"Ultimate bar charge changed #{ultimateBarUpdateCount}: {currentUltimateCharge:F1}/{maxUltimateCharge:F1} = {ultimatePercent:F3} ({ultimatePercent*100:F1}%)");
                 // Debug.Log($"  Fill amounts: Previous={previousFillAmount:F3} -> Expected={ultimatePercent:F3} -> Actual={actualFillAmount:F3}");
                 // Debug.Log($"  Ultimate bar properties: Type={ultimateBarFill.type}, FillMethod={ultimateBarFill.fillMethod}, Active={ultimateBarFill.gameObject.activeInHierarchy}");
                 
@@ -2642,7 +2771,7 @@ public class PlayerMovement : NetworkBehaviour
         iconRect.anchorMax = new Vector2(0f, 0f);
         iconRect.pivot = new Vector2(0.5f, 0f); // Pivot at bottom center so it grows upward
         
-        Debug.Log($"Creating fire buff icon for {buff.type}. Fire sprites available: {fireAnimationSprites != null && fireAnimationSprites.Length > 0}");
+        // Debug.Log($"Creating fire buff icon for {buff.type}. Fire sprites available: {fireAnimationSprites != null && fireAnimationSprites.Length > 0}");
         
         // Fire image with colored tint for buff type
         Image fireImage = buffIconGO.AddComponent<Image>();
@@ -2661,7 +2790,7 @@ public class PlayerMovement : NetworkBehaviour
             FireSpriteAnimator fireAnimator = buffIconGO.AddComponent<FireSpriteAnimator>();
             fireAnimator.Initialize(fireImage, fireAnimationSprites, fireAnimationSpeed);
             
-            Debug.Log($"Fire sprite animation added for {buff.type} with {fireAnimationSprites.Length} frames");
+            // Debug.Log($"Fire sprite animation added for {buff.type} with {fireAnimationSprites.Length} frames");
         }
         else
         {
@@ -2739,10 +2868,10 @@ public class PlayerMovement : NetworkBehaviour
         IndividualBuffTooltipHandler hoverTooltipHandler = hoverArea.AddComponent<IndividualBuffTooltipHandler>();
         hoverTooltipHandler.Initialize(this, buff);
         
-        Debug.Log($"Added tooltip handler for {buff.type} to hover area. Hover area scale: {hoverRect.localScale}");
-        Debug.Log($"Buff icon {buff.type} position: {buffIconGO.transform.position}, localPosition: {buffIconGO.transform.localPosition}");
+        // Debug.Log($"Added tooltip handler for {buff.type} to hover area. Hover area scale: {hoverRect.localScale}");
+        // Debug.Log($"Buff icon {buff.type} position: {buffIconGO.transform.position}, localPosition: {buffIconGO.transform.localPosition}");
         
-        Debug.Log($"Created fire buff icon for {buff.type} at scale {iconRect.localScale} with size {iconRect.sizeDelta}. Raycast target: {fireImage.raycastTarget}");
+        // Debug.Log($"Created fire buff icon for {buff.type} at scale {iconRect.localScale} with size {iconRect.sizeDelta}. Raycast target: {fireImage.raycastTarget}");
         
         activeBuffUI.Add(buffIconGO);
     }
@@ -3108,6 +3237,46 @@ public class PlayerMovement : NetworkBehaviour
         // Clear the animation flag
         isUltimateEffectPlaying = false;
     }
+    
+    // Method to handle respawning the player after death
+    public void RespawnPlayer()
+    {
+        if (!IsServer) return;
+        
+        // Reset health and death status
+        networkHealth.Value = maxHealth;
+        networkIsPlayerDead.Value = false;
+        
+        // Re-enable player control
+        enabled = true;
+        
+        // Reset animation state
+        if (playerAnimator != null)
+        {
+            playerAnimator.SetBool("IsDead", false);
+        }
+        
+        // Reset any ongoing effects
+        if (isBurning)
+        {
+            StopCoroutine("BurningEffect");
+            isBurning = false;
+        }
+        
+        // Clear any active buffs
+        ClearAllBuffs();
+        
+        Debug.Log($"Player respawned with full health at position {transform.position}");
+    }
+    
+    // Helper method to clear all active buffs
+    private void ClearAllBuffs()
+    {
+        if (IsServer)
+        {
+            activeBuffs.Clear();
+        }
+    }
 }
 
 // Separate component for handling buff icon hover events
@@ -3155,7 +3324,7 @@ public class IndividualBuffTooltipHandler : MonoBehaviour, IPointerEnterHandler,
     {
         playerMovement = player;
         buff = buffInstance;
-        Debug.Log($"IndividualBuffTooltipHandler initialized for {buff.type} with player: {player != null}");
+        // Debug.Log($"IndividualBuffTooltipHandler initialized for {buff.type} with player: {player != null}");
     }
     
     public void OnPointerEnter(PointerEventData eventData)
