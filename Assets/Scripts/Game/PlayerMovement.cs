@@ -6,8 +6,9 @@ using UnityEngine.InputSystem.UI;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Netcode;
 
-public class PlayerMovement : MonoBehaviour
+public class PlayerMovement : NetworkBehaviour
 {
     [Header("Movement Settings")]
     [SerializeField] private float moveSpeed = 5f;
@@ -117,7 +118,7 @@ public class PlayerMovement : MonoBehaviour
     [Header("Collider")]
     [SerializeField] private CapsuleCollider2D playerCollider;
     private SpriteRenderer spriteRenderer;
-    private Animator playerAnimator;
+    public Animator playerAnimator; // Made public for WeaponClassController access
 
     // Input
     private float horizontalInput;
@@ -138,13 +139,23 @@ public class PlayerMovement : MonoBehaviour
     private bool isPlayerWalking = false;
     private bool isPlayerDead = false;
     private int currentAttackType = 0; // 0=None, 1=Melee, 2=Projectile, 3=Ultimate
-    private RuntimeAnimatorController currentAnimController = null;
+    public RuntimeAnimatorController currentAnimController = null; // Made public for WeaponClassController access
+    private float lastAnimationWarningTime = 0f; // To prevent log spam
 
     private GameObject currentPlatform;
     
     // Health System
     private int currentHealth;
     private Vector3 spawnPosition;
+    
+    // Network Synchronized Variables
+    private NetworkVariable<int> networkHealth = new NetworkVariable<int>(100, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> networkIsBurning = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> networkIsPlayerDead = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<int> networkEquippedShardType = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<float> networkCurrentShield = new NetworkVariable<float>(0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<ulong> networkPlayerID = new NetworkVariable<ulong>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> networkFacingLeft = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     
     // Health Regeneration System
     private float lastDamageTime;
@@ -263,11 +274,8 @@ public class PlayerMovement : MonoBehaviour
         originalGravityScale = rb.gravityScale;
         
         // Create screen UI system (replaces world-space health bar)
-        if (useScreenUI)
-        {
-            CreateScreenUI();
-        }
-        else
+        // UI creation will be handled in OnNetworkSpawn() for proper network ownership
+        if (!useScreenUI)
         {
             // Only create world-space health bar if screen UI is disabled
             CreateHealthBar();
@@ -277,49 +285,206 @@ public class PlayerMovement : MonoBehaviour
         weaponController = GetComponent<WeaponClassController>();
     }
 
-    void Update()
+    public override void OnNetworkSpawn()
     {
-        GetInput();
-        CheckGrounded();
-        CheckCeilingClearance();
-        HandleFallDamage();
-        HandleWaterPhysics();
-        HandleMovement();
-        HandleHealthRegeneration();
-        HandleBurningEffect();
-        UpdateSprite();
-        UpdateHealthBarPosition();
+        base.OnNetworkSpawn();
         
-        // Update new systems
-        UpdateBuffs();
-        UpdateScreenUI();
-        UpdateAnimationParameters();
-        
-        // Handle max health changes from durability buffs
-        float newMaxHealth = GetModifiedMaxHealth();
-        if (newMaxHealth != previousMaxHealth)
+        if (IsOwner)
         {
-            // Calculate the ratio to maintain proportional health and aegis
-            float healthRatio = previousMaxHealth > 0 ? (float)currentHealth / previousMaxHealth : 1f;
-            float aegisRatio = maxAegisShield > 0 ? currentAegisShield / maxAegisShield : 0f;
+            // Set spawn position based on player ID
+            SetPlayerSpawnPosition();
             
-            // Update max health and maintain ratio
-            currentHealth = Mathf.RoundToInt(newMaxHealth * healthRatio);
-            currentHealth = Mathf.Min(currentHealth, (int)newMaxHealth); // Ensure health doesn't exceed new max
+            // Initialize network variables for the owning player
+            networkPlayerID.Value = OwnerClientId;
             
-            // Update aegis shield proportionally
-            maxAegisShield = newMaxHealth;
-            if (currentAegisShield > 0f)
+            // Create screen UI for local player only
+            if (useScreenUI)
             {
-                currentAegisShield = maxAegisShield * aegisRatio;
-                currentAegisShield = Mathf.Min(currentAegisShield, maxAegisShield); // Ensure aegis doesn't exceed new max
+                CreateScreenUI();
+                Debug.Log("Created UI for local player");
             }
             
-            previousMaxHealth = newMaxHealth;
-            UpdateAegisOutline();
-            UpdateHealthBar(); // Update health bar to reflect new values
+            // Set initial network health
+            if (IsServer)
+            {
+                networkHealth.Value = maxHealth;
+                networkIsBurning.Value = false;
+                networkIsPlayerDead.Value = false;
+                networkEquippedShardType.Value = 0; // No shard equipped initially
+                networkCurrentShield.Value = 0f;
+            }
+        }
+        
+        // Subscribe to network variable changes for all clients
+        networkHealth.OnValueChanged += OnHealthChanged;
+        networkIsBurning.OnValueChanged += OnBurningStatusChanged;
+        networkFacingLeft.OnValueChanged += OnFacingDirectionChanged;
+        networkIsPlayerDead.OnValueChanged += OnDeathStatusChanged;
+        networkEquippedShardType.OnValueChanged += OnShardEquipChanged;
+        networkCurrentShield.OnValueChanged += OnShieldChanged;
+        
+        // Sync current health with network variable
+        currentHealth = networkHealth.Value;
+        isBurning = networkIsBurning.Value;
+        isPlayerDead = networkIsPlayerDead.Value;
+    }
+    
+    public override void OnNetworkDespawn()
+    {
+        // Unsubscribe from network variable changes
+        if (networkHealth != null)
+        {
+            networkHealth.OnValueChanged -= OnHealthChanged;
+            networkIsBurning.OnValueChanged -= OnBurningStatusChanged;
+            networkFacingLeft.OnValueChanged -= OnFacingDirectionChanged;
+            networkIsPlayerDead.OnValueChanged -= OnDeathStatusChanged;
+            networkEquippedShardType.OnValueChanged -= OnShardEquipChanged;
+            networkCurrentShield.OnValueChanged -= OnShieldChanged;
+        }
+        
+        base.OnNetworkDespawn();
+    }
+    
+    private void UpdateHealthUI()
+    {
+        // Update health displays based on current network health value
+        UpdateHealthBar();
+        UpdateScreenUI();
+    }
+    
+    private void SetPlayerSpawnPosition()
+    {
+        // Set different spawn positions for different players
+        Vector3 baseSpawnPosition = spawnPosition;
+        
+        // Offset spawn position based on client ID
+        switch (OwnerClientId)
+        {
+            case 0: // Player 1 - original position
+                transform.position = baseSpawnPosition;
+                break;
+            case 1: // Player 2 - offset to the right
+                transform.position = baseSpawnPosition + new Vector3(3f, 0f, 0f);
+                break;
+            default: // Additional players - spread them out
+                transform.position = baseSpawnPosition + new Vector3(1.5f * OwnerClientId, 0f, 0f);
+                break;
+        }
+    }
+    
+    // Network variable change callbacks
+    private void OnHealthChanged(int previousValue, int newValue)
+    {
+        currentHealth = newValue;
+        UpdateHealthUI();
+    }
+    
+    private void OnBurningStatusChanged(bool previousValue, bool newValue)
+    {
+        isBurning = newValue;
+        UpdateBurningVisuals();
+    }
+    
+    private void OnFacingDirectionChanged(bool previousValue, bool newValue)
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.flipX = newValue;
             
-            Debug.Log($"Max health changed: {previousMaxHealth} -> {newMaxHealth}. Health: {currentHealth}/{newMaxHealth}, Aegis: {currentAegisShield:F1}/{maxAegisShield:F1}");
+            // Update particle points for remote players
+            if (!IsOwner && weaponController != null)
+            {
+                weaponController.FlipParticlePoints(newValue);
+            }
+        }
+    }
+    
+    private void OnDeathStatusChanged(bool previousValue, bool newValue)
+    {
+        isPlayerDead = newValue;
+        if (newValue)
+        {
+            HandlePlayerDeath();
+        }
+    }
+    
+    private void OnShardEquipChanged(int previousValue, int newValue)
+    {
+        // Update animation controller based on equipped shard
+        UpdateAnimationController(newValue);
+    }
+    
+    private void OnShieldChanged(float previousValue, float newValue)
+    {
+        currentAegisShield = newValue;
+        UpdateShieldVisuals();
+    }
+    
+    private void UpdateShieldVisuals()
+    {
+        // Update aegis shield visual effects
+        UpdateAegisOutline();
+    }
+
+    void Update()
+    {
+        // Only process input and certain logic for the owning player
+        // Handle networked vs non-networked movement
+        if (IsOwner || !IsSpawned)
+        {
+            // IsSpawned false means we're testing without networking
+            GetInput();
+            HandleMovement();
+        }
+        
+        // These run for all clients to keep visuals synchronized
+        CheckGrounded();
+        CheckCeilingClearance();
+        UpdateSprite();
+        UpdateAnimationParameters();
+        
+        // Owner-only systems that affect game state (or non-networked testing)
+        if (IsOwner || !IsSpawned)
+        {
+            HandleFallDamage();
+            HandleWaterPhysics();
+            HandleHealthRegeneration();
+            HandleBurningEffect();
+            UpdateBuffs();
+        }
+        
+        // UI updates for all players (local UI shows based on network variables)
+        UpdateHealthBarPosition();
+        UpdateScreenUI();
+        
+        // Handle max health changes from durability buffs (owner only)
+        if (IsOwner)
+        {
+            float newMaxHealth = GetModifiedMaxHealth();
+            if (newMaxHealth != previousMaxHealth)
+            {
+                // Calculate the ratio to maintain proportional health and aegis
+                float healthRatio = previousMaxHealth > 0 ? (float)currentHealth / previousMaxHealth : 1f;
+                float aegisRatio = maxAegisShield > 0 ? currentAegisShield / maxAegisShield : 0f;
+                
+                // Update max health and maintain ratio
+                currentHealth = Mathf.RoundToInt(newMaxHealth * healthRatio);
+                currentHealth = Mathf.Min(currentHealth, (int)newMaxHealth); // Ensure health doesn't exceed new max
+                
+                // Update aegis shield proportionally
+                maxAegisShield = newMaxHealth;
+                if (currentAegisShield > 0f)
+                {
+                    currentAegisShield = maxAegisShield * aegisRatio;
+                    currentAegisShield = Mathf.Min(currentAegisShield, maxAegisShield); // Ensure aegis doesn't exceed new max
+                }
+                
+                previousMaxHealth = newMaxHealth;
+                UpdateAegisOutline();
+                UpdateHealthBar(); // Update health bar to reflect new values
+                
+                Debug.Log($"Max health changed: {previousMaxHealth} -> {newMaxHealth}. Health: {currentHealth}/{newMaxHealth}, Aegis: {currentAegisShield:F1}/{maxAegisShield:F1}");
+            }
         }
     }
     
@@ -399,25 +564,36 @@ public class PlayerMovement : MonoBehaviour
         bool weaponMenuOpen = weaponController != null && weaponController.IsWeaponMenuOpen();
         bool isUsingWhisperShard = weaponController != null && weaponController.IsWhisperShardActive;
         
-        if (spriteRenderer != null && !weaponMenuOpen && !isUsingWhisperShard)
+        if (spriteRenderer != null && !weaponMenuOpen && !isUsingWhisperShard && IsOwner)
         {
             bool previousFlipX = spriteRenderer.flipX;
+            bool shouldFaceLeft = false;
             
             if (horizontalInput < -0.1f)
             {
-                spriteRenderer.flipX = true; // Face left
-                //spriteRenderer.transform.localPosition = new Vector3(-0.1f, spriteRenderer.transform.localPosition.y, spriteRenderer.transform.localPosition.z);
+                shouldFaceLeft = true;
             }
             else if (horizontalInput > 0.1f)
             {
-                spriteRenderer.flipX = false; // Face right
-                //spriteRenderer.transform.localPosition = new Vector3(0.1f, spriteRenderer.transform.localPosition.y, spriteRenderer.transform.localPosition.z);
+                shouldFaceLeft = false;
+            }
+            else
+            {
+                // No input, keep current direction
+                return;
             }
             
-            // If facing direction changed, flip particle points
-            if (previousFlipX != spriteRenderer.flipX && weaponController != null)
+            // Only update if direction changed and sync to network
+            if (shouldFaceLeft != networkFacingLeft.Value)
             {
-                weaponController.FlipParticlePoints(spriteRenderer.flipX);
+                networkFacingLeft.Value = shouldFaceLeft;
+                spriteRenderer.flipX = shouldFaceLeft;
+                
+                // If facing direction changed, flip particle points
+                if (weaponController != null)
+                {
+                    weaponController.FlipParticlePoints(shouldFaceLeft);
+                }
             }
         }
         
@@ -654,47 +830,104 @@ public class PlayerMovement : MonoBehaviour
     
     private void TakeDamage(int damage)
     {
+        // For networked gameplay, damage must be processed on the server
+        if (IsOwner && IsClient)
+        {
+            TakeDamageServerRpc(damage);
+        }
+        else if (IsServer && !IsClient)
+        {
+            // Direct server processing
+            ProcessDamage(damage);
+        }
+    }
+    
+    [ServerRpc]
+    private void TakeDamageServerRpc(int damage)
+    {
+        ProcessDamage(damage);
+    }
+    
+    private void ProcessDamage(int damage)
+    {
+        // This method processes damage with server authority
         int remainingDamage = damage;
         
         // Check aegis shield first
-        if (currentAegisShield > 0f)
+        if (networkCurrentShield.Value > 0f)
         {
-            float shieldDamage = Mathf.Min(currentAegisShield, remainingDamage);
-            currentAegisShield -= shieldDamage;
+            float shieldDamage = Mathf.Min(networkCurrentShield.Value, remainingDamage);
+            networkCurrentShield.Value -= shieldDamage;
             remainingDamage -= (int)shieldDamage;
             
-            Debug.Log($"Aegis Shield absorbed {shieldDamage:F1} damage. Shield remaining: {currentAegisShield:F1}/{maxAegisShield:F1}");
-            UpdateAegisOutline();
+            Debug.Log($"Aegis Shield absorbed {shieldDamage:F1} damage. Shield remaining: {networkCurrentShield.Value:F1}/{maxAegisShield:F1}");
         }
         
         // Apply remaining damage to health
         if (remainingDamage > 0)
         {
-            currentHealth -= remainingDamage;
-            currentHealth = Mathf.Max(0, currentHealth);
+            networkHealth.Value = Mathf.Max(0, networkHealth.Value - remainingDamage);
             
-            // Record damage time for regeneration system
-            lastDamageTime = Time.time;
-            isRegenerating = false;
+            // Record damage time for regeneration system (local only)
+            if (IsOwner)
+            {
+                lastDamageTime = Time.time;
+                isRegenerating = false;
+            }
             
-            Debug.Log($"Health damage: -{remainingDamage}, Health remaining: {currentHealth}/{GetModifiedMaxHealth()}");
+            Debug.Log($"Health damage: -{remainingDamage}, Health remaining: {networkHealth.Value}/{GetModifiedMaxHealth()}");
         }
         
-        // Update health bar display
-        UpdateHealthBar();
-        
-        if (currentHealth <= 0)
+        if (networkHealth.Value <= 0)
         {
-            Die();
+            ProcessPlayerDeath();
+        }
+    }
+    
+    private void ProcessPlayerDeath()
+    {
+        if (IsServer)
+        {
+            networkIsPlayerDead.Value = true;
+            // Additional death processing will be handled by the network callback
+        }
+    }
+    
+    private void HandlePlayerDeath()
+    {
+        // This is called when the death status changes via network
+        if (isPlayerDead)
+        {
+            Debug.Log("Player died!");
+            // Handle death visuals and logic for all clients
+            if (playerAnimator != null)
+            {
+                playerAnimator.SetBool("IsDead", true);
+            }
+            
+            // Disable player control for the owner
+            if (IsOwner)
+            {
+                enabled = false; // Disable this script's Update method
+            }
         }
     }
     
     // Apply burning status effect to the player
     public void ApplyBurningEffect(float duration = -1f)
     {
+        if (IsOwner)
+        {
+            ApplyBurningEffectServerRpc(duration);
+        }
+    }
+    
+    [ServerRpc]
+    private void ApplyBurningEffectServerRpc(float duration = -1f)
+    {
         float burnDuration = duration > 0 ? duration : baseBurnDuration;
         
-        if (isBurning)
+        if (networkIsBurning.Value)
         {
             // If already burning, extend the duration (duration stacking)
             float timeRemaining = burnEndTime - Time.time;
@@ -705,12 +938,39 @@ public class PlayerMovement : MonoBehaviour
         else
         {
             // Start new burning effect
-            isBurning = true;
+            networkIsBurning.Value = true;
             burnEndTime = Time.time + burnDuration;
             nextBurnDamageTime = Time.time + burnDamageInterval;
-            CreateBurnVisualEffect();
             Debug.Log($"Burning effect applied. Duration: {burnDuration:F1}s");
         }
+    }
+    
+    private void UpdateBurningVisuals()
+    {
+        if (networkIsBurning.Value && !isBurning)
+        {
+            // Start burning visual effect
+            CreateBurnVisualEffect();
+        }
+        else if (!networkIsBurning.Value && isBurning)
+        {
+            // Stop burning visual effect
+            StopBurningVisualEffect();
+        }
+    }
+    
+    private void StopBurningVisualEffect()
+    {
+        // Stop the visual burning effect only (not the damage over time)
+        isBurning = false;
+        
+        if (burnEffectObject != null)
+        {
+            Destroy(burnEffectObject);
+            burnEffectObject = null;
+        }
+        
+        Debug.Log("Burning visual effect stopped");
     }
     
     private void HandleBurningEffect()
@@ -1238,20 +1498,77 @@ public class PlayerMovement : MonoBehaviour
     // ===== ANIMATION CONTROLLER SYSTEM =====
     
     /// <summary>
-    /// Set the animation controller directly
+    /// Set the animation controller directly (networked)
     /// </summary>
     public void SetAnimationController(RuntimeAnimatorController controller)
     {
+        if (IsOwner)
+        {
+            // Determine shard type based on controller
+            int shardType = GetShardTypeFromController(controller);
+            SetAnimationControllerServerRpc(shardType);
+        }
+    }
+    
+    [ServerRpc]
+    private void SetAnimationControllerServerRpc(int shardType)
+    {
+        networkEquippedShardType.Value = shardType;
+    }
+    
+    private void UpdateAnimationController(int shardType)
+    {
+        // This method is called when networkEquippedShardType changes
         if (playerAnimator == null) return;
         
-        RuntimeAnimatorController targetController = controller ?? defaultPlayerAnimController;
+        RuntimeAnimatorController targetController = GetControllerFromShardType(shardType);
         
         // Only switch if controller is different to avoid unnecessary changes
         if (currentAnimController != targetController)
         {
             playerAnimator.runtimeAnimatorController = targetController;
             currentAnimController = targetController;
-            Debug.Log($"Switched animation controller to: {(targetController != null ? targetController.name : "null")}");
+            Debug.Log($"Switched animation controller to: {(targetController != null ? targetController.name : "null")} for shard type {shardType}");
+        }
+    }
+    
+    private int GetShardTypeFromController(RuntimeAnimatorController controller)
+    {
+        // Convert controller to shard type (you'll need to implement this based on your shard system)
+        if (controller == null || controller == defaultPlayerAnimController)
+            return 0; // No shard
+            
+        // Add logic to determine shard type from controller name or reference
+        // This is a placeholder - you'll need to implement based on your actual shard system
+        if (controller.name.Contains("Valor")) return 1;
+        if (controller.name.Contains("Whisper")) return 2;
+        if (controller.name.Contains("Storm")) return 3;
+        
+        return 0; // Default to no shard
+    }
+    
+    private RuntimeAnimatorController GetControllerFromShardType(int shardType)
+    {
+        // Convert shard type back to controller
+        // Get the WeaponClassController to access the proper controllers
+        WeaponClassController weaponController = GetComponent<WeaponClassController>();
+        if (weaponController == null)
+        {
+            Debug.LogError("WeaponClassController not found on player!");
+            return defaultPlayerAnimController;
+        }
+
+        switch (shardType)
+        {
+            case 0: return defaultPlayerAnimController; // No shard
+            case 1: // Valor shard
+                return weaponController.valorShardPlayerAnimController ?? defaultPlayerAnimController;
+            case 2: // Whisper shard
+                return weaponController.whisperShardPlayerAnimController ?? defaultPlayerAnimController;
+            case 3: // Storm shard
+                return weaponController.stormShardPlayerAnimController ?? defaultPlayerAnimController;
+            default: 
+                return defaultPlayerAnimController;
         }
     }
     
@@ -1272,7 +1589,12 @@ public class PlayerMovement : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("PlayerMovement: No animation controller available (default is null)");
+                // Only log this warning once every 5 seconds to prevent spam
+                if (Time.time - lastAnimationWarningTime > 5f)
+                {
+                    Debug.LogWarning("PlayerMovement: No animation controller available (default is null)");
+                    lastAnimationWarningTime = Time.time;
+                }
                 return;
             }
         }
@@ -1365,7 +1687,11 @@ public class PlayerMovement : MonoBehaviour
     /// </summary>
     public void OnStormArcPoint1()
     {
-        TriggerLightningParticles(1);
+        // Only trigger for the owner, but show effect for all clients
+        if (IsOwner)
+        {
+            TriggerLightningParticlesServerRpc(1);
+        }
         Debug.Log("Storm Shard lightning particles triggered at arc point 1");
     }
     
@@ -1374,8 +1700,30 @@ public class PlayerMovement : MonoBehaviour
     /// </summary>
     public void OnStormArcPoint2()
     {
-        TriggerLightningParticles(2);
+        // Only trigger for the owner, but show effect for all clients
+        if (IsOwner)
+        {
+            TriggerLightningParticlesServerRpc(2);
+        }
         Debug.Log("Storm Shard lightning particles triggered at arc point 2");
+    }
+    
+    /// <summary>
+    /// Server RPC to trigger lightning particles for all clients
+    /// </summary>
+    [ServerRpc]
+    private void TriggerLightningParticlesServerRpc(int arcPoint)
+    {
+        TriggerLightningParticlesClientRpc(arcPoint);
+    }
+    
+    /// <summary>
+    /// Client RPC to spawn lightning particles on all clients
+    /// </summary>
+    [ClientRpc]
+    private void TriggerLightningParticlesClientRpc(int arcPoint)
+    {
+        TriggerLightningParticles(arcPoint);
     }
     
     /// <summary>
@@ -1570,8 +1918,16 @@ public class PlayerMovement : MonoBehaviour
     
     public void SetAegisShield(float shieldValue)
     {
-        currentAegisShield = Mathf.Clamp(shieldValue, 0f, maxAegisShield);
-        UpdateAegisOutline();
+        if (IsOwner)
+        {
+            SetAegisShieldServerRpc(shieldValue);
+        }
+    }
+    
+    [ServerRpc]
+    private void SetAegisShieldServerRpc(float shieldValue)
+    {
+        networkCurrentShield.Value = Mathf.Clamp(shieldValue, 0f, maxAegisShield);
     }
     
     // Damage Modifier Methods
@@ -1715,6 +2071,7 @@ public class PlayerMovement : MonoBehaviour
     
     public void ApplyBuff(BuffType buffType, float value, float duration, string description = "")
     {
+        // For networked gameplay, buffs are applied locally but critical ones are synced
         // Check if buff type allows stacking - most buffs are now stackable
         bool allowStacking = (buffType == BuffType.Durability || buffType == BuffType.Flux || 
                              buffType == BuffType.Swiftness || buffType == BuffType.Strength || 
@@ -1730,8 +2087,22 @@ public class PlayerMovement : MonoBehaviour
         ActiveBuff newBuff = new ActiveBuff(buffType, value, duration, description);
         activeBuffs.Add(newBuff);
         
+        // For critical buffs that affect other players (like Aegis shield), sync them
+        if (buffType == BuffType.Aegis && IsOwner)
+        {
+            SyncAegisBuffServerRpc(value, duration);
+        }
+        
         Debug.Log($"Buff applied: {buffType}, value: {value}, duration: {duration}, stacking: {allowStacking}");
         UpdateBuffUI();
+    }
+    
+    [ServerRpc]
+    private void SyncAegisBuffServerRpc(float value, float duration)
+    {
+        // This syncs Aegis shield values across all clients
+        float shieldAmount = (value / 100f) * maxAegisShield;
+        networkCurrentShield.Value = Mathf.Min(networkCurrentShield.Value + shieldAmount, maxAegisShield);
     }
     
     private void UpdateBuffs()

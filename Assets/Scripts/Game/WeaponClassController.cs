@@ -4,8 +4,9 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 
-public class WeaponClassController : MonoBehaviour
+public class WeaponClassController : NetworkBehaviour
 {
     [Header("GUI Settings")]
     [SerializeField] private Vector2 guiPosition = new Vector2(-50, 100); // Further right from bottom right corner
@@ -18,11 +19,9 @@ public class WeaponClassController : MonoBehaviour
     
     [Header("Player Animation Controllers")]
     [SerializeField] private RuntimeAnimatorController defaultPlayerAnimController = null; // Default animation when no shards equipped
-    [SerializeField] private RuntimeAnimatorController valorShardPlayerAnimController = null; // Animation when Valor Shard equipped
-    [SerializeField] private RuntimeAnimatorController whisperShardPlayerAnimController = null; // Animation when Whisper Shard equipped  
-    [SerializeField] private RuntimeAnimatorController stormShardPlayerAnimController = null; // Animation when Storm Shard equipped
-    
-    // ========== VALOR SHARD CONFIGURATION ==========
+    [SerializeField] public RuntimeAnimatorController valorShardPlayerAnimController = null; // Animation when Valor Shard equipped (public for PlayerMovement access)
+    [SerializeField] public RuntimeAnimatorController whisperShardPlayerAnimController = null; // Animation when Whisper Shard equipped (public for PlayerMovement access)
+    [SerializeField] public RuntimeAnimatorController stormShardPlayerAnimController = null; // Animation when Storm Shard equipped (public for PlayerMovement access)    // ========== VALOR SHARD CONFIGURATION ==========
     [Header("Valor Shard - Melee Attack Settings")]
     [SerializeField] private float swordRange = 0.8f; // Closer to player
     [SerializeField] private float swordWidth = 1.2f; // Wider to match player
@@ -158,6 +157,16 @@ public class WeaponClassController : MonoBehaviour
     
     // Weapon System
     private enum ShardType { None, ValorShard, WhisperShard, StormShard }
+    
+    // Network Variables for multiplayer synchronization
+    private NetworkVariable<int> networkEquippedShard1 = new NetworkVariable<int>();
+    private NetworkVariable<int> networkEquippedShard2 = new NetworkVariable<int>();
+    private NetworkVariable<int> networkActiveSlotIndex = new NetworkVariable<int>();
+    private NetworkVariable<bool> networkIsWeaponMenuOpen = new NetworkVariable<bool>();
+    private NetworkVariable<float> networkCurrentChargeTime = new NetworkVariable<float>();
+    private NetworkVariable<bool> networkIsChargingValorAttack = new NetworkVariable<bool>();
+    
+    // Local variables (converted to use network variables)
     private ShardType[] equippedShards = new ShardType[2]; // Two slots
     private int activeSlotIndex = 0;
     private bool isWeaponMenuOpen = false;
@@ -192,6 +201,27 @@ public class WeaponClassController : MonoBehaviour
     /// </summary>
     public void ValorAttack1Start()
     {
+        // Only the owning player should trigger attacks
+        if (!IsOwner) return;
+        
+        // Use server RPC to ensure all clients see the attack
+        ValorAttack1StartServerRpc();
+    }
+    
+    [ServerRpc]
+    private void ValorAttack1StartServerRpc()
+    {
+        ValorAttack1StartClientRpc();
+    }
+    
+    [ClientRpc]
+    private void ValorAttack1StartClientRpc()
+    {
+        ProcessValorAttack1Start();
+    }
+    
+    private void ProcessValorAttack1Start()
+    {
         if (playerTransform == null) return;
         
         Debug.Log("Animation Event: ValorAttack1Start triggered");
@@ -224,6 +254,27 @@ public class WeaponClassController : MonoBehaviour
     /// </summary>
     public void ValorAttack1End()
     {
+        // Only the owning player should trigger attacks
+        if (!IsOwner) return;
+        
+        // Use server RPC to ensure all clients see the attack end
+        ValorAttack1EndServerRpc();
+    }
+    
+    [ServerRpc]
+    private void ValorAttack1EndServerRpc()
+    {
+        ValorAttack1EndClientRpc();
+    }
+    
+    [ClientRpc]
+    private void ValorAttack1EndClientRpc()
+    {
+        ProcessValorAttack1End();
+    }
+    
+    private void ProcessValorAttack1End()
+    {
         Debug.Log("Animation Event: ValorAttack1End triggered");
         
         // Destroy the active melee attack damage object
@@ -244,6 +295,27 @@ public class WeaponClassController : MonoBehaviour
     /// Animation Event: Valor Shard second attack (attackType=1) damage box appears
     /// </summary>
     public void ValorAttack2Start()
+    {
+        // Only the owning player should trigger attacks
+        if (!IsOwner) return;
+        
+        // Use server RPC to ensure all clients see the attack
+        ValorAttack2StartServerRpc();
+    }
+    
+    [ServerRpc]
+    private void ValorAttack2StartServerRpc()
+    {
+        ValorAttack2StartClientRpc();
+    }
+    
+    [ClientRpc]
+    private void ValorAttack2StartClientRpc()
+    {
+        ProcessValorAttack2Start();
+    }
+    
+    private void ProcessValorAttack2Start()
     {
         if (playerTransform == null) return;
         
@@ -577,11 +649,11 @@ public class WeaponClassController : MonoBehaviour
     /// </summary>
     private IEnumerator AttackAnimationSafetyTimeout()
     {
-        yield return new WaitForSeconds(3.0f); // 3-second safety timeout
+        yield return new WaitForSeconds(5.0f); // Extended 5-second safety timeout for shard animations
         
         if (isPlayingAttackAnimation)
         {
-            Debug.LogWarning("Animation safety timeout triggered - resetting attack state (animation events may not be set up correctly)");
+            Debug.LogWarning($"Animation safety timeout triggered for {equippedShards[activeSlotIndex]} - resetting attack state (animation events may not be set up correctly in {(playerMovement?.currentAnimController?.name ?? "unknown")} controller)");
             EndAttackAnimation();
             if (playerMovement != null)
             {
@@ -679,6 +751,130 @@ public class WeaponClassController : MonoBehaviour
     public bool IsChargingValorAttack => isChargingValorAttack;
     public bool IsWhisperShardActive => equippedShards[activeSlotIndex] == ShardType.WhisperShard;
     
+    public override void OnNetworkSpawn()
+    {
+        // Subscribe to network variable changes
+        networkEquippedShard1.OnValueChanged += OnNetworkEquippedShard1Changed;
+        networkEquippedShard2.OnValueChanged += OnNetworkEquippedShard2Changed;
+        networkActiveSlotIndex.OnValueChanged += OnNetworkActiveSlotIndexChanged;
+        networkIsWeaponMenuOpen.OnValueChanged += OnNetworkWeaponMenuOpenChanged;
+        networkCurrentChargeTime.OnValueChanged += OnNetworkCurrentChargeTimeChanged;
+        networkIsChargingValorAttack.OnValueChanged += OnNetworkChargingValorAttackChanged;
+        
+        // Initialize local variables from network variables
+        if (IsClient)
+        {
+            equippedShards[0] = (ShardType)networkEquippedShard1.Value;
+            equippedShards[1] = (ShardType)networkEquippedShard2.Value;
+            activeSlotIndex = networkActiveSlotIndex.Value;
+            isWeaponMenuOpen = networkIsWeaponMenuOpen.Value;
+            currentChargeTime = networkCurrentChargeTime.Value;
+            isChargingValorAttack = networkIsChargingValorAttack.Value;
+        }
+        
+        base.OnNetworkSpawn();
+    }
+    
+    public override void OnNetworkDespawn()
+    {
+        // Unsubscribe from network variable changes
+        if (networkEquippedShard1 != null)
+            networkEquippedShard1.OnValueChanged -= OnNetworkEquippedShard1Changed;
+        if (networkEquippedShard2 != null)
+            networkEquippedShard2.OnValueChanged -= OnNetworkEquippedShard2Changed;
+        if (networkActiveSlotIndex != null)
+            networkActiveSlotIndex.OnValueChanged -= OnNetworkActiveSlotIndexChanged;
+        if (networkIsWeaponMenuOpen != null)
+            networkIsWeaponMenuOpen.OnValueChanged -= OnNetworkWeaponMenuOpenChanged;
+        if (networkCurrentChargeTime != null)
+            networkCurrentChargeTime.OnValueChanged -= OnNetworkCurrentChargeTimeChanged;
+        if (networkIsChargingValorAttack != null)
+            networkIsChargingValorAttack.OnValueChanged -= OnNetworkChargingValorAttackChanged;
+        
+        base.OnNetworkDespawn();
+    }
+    
+    // Network variable change callbacks
+    private void OnNetworkEquippedShard1Changed(int previousValue, int newValue)
+    {
+        equippedShards[0] = (ShardType)newValue;
+        UpdateWeaponSlotVisuals();
+        
+        // Update animation controller if slot 0 is active
+        if (activeSlotIndex == 0)
+        {
+            UpdatePlayerAnimationController();
+        }
+    }
+    
+    private void OnNetworkEquippedShard2Changed(int previousValue, int newValue)
+    {
+        equippedShards[1] = (ShardType)newValue;
+        UpdateWeaponSlotVisuals();
+        
+        // Update animation controller if slot 1 is active
+        if (activeSlotIndex == 1)
+        {
+            UpdatePlayerAnimationController();
+        }
+    }
+    
+    private void OnNetworkActiveSlotIndexChanged(int previousValue, int newValue)
+    {
+        activeSlotIndex = newValue;
+        UpdateActiveSlotVisuals();
+        
+        // Update animation controller when active slot changes
+        UpdatePlayerAnimationController();
+    }
+    
+    private void OnNetworkWeaponMenuOpenChanged(bool previousValue, bool newValue)
+    {
+        isWeaponMenuOpen = newValue;
+    }
+    
+    private void OnNetworkCurrentChargeTimeChanged(float previousValue, float newValue)
+    {
+        currentChargeTime = newValue;
+        UpdateChargeVisuals();
+    }
+    
+    private void OnNetworkChargingValorAttackChanged(bool previousValue, bool newValue)
+    {
+        isChargingValorAttack = newValue;
+    }
+    
+    // Helper methods for updating visuals (to be implemented if needed)
+    private void UpdateWeaponSlotVisuals()
+    {
+        // Only update UI for the local player to prevent cross-client interference
+        if (!IsOwner) 
+        {
+            Debug.Log($"UpdateWeaponSlotVisuals skipped - not owner. Owner: {OwnerClientId}, Local: {NetworkManager.Singleton.LocalClientId}");
+            return;
+        }
+        
+        // Update GUI weapon slot display
+        // This should trigger visual updates for weapon slots
+        Debug.Log($"UpdateWeaponSlotVisuals for local player (Owner {OwnerClientId}): Slot 0 = {equippedShards[0]}, Slot 1 = {equippedShards[1]}");
+    }
+    
+    private void UpdateActiveSlotVisuals()
+    {
+        // Only update UI for the local player to prevent cross-client interference
+        if (!IsOwner) return;
+        
+        // Update active slot highlighting
+        // This should update which slot appears selected
+        Debug.Log($"UpdateActiveSlotVisuals for local player: Active slot = {activeSlotIndex}");
+    }
+    
+    private void UpdateChargeVisuals()
+    {
+        // Update weapon charge display
+        // This should show weapon charge status to other players
+    }
+    
     void Start()
     {
         // Get player components (this script is attached to the player)
@@ -708,18 +904,24 @@ public class WeaponClassController : MonoBehaviour
     
     void Update()
     {
-        CheckForNearbyShards();
-        HandleInput();
-        UpdatePromptPosition();
-        
-        // Continuously update facing direction when using WhisperShard
-        if (IsWhisperShardActive)
+        // Only process input and interactions for the owning player
+        if (IsOwner)
         {
-            UpdatePlayerFacingForMouse();
+            CheckForNearbyShards();
+            HandleInput();
+            
+            // Continuously update facing direction when using WhisperShard
+            if (IsWhisperShardActive)
+            {
+                UpdatePlayerFacingForMouse();
+            }
+            
+            // Handle passive abilities
+            UpdatePassiveAbilities();
         }
         
-        // Handle passive abilities
-        UpdatePassiveAbilities();
+        // Update prompt position for all clients (in case other players see prompts)
+        UpdatePromptPosition();
     }
     
     private void InitializeGUI()
@@ -1196,10 +1398,41 @@ public class WeaponClassController : MonoBehaviour
     
     private void EquipShard(ShardType shardType)
     {
+        // Only the owning player can equip shards
+        if (!IsOwner) return;
+        
+        // Use server RPC to synchronize shard equipment
+        EquipShardServerRpc((int)shardType);
+    }
+    
+    [ServerRpc]
+    private void EquipShardServerRpc(int shardTypeInt)
+    {
+        EquipShardClientRpc(shardTypeInt);
+    }
+    
+    [ClientRpc]
+    private void EquipShardClientRpc(int shardTypeInt)
+    {
+        ProcessEquipShard((ShardType)shardTypeInt);
+    }
+    
+    private void ProcessEquipShard(ShardType shardType)
+    {
         int emptySlot = GetEmptySlotIndex();
         if (emptySlot == -1) return;
         
         equippedShards[emptySlot] = shardType;
+        
+        // Update network variables for synchronization
+        if (IsServer)
+        {
+            if (emptySlot == 0)
+                networkEquippedShard1.Value = (int)shardType;
+            else if (emptySlot == 1)
+                networkEquippedShard2.Value = (int)shardType;
+        }
+        
         UpdateSlotDisplay(emptySlot);
         
         // Update animation controller if this is the active slot
@@ -1208,8 +1441,8 @@ public class WeaponClassController : MonoBehaviour
             UpdatePlayerAnimationController();
         }
         
-        // Remove shard from world
-        if (nearbyShardObject != null)
+        // Remove shard from world (only for the owning player)
+        if (IsOwner && nearbyShardObject != null)
         {
             Destroy(nearbyShardObject);
             nearbyShardObject = null;
@@ -1290,14 +1523,37 @@ public class WeaponClassController : MonoBehaviour
     
     private void SwitchToSlot(int slotIndex)
     {
+        // Only the owning player can switch slots
+        if (!IsOwner) return;
+        
         if (slotIndex >= 0 && slotIndex < 2 && equippedShards[slotIndex] != ShardType.None)
         {
-            activeSlotIndex = slotIndex;
-            UpdateActiveSlotIndicator();
-            
-            // Update animation controller for new active shard
-            UpdatePlayerAnimationController();
+            // Use server RPC to synchronize slot switching
+            SwitchToSlotServerRpc(slotIndex);
         }
+    }
+    
+    [ServerRpc]
+    private void SwitchToSlotServerRpc(int slotIndex)
+    {
+        // Update network variable
+        networkActiveSlotIndex.Value = slotIndex;
+        SwitchToSlotClientRpc(slotIndex);
+    }
+    
+    [ClientRpc]
+    private void SwitchToSlotClientRpc(int slotIndex)
+    {
+        ProcessSwitchToSlot(slotIndex);
+    }
+    
+    private void ProcessSwitchToSlot(int slotIndex)
+    {
+        activeSlotIndex = slotIndex;
+        UpdateActiveSlotIndicator();
+        
+        // Update animation controller for new active shard
+        UpdatePlayerAnimationController();
     }
     
     private void UseActiveWeapon(bool isRightClick = false, bool bypassCooldown = false)
@@ -4044,8 +4300,20 @@ public class WeaponClassController : MonoBehaviour
         
         Debug.Log($"WeaponClassController: Selected controller: {(targetController != null ? targetController.name : "null")}");
         
-        // Pass the controller reference to PlayerMovement
-        playerMovement.SetAnimationController(targetController);
+        // Apply the controller directly to the PlayerMovement's animator
+        if (playerMovement != null && playerMovement.playerAnimator != null)
+        {
+            if (playerMovement.playerAnimator.runtimeAnimatorController != targetController)
+            {
+                playerMovement.playerAnimator.runtimeAnimatorController = targetController;
+                playerMovement.currentAnimController = targetController;
+                Debug.Log($"Applied animation controller: {targetController.name} to player animator");
+            }
+        }
+        else
+        {
+            Debug.LogError("PlayerMovement or playerAnimator is null!");
+        }
     }
     
     /// <summary>
