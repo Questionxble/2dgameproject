@@ -56,7 +56,7 @@ public class MultiplayerTestValidator : MonoBehaviour
     {
         if (verboseLogging) Debug.Log("[Test] Checking PlayerMovement collision prevention...");
         
-        PlayerMovement[] playerMovements = FindObjectsOfType<PlayerMovement>();
+        PlayerMovement[] playerMovements = FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None);
         bool hasCollisionMethod = false;
         
         foreach (var pm in playerMovements)
@@ -87,7 +87,7 @@ public class MultiplayerTestValidator : MonoBehaviour
     {
         if (verboseLogging) Debug.Log("[Test] Checking MultiplayerGameManager setup...");
         
-        MultiplayerGameManager mgm = FindObjectOfType<MultiplayerGameManager>();
+        MultiplayerGameManager mgm = FindFirstObjectByType<MultiplayerGameManager>();
         if (mgm != null)
         {
             Debug.Log("✅ MultiplayerGameManager found in scene");
@@ -100,24 +100,25 @@ public class MultiplayerTestValidator : MonoBehaviour
     
     private void TestAutoStartupComponents()
     {
-        if (verboseLogging) Debug.Log("[Test] Checking auto-startup components...");
+        if (verboseLogging) Debug.Log("[Test] Checking server configuration components...");
         
-        AutoNetworkStarter[] autoStarters = FindObjectsOfType<AutoNetworkStarter>();
-        DedicatedServerLauncher[] serverLaunchers = FindObjectsOfType<DedicatedServerLauncher>();
+        DedicatedServerConfig[] serverConfigs = FindObjectsByType<DedicatedServerConfig>(FindObjectsSortMode.None);
         
-        if (autoStarters.Length > 0)
+        if (serverConfigs.Length > 0)
         {
-            Debug.Log($"✅ Found {autoStarters.Length} AutoNetworkStarter component(s)");
+            Debug.Log($"✅ Found {serverConfigs.Length} DedicatedServerConfig component(s)");
+            
+            foreach (var config in serverConfigs)
+            {
+                if (verboseLogging)
+                {
+                    Debug.Log($"  - DedicatedServerConfig on GameObject: {config.gameObject.name}");
+                }
+            }
         }
-        
-        if (serverLaunchers.Length > 0)
+        else
         {
-            Debug.Log($"✅ Found {serverLaunchers.Length} DedicatedServerLauncher component(s)");
-        }
-        
-        if (autoStarters.Length == 0 && serverLaunchers.Length == 0)
-        {
-            Debug.LogWarning("⚠️ No auto-startup components found. Add AutoNetworkStarter or DedicatedServerLauncher to a GameObject");
+            Debug.LogWarning("⚠️ No DedicatedServerConfig found. Add DedicatedServerConfig to the NetworkManager GameObject for proper server startup");
         }
     }
     

@@ -191,7 +191,7 @@ public class MultiplayerGameManager : NetworkBehaviour
     }
     
     // Respawn functionality for when players die
-    [ServerRpc(RequireOwnership = false)]
+    [ServerRpc]
     public void RespawnPlayerServerRpc(ulong clientId)
     {
         if (!IsServer) return;

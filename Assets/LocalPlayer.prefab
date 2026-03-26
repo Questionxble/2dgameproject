@@ -155,6 +155,10 @@ MonoBehaviour:
   ultimateBarScreenSize: {x: 150, y: 15}
   buffListSize: {x: 300, y: 100}
   playerCollider: {fileID: 9000068255331119145}
+  playerAnimator: {fileID: 7477138380311728138}
+  currentAnimController: {fileID: 0}
+  networkFacingLeft:
+    m_InternalValue: 0
 --- !u!70 &9000068255331119145
 CapsuleCollider2D:
   m_ObjectHideFlags: 0
@@ -294,6 +298,9 @@ MonoBehaviour:
   lightningBlastPrefab: {fileID: 1544860697441305676, guid: d6daa8ce579ae4534880a4abcda84dfd, type: 3}
   lightningBlastSprite: {fileID: 0}
   boltAnimationDelay: 0.1
+  valorShardPrefab: {fileID: 8357327596011965780, guid: 753d973e8f09b4ffaba37602ad12e00a, type: 3}
+  whisperShardPrefab: {fileID: 2330576533982321061, guid: 67d8c0888b5e34b01ab7835f85cd4498, type: 3}
+  stormShardPrefab: {fileID: 8675671524609749884, guid: b6257e79e00fb4d36bf97aae5ae20de8, type: 3}
   chainRange: 8
   maxChainArcs: 2
   chainDamageMultiplier: 0.7

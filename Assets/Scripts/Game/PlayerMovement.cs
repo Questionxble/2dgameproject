@@ -17,7 +17,7 @@ public class PlayerMovement : NetworkBehaviour
     [Header("Ground Detection")]
     public LayerMask groundLayerMask = 1;
     public LayerMask solidObjectLayerMask = 1; // For detecting solid objects (not one-way platforms)
-    public float groundCheckDistance = 0.1f;
+    public float groundCheckDistance = 0.2f; // Increased from 0.1f for more reliable jumping
     public float ceilingCheckDistance = 0.2f; // Distance to check for ceiling/objects above
     
     [Header("Health System")]
@@ -158,6 +158,7 @@ public class PlayerMovement : NetworkBehaviour
     public NetworkVariable<bool> networkFacingLeft = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     private NetworkVariable<bool> networkIsWalking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     private NetworkVariable<bool> networkIsAttacking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<int> networkAttackType = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     
     // Health Regeneration System
     private float lastDamageTime;
@@ -332,6 +333,7 @@ public class PlayerMovement : NetworkBehaviour
         networkCurrentShield.OnValueChanged += OnShieldChanged;
         networkIsWalking.OnValueChanged += OnWalkingStatusChanged;
         networkIsAttacking.OnValueChanged += OnAttackingStatusChanged;
+        networkAttackType.OnValueChanged += OnAttackTypeChanged;
         
         // Sync current health with network variable
         currentHealth = networkHealth.Value;
@@ -352,6 +354,7 @@ public class PlayerMovement : NetworkBehaviour
             networkCurrentShield.OnValueChanged -= OnShieldChanged;
             networkIsWalking.OnValueChanged -= OnWalkingStatusChanged;
             networkIsAttacking.OnValueChanged -= OnAttackingStatusChanged;
+            networkAttackType.OnValueChanged -= OnAttackTypeChanged;
         }
         
         base.OnNetworkDespawn();
@@ -448,6 +451,16 @@ public class PlayerMovement : NetworkBehaviour
         {
             playerAnimator.SetBool("isAttacking", newValue);
         }
+    }
+    
+    private void OnAttackTypeChanged(int previousValue, int newValue)
+    {
+        currentAttackType = newValue;
+        if (playerAnimator != null)
+        {
+            playerAnimator.SetInteger("attackType", newValue);
+        }
+        Debug.Log($"Network attack type changed to: {newValue}");
     }
     
     private void UpdateShieldVisuals()
@@ -911,6 +924,12 @@ public class PlayerMovement : NetworkBehaviour
     
     private void ProcessDamage(int damage)
     {
+        // CRITICAL: Don't process damage if player is already dead
+        if (networkIsPlayerDead.Value)
+        {
+            return;
+        }
+        
         // This method processes damage with server authority
         int remainingDamage = damage;
         
@@ -950,6 +969,15 @@ public class PlayerMovement : NetworkBehaviour
         if (IsServer)
         {
             networkIsPlayerDead.Value = true;
+            
+            // Drop equipped shards when player dies
+            var weaponController = GetComponent<WeaponClassController>();
+            if (weaponController != null)
+            {
+                // Access the DropEquippedShards method - we'll make it public
+                weaponController.DropEquippedShardsOnDeath();
+            }
+            
             // Additional death processing will be handled by the network callback
         }
     }
@@ -986,7 +1014,7 @@ public class PlayerMovement : NetworkBehaviour
         yield return new WaitForSeconds(3f); // Wait 3 seconds before respawning
         
         // Get the MultiplayerGameManager and trigger respawn
-        MultiplayerGameManager gameManager = FindObjectOfType<MultiplayerGameManager>();
+        MultiplayerGameManager gameManager = FindFirstObjectByType<MultiplayerGameManager>();
         if (gameManager != null)
         {
             gameManager.RespawnPlayerServerRpc(OwnerClientId);
@@ -1059,7 +1087,8 @@ public class PlayerMovement : NetworkBehaviour
     
     private void HandleBurningEffect()
     {
-        if (!isBurning) return;
+        // Don't process burning if player is dead
+        if (!isBurning || networkIsPlayerDead.Value) return;
         
         // Check if burning effect should end
         if (Time.time >= burnEndTime)
@@ -1146,7 +1175,7 @@ public class PlayerMovement : NetworkBehaviour
         int modifiedMaxHealth = GetModifiedMaxHealth();
         
         // Don't regenerate if system is disabled, health is full, or player is dead
-        if (!enableHealthRegeneration || currentHealth >= modifiedMaxHealth || currentHealth <= 0)
+        if (!enableHealthRegeneration || currentHealth >= modifiedMaxHealth || currentHealth <= 0 || networkIsPlayerDead.Value)
         {
             return;
         }
@@ -1697,9 +1726,8 @@ public class PlayerMovement : NetworkBehaviour
         if (isPlayerWalking != isMoving)
         {
             isPlayerWalking = isMoving;
-            playerAnimator.SetBool("isWalking", isPlayerWalking);
             
-            // Sync to network if this is the owner
+            // Only the owner should update the network variable - the callback will handle animation for everyone
             if (IsOwner)
             {
                 networkIsWalking.Value = isPlayerWalking;
@@ -1742,6 +1770,7 @@ public class PlayerMovement : NetworkBehaviour
         if (IsOwner)
         {
             networkIsAttacking.Value = true;
+            networkAttackType.Value = attackType;
         }
         
         // Reset attack state after duration
@@ -1766,6 +1795,7 @@ public class PlayerMovement : NetworkBehaviour
         if (IsOwner)
         {
             networkIsAttacking.Value = true;
+            networkAttackType.Value = attackType;
         }
         
         Debug.Log($"Triggered attack animation (event-based): Type {attackType}");
@@ -3247,6 +3277,13 @@ public class PlayerMovement : NetworkBehaviour
         networkHealth.Value = maxHealth;
         networkIsPlayerDead.Value = false;
         
+        // Reset velocity and physics
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+        
         // Re-enable player control
         enabled = true;
         
@@ -3254,17 +3291,37 @@ public class PlayerMovement : NetworkBehaviour
         if (playerAnimator != null)
         {
             playerAnimator.SetBool("IsDead", false);
+            playerAnimator.SetBool("isDead", false); // Both variants
+            playerAnimator.SetBool("IsAttacking", false);
+            playerAnimator.SetBool("IsWalking", false);
+            
+            // Reset all animation triggers
+            playerAnimator.ResetTrigger("Attack");
+            playerAnimator.ResetTrigger("Jump");
+            playerAnimator.ResetTrigger("Death");
         }
         
         // Reset any ongoing effects
         if (isBurning)
         {
-            StopCoroutine("BurningEffect");
-            isBurning = false;
+            StopBurningEffect();
         }
+        
+        // Reset burn effects for network sync
+        if (IsServer)
+        {
+            networkIsBurning.Value = false;
+        }
+        
+        // Reset shield values
+        networkCurrentShield.Value = 0f;
         
         // Clear any active buffs
         ClearAllBuffs();
+        
+        // Reset local variables
+        currentHealth = maxHealth;
+        isPlayerDead = false;
         
         Debug.Log($"Player respawned with full health at position {transform.position}");
     }

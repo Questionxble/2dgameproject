@@ -130,6 +130,11 @@ public class WeaponClassController : NetworkBehaviour
     [SerializeField] private Sprite lightningBlastSprite = null; // Fallback sprite if no blast prefab assigned
     [SerializeField] private float boltAnimationDelay = 0.1f; // Delay before lightning bolt is created after animation starts
     
+    [Header("Shard Prefabs for Dropping")]
+    [SerializeField] private GameObject valorShardPrefab = null; // Prefab for dropping valor shards
+    [SerializeField] private GameObject whisperShardPrefab = null; // Prefab for dropping whisper shards
+    [SerializeField] private GameObject stormShardPrefab = null; // Prefab for dropping storm shards
+    
     [Header("Storm Shard - Chain Lightning Settings")]
     [SerializeField] private float chainRange = 8f; // Range to find nearby enemies for chaining
     [SerializeField] private int maxChainArcs = 2; // Maximum number of chain arcs per attack (1-2)
@@ -907,6 +912,12 @@ public class WeaponClassController : NetworkBehaviour
     
     public override void OnNetworkDespawn()
     {
+        // Drop equipped shards when player disconnects
+        if (IsServer)
+        {
+            DropEquippedShards();
+        }
+        
         // Unsubscribe from network variable changes
         if (networkEquippedShard1 != null)
             networkEquippedShard1.OnValueChanged -= OnNetworkEquippedShard1Changed;
@@ -1024,9 +1035,12 @@ public class WeaponClassController : NetworkBehaviour
         LoadShardSprites();
         FindStormParticlePoint();
         
-        // Initialize animation controller based on current equipped shards
-        Debug.Log("WeaponClassController: Initializing animation controller...");
-        UpdatePlayerAnimationController();
+        // Initialize animation controller based on current equipped shards (owner only)
+        if (IsOwner)
+        {
+            Debug.Log("WeaponClassController: Initializing animation controller...");
+            UpdatePlayerAnimationController();
+        }
         
         // Sync ultimate charge configuration with PlayerMovement
         SyncUltimateChargeSettings();
@@ -1547,6 +1561,32 @@ public class WeaponClassController : NetworkBehaviour
         ProcessEquipShard((ShardType)shardTypeInt);
     }
     
+    [ServerRpc]
+    private void DestroyShardServerRpc(int shardInstanceID)
+    {
+        DestroyShardClientRpc(shardInstanceID);
+    }
+    
+    [ClientRpc] 
+    private void DestroyShardClientRpc(int shardInstanceID)
+    {
+        // Find and destroy the shard by instance ID for all clients
+        GameObject[] allObjects = FindObjectsOfType<GameObject>();
+        foreach (GameObject obj in allObjects)
+        {
+            if (obj.GetInstanceID() == shardInstanceID)
+            {
+                // Check if it's a shard by tag
+                if (obj.CompareTag("ValorShard") || obj.CompareTag("WhisperShard") || obj.CompareTag("StormShard"))
+                {
+                    Destroy(obj);
+                    Debug.Log($"Shard destroyed for all clients: {obj.name}");
+                    break;
+                }
+            }
+        }
+    }
+    
     private void ProcessEquipShard(ShardType shardType)
     {
         int emptySlot = GetEmptySlotIndex();
@@ -1571,10 +1611,11 @@ public class WeaponClassController : NetworkBehaviour
             UpdatePlayerAnimationController();
         }
         
-        // Remove shard from world (only for the owning player)
+        // Remove shard from world (server authority)
         if (IsOwner && nearbyShardObject != null)
         {
-            Destroy(nearbyShardObject);
+            // Request server to destroy the shard for all clients
+            DestroyShardServerRpc(nearbyShardObject.GetInstanceID());
             nearbyShardObject = null;
         }
         
@@ -2057,10 +2098,11 @@ public class WeaponClassController : NetworkBehaviour
             // Left-click: Electric arc with cooldown (only for manual clicks, auto-fire handled separately)
             if (!isAutoFiring && Time.time - lastLightningArcTime < lightningCooldown) return;
             
-            // For manual clicks, cycle between attack types 1 and 2
+            // For manual clicks, use attackType 0 for first click, attackType 1 for second click
             if (!isAutoFiring) {
-                stormClickCount = (stormClickCount + 1) % 2; // Cycles 0 -> 1 -> 0 -> 1...
-                CreateElectricArc(stormClickCount);
+                // Cycle stormClickCount: 0 -> 1 -> 0 -> 1...
+                CreateElectricArc(stormClickCount); // Use current count before incrementing
+                stormClickCount = (stormClickCount + 1) % 2; // Then increment for next click
                 lastLightningArcTime = Time.time;
             }
             // Note: Auto-fire is handled in Update() method with its own timing
@@ -3766,8 +3808,8 @@ public class WeaponClassController : NetworkBehaviour
                 
                 // Debug.Log($"First click registered - clickCount: {clickCount}");
                 
-                // Queue the first attack
-                attackQueue.Enqueue(1); // 1 = basic attack
+                // Queue the first attack (attackType 0 - basic attack)
+                attackQueue.Enqueue(0); // 0 = basic attack (attackType 0)
                 
                 // Start the sequential attack system
                 StartAttackQueueProcessing();
@@ -3781,9 +3823,9 @@ public class WeaponClassController : NetworkBehaviour
                 
                 if (clickCount == 2)
                 {
-                    // Double click detected - queue dash attack
-                    attackQueue.Enqueue(2); // 2 = dash attack
-                    // Debug.Log("Double click detected - queued dash attack");
+                    // Second click detected - queue dash attack (attackType 1)
+                    attackQueue.Enqueue(1); // 1 = dash attack (attackType 1)
+                    // Debug.Log("Second click detected - queued dash attack");
                     
                     // Apply Valor Shard passive buffs for double-click
                     ApplyDoubleClickBuffs();
@@ -3793,9 +3835,9 @@ public class WeaponClassController : NetworkBehaviour
                 }
                 else if (clickCount == 3)
                 {
-                    // Triple click detected - queue thrust attack
-                    attackQueue.Enqueue(3); // 3 = thrust attack
-                    Debug.Log("Triple click detected - queued thrust attack");
+                    // Third click detected - queue thrust attack (attackType 2)
+                    attackQueue.Enqueue(2); // 2 = thrust attack (attackType 2)
+                    Debug.Log("Third click detected - queued thrust attack");
                     
                     // Apply Valor Shard passive buffs for triple-click
                     ApplyTripleClickBuffs();
@@ -3829,13 +3871,13 @@ public class WeaponClassController : NetworkBehaviour
             
             switch (attackType)
             {
-                case 1: // Basic attack
-                    yield return StartCoroutine(PerformBasicValorAttack());
+                case 0: // Basic attack (attackType 0)
+                    yield return StartCoroutine(PerformBasicValorAttack(0));
                     break;
-                case 2: // Dash attack
+                case 1: // Dash attack (attackType 1)
                     yield return StartCoroutine(PerformValorDashAttackSequential());
                     break;
-                case 3: // Thrust attack
+                case 2: // Thrust attack (attackType 2)
                     yield return StartCoroutine(PerformValorThrustAttackSequential());
                     break;
             }
@@ -3877,12 +3919,12 @@ public class WeaponClassController : NetworkBehaviour
         Debug.Log("Attack queue cleared");
     }
 
-    private System.Collections.IEnumerator PerformBasicValorAttack()
+    private System.Collections.IEnumerator PerformBasicValorAttack(int attackType = 0)
     {
-        // Debug.Log("Starting basic valor attack");
+        // Debug.Log($"Starting basic valor attack with attackType {attackType}");
         
-        // Trigger basic sword attack
-        CreateSwordAttack(0); // Attack type 0 for basic attack
+        // Trigger basic sword attack with the specified attack type
+        CreateSwordAttack(attackType);
         
         // Wait for the attack animation to complete (animation events control timing)
         while (IsPlayingAttackAnimation())
@@ -3890,7 +3932,7 @@ public class WeaponClassController : NetworkBehaviour
             yield return null;
         }
         
-        // Debug.Log("Basic valor attack completed");
+        // Debug.Log($"Basic valor attack (type {attackType}) completed");
     }
     
     private System.Collections.IEnumerator PerformValorDashAttackSequential()
@@ -4402,6 +4444,9 @@ public class WeaponClassController : NetworkBehaviour
     /// </summary>
     private void UpdatePlayerAnimationController()
     {
+        // Only update animation controller for the owner
+        if (!IsOwner) return;
+        
         if (playerMovement == null) 
         {
             Debug.LogError("WeaponClassController: playerMovement is null in UpdatePlayerAnimationController");
@@ -5019,6 +5064,107 @@ public class WeaponClassController : NetworkBehaviour
             playerMovement.ConsumeUltimateCharge(amount);
             Debug.Log($"Ultimate charge consumed: -{amount}");
         }
+    }
+    
+    /// <summary>
+    /// Drop equipped shards when player disconnects or dies
+    /// </summary>
+    private void DropEquippedShards()
+    {
+        if (!IsServer) return;
+        
+        Vector3 playerPosition = transform.position;
+        int droppedCount = 0;
+        
+        // Drop each equipped shard
+        for (int i = 0; i < equippedShards.Length; i++)
+        {
+            if (equippedShards[i] != ShardType.None)
+            {
+                DropShardAtPosition(equippedShards[i], playerPosition, i);
+                droppedCount++;
+                // Clear the equipped shard
+                equippedShards[i] = ShardType.None;
+            }
+        }
+        
+        // Update network variables to clear equipped shards
+        if (droppedCount > 0)
+        {
+            networkEquippedShard1.Value = (int)ShardType.None;
+            networkEquippedShard2.Value = (int)ShardType.None;
+            networkActiveSlotIndex.Value = 0;
+            Debug.Log($"Dropped {droppedCount} shards for disconnected player at {playerPosition}");
+        }
+    }
+    
+    /// <summary>
+    /// Public method to drop shards when player dies - called from PlayerMovement
+    /// </summary>
+    public void DropEquippedShardsOnDeath()
+    {
+        DropEquippedShards();
+    }
+    
+    /// <summary>
+    /// Drop a specific shard type at a position
+    /// </summary>
+    private void DropShardAtPosition(ShardType shardType, Vector3 position, int slotIndex)
+    {
+        // Offset each shard slightly so they don't overlap
+        Vector3 dropPosition = position + new Vector3(slotIndex * 0.5f - 0.25f, 1f, 0);
+        
+        GameObject shardPrefab = GetShardPrefabByType(shardType);
+        if (shardPrefab != null)
+        {
+            GameObject droppedShard = Instantiate(shardPrefab, dropPosition, Quaternion.identity);
+            
+            // Make sure it's networked if it has NetworkObject component
+            var networkObject = droppedShard.GetComponent<NetworkObject>();
+            if (networkObject != null && !networkObject.IsSpawned)
+            {
+                networkObject.Spawn();
+            }
+            
+            Debug.Log($"Dropped {shardType} shard at {dropPosition}");
+        }
+        else
+        {
+            Debug.LogWarning($"No prefab found for shard type: {shardType}");
+        }
+    }
+    
+    /// <summary>
+    /// Get shard prefab by type - you'll need to assign these in the inspector
+    /// </summary>
+    private GameObject GetShardPrefabByType(ShardType shardType)
+    {
+        // You'll need to add these prefab references to the inspector
+        switch (shardType)
+        {
+            case ShardType.ValorShard:
+                return valorShardPrefab;
+            case ShardType.WhisperShard:
+                return whisperShardPrefab;
+            case ShardType.StormShard:
+                return stormShardPrefab;
+            default:
+                return null;
+        }
+    }
+    
+    /// <summary>
+    /// Get count of equipped shards
+    /// </summary>
+    private int GetEquippedShardCount()
+    {
+        int count = 0;
+        for (int i = 0; i < equippedShards.Length; i++)
+        {
+            if (equippedShards[i] != ShardType.None)
+                count++;
+        }
+        return count;
     }
 }
 

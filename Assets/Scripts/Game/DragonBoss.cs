@@ -3,8 +3,9 @@ using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Tilemaps;
+using Unity.Netcode;
 
-public class DragonBoss : MonoBehaviour
+public class DragonBoss : NetworkBehaviour
 {
     [Header("Dragon Boss Settings")]
     [SerializeField] private int maxHealth = 300;
@@ -78,6 +79,10 @@ public class DragonBoss : MonoBehaviour
     private Vector3 spawnPosition;
     private Color originalColor;
     
+    // Network Variables for multiplayer synchronization
+    private NetworkVariable<int> networkHealth = new NetworkVariable<int>(300, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> networkIsDead = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    
     // Health-based buff system
     private bool halfHealthBuffActivated = false;
     private bool quarterHealthBuffActivated = false;
@@ -137,6 +142,77 @@ public class DragonBoss : MonoBehaviour
         InvokeRepeating(nameof(CleanupExpiredBurnCooldowns), 5f, 5f);
         
         // Dragon initialization complete
+    }
+    
+    public override void OnNetworkSpawn()
+    {
+        // Subscribe to network variable changes
+        networkHealth.OnValueChanged += OnHealthChanged;
+        networkIsDead.OnValueChanged += OnDeathStatusChanged;
+        
+        // Initialize local variables from network state
+        if (IsClient)
+        {
+            currentHealth = networkHealth.Value;
+            isDead = networkIsDead.Value;
+        }
+        
+        // Set initial network values if server
+        if (IsServer)
+        {
+            networkHealth.Value = maxHealth;
+            networkIsDead.Value = false;
+        }
+        
+        base.OnNetworkSpawn();
+    }
+    
+    public override void OnNetworkDespawn()
+    {
+        // Unsubscribe from network variable changes
+        if (networkHealth != null)
+        {
+            networkHealth.OnValueChanged -= OnHealthChanged;
+            networkIsDead.OnValueChanged -= OnDeathStatusChanged;
+        }
+        
+        base.OnNetworkDespawn();
+    }
+    
+    // Network variable change callbacks
+    private void OnHealthChanged(int previousValue, int newValue)
+    {
+        currentHealth = newValue;
+        // Update health bar target based on network health
+        targetFillAmount = (float)newValue / maxHealth;
+        UpdateHealthBar();
+    }
+    
+    private void OnDeathStatusChanged(bool previousValue, bool newValue)
+    {
+        isDead = newValue;
+        if (isDead)
+        {
+            HandleNetworkDeath();
+        }
+        else
+        {
+            HandleNetworkRespawn();
+        }
+    }
+    
+    private void HandleNetworkRespawn()
+    {
+        // Handle respawn visuals and state for all clients
+        if (animator != null)
+        {
+            animator.SetBool("isDead", false);
+        }
+        
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = originalColor;
+        }
     }
     
     void Update()
@@ -1696,31 +1772,61 @@ public class DragonBoss : MonoBehaviour
     
     public void TakeDamage(int damage)
     {
-        if (isDead) return;
+        // For networked gameplay, damage must be processed on the server
+        if (IsOwner && IsClient)
+        {
+            TakeDamageServerRpc(damage);
+        }
+        else if (IsServer && !IsClient)
+        {
+            // Direct server processing
+            ProcessDamage(damage);
+        }
+    }
+    
+    [ServerRpc]
+    private void TakeDamageServerRpc(int damage)
+    {
+        ProcessDamage(damage);
+    }
+    
+    private void ProcessDamage(int damage)
+    {
+        // Don't process damage if already dead
+        if (networkIsDead.Value) return;
         
-        currentHealth -= damage;
-        currentHealth = Mathf.Max(0, currentHealth);
+        networkHealth.Value = Mathf.Max(0, networkHealth.Value - damage);
         
-        // Create damage number
-        DamageObject.CreateDamageNumber(damage, transform.position + Vector3.up * 2f);
+        // Create damage number (server only, will be visible to all)
+        if (IsServer)
+        {
+            DamageObject.CreateDamageNumber(damage, transform.position + Vector3.up * 2f);
+        }
         
-        // Update health bar target
-        targetFillAmount = (float)currentHealth / maxHealth;
-        
-        Debug.Log($"DragonBoss took {damage} damage! Health: {currentHealth}/{maxHealth}");
+        Debug.Log($"DragonBoss took {damage} damage! Health: {networkHealth.Value}/{maxHealth}");
         
         // Check for health-based buffs
         CheckHealthThresholds();
         
         // Flash effect - only if not dying
-        if (spriteRenderer != null && currentHealth > 0)
+        if (spriteRenderer != null && networkHealth.Value > 0)
         {
             StartCoroutine(FlashRed());
         }
         
-        if (currentHealth <= 0)
+        if (networkHealth.Value <= 0)
         {
-            Die();
+            ProcessDeath();
+        }
+    }
+    
+    private void ProcessDeath()
+    {
+        if (IsServer)
+        {
+            networkIsDead.Value = true;
+            // Start respawn countdown on server only
+            StartCoroutine(RespawnCountdown());
         }
     }
 
@@ -1729,7 +1835,7 @@ public class DragonBoss : MonoBehaviour
     /// </summary>
     private void CheckHealthThresholds()
     {
-        float healthPercentage = (float)currentHealth / maxHealth;
+        float healthPercentage = (float)networkHealth.Value / maxHealth;
         
         // Half health buff: +1 flyover
         if (healthPercentage <= 0.5f && !halfHealthBuffActivated)
@@ -1761,7 +1867,7 @@ public class DragonBoss : MonoBehaviour
     /// </summary>
     public float GetHealthPercentage()
     {
-        return (float)currentHealth / maxHealth;
+        return (float)networkHealth.Value / maxHealth;
     }
 
     private IEnumerator FlashRed()
@@ -1778,11 +1884,20 @@ public class DragonBoss : MonoBehaviour
                 spriteRenderer.color = originalColor;
             }
         }
-    }    public void Die()
+    }
+    
+    public void Die()
     {
-        if (isDead) return;
-        
-        isDead = true;
+        // Legacy method for backward compatibility - redirect to network death
+        if (IsServer)
+        {
+            ProcessDeath();
+        }
+    }
+    
+    private void HandleNetworkDeath()
+    {
+        // Handle death state for all clients
         Debug.Log("DragonBoss died");
         
         // CRITICAL: Stop all coroutines to prevent jump/landing mechanics from continuing
@@ -1855,8 +1970,16 @@ public class DragonBoss : MonoBehaviour
     
     public void Respawn()
     {
-        isDead = false;
+        // Only server can trigger respawn
+        if (!IsServer) return;
+        
+        // Reset network variables
+        networkHealth.Value = maxHealth;
+        networkIsDead.Value = false;
+        
+        // Local state will be updated via network callbacks
         currentHealth = maxHealth;
+        isDead = false;
         targetFillAmount = 1f;
         currentFillAmount = 1f;
         
