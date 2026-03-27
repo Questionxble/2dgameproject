@@ -14,14 +14,21 @@ public class PlayerInteract : MonoBehaviour
         }
     }
 
+
     void OnTriggerEnter2D(Collider2D other)
     {
-        currentInteractable = other.GetComponent<Interactable>();
+        Interactable interactable = other.GetComponent<Interactable>();
+
+        if (interactable != null)
+            currentInteractable = interactable;
     }
 
     void OnTriggerExit2D(Collider2D other)
     {
-        if (other.GetComponent<Interactable>() == currentInteractable)
+        Interactable interactable = other.GetComponent<Interactable>();
+
+        if (interactable != null && interactable == currentInteractable)
             currentInteractable = null;
     }
+
 }
