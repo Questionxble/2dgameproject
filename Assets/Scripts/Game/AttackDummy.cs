@@ -76,6 +76,9 @@ public class AttackDummy : MonoBehaviour
     // Track active attacks for cleanup
     private System.Collections.Generic.List<GameObject> activeAttackObjects = new System.Collections.Generic.List<GameObject>();
     private System.Collections.Generic.List<Coroutine> activeAttackCoroutines = new System.Collections.Generic.List<Coroutine>();
+    private readonly System.Collections.Generic.List<float> activeSoulSupportBuffs = new System.Collections.Generic.List<float>();
+    private readonly System.Collections.Generic.List<float> activeSoulFluxBuffs = new System.Collections.Generic.List<float>();
+    private readonly System.Collections.Generic.List<float> activeSoulDurabilityBuffs = new System.Collections.Generic.List<float>();
     private bool hasBeenCleaned = false;
     
     void Start()
@@ -576,7 +579,7 @@ public class AttackDummy : MonoBehaviour
         
         // Add damage object component
         DamageObject damageComponent = attack.AddComponent<DamageObject>();
-        damageComponent.damageAmount = (int)attackDamage;
+        damageComponent.damageAmount = Mathf.RoundToInt(GetBuffedAttackDamage());
         damageComponent.damageRate = 0.1f; // Fast damage rate
         
         // Set that this should ONLY damage enemies (not player or other dummies)
@@ -628,13 +631,98 @@ public class AttackDummy : MonoBehaviour
         
         currentHealth -= damage;
         currentHealth = Mathf.Max(0f, currentHealth);
+        float modifiedMaxHealth = GetModifiedMaxHealth();
         
-        Debug.Log($"Attack Dummy took {damage} damage. Health: {currentHealth}/{maxHealth}");
+        Debug.Log($"Attack Dummy took {damage} damage. Health: {currentHealth}/{modifiedMaxHealth}");
         
         if (currentHealth <= 0f)
         {
             Die();
         }
+    }
+
+    public bool IsDead => isDead;
+
+    public void HealFromSupport(int healAmount)
+    {
+        if (isDead || healAmount <= 0) return;
+
+        currentHealth = Mathf.Min(currentHealth + healAmount, GetModifiedMaxHealth());
+    }
+
+    public void ApplySoulSupportBuff(float attackPercent, float duration)
+    {
+        ApplySoulSupportBuffs(attackPercent, 0f, 0f, duration);
+    }
+
+    public void ApplySoulSupportBuffs(float attackPercent, float fluxPercent, float durabilityPercent, float duration)
+    {
+        if (isDead || duration <= 0f) return;
+
+        if (attackPercent > 0f)
+        {
+            StartCoroutine(SoulSupportBuffRoutine(attackPercent, duration));
+        }
+
+        if (fluxPercent > 0f)
+        {
+            StartCoroutine(SoulFluxBuffRoutine(fluxPercent, duration));
+        }
+
+        if (durabilityPercent > 0f)
+        {
+            StartCoroutine(SoulDurabilityBuffRoutine(durabilityPercent, duration));
+        }
+    }
+
+    private IEnumerator SoulSupportBuffRoutine(float attackPercent, float duration)
+    {
+        activeSoulSupportBuffs.Add(attackPercent);
+        yield return new WaitForSeconds(duration);
+        activeSoulSupportBuffs.Remove(attackPercent);
+    }
+
+    private IEnumerator SoulFluxBuffRoutine(float fluxPercent, float duration)
+    {
+        activeSoulFluxBuffs.Add(fluxPercent);
+        yield return new WaitForSeconds(duration);
+        activeSoulFluxBuffs.Remove(fluxPercent);
+    }
+
+    private IEnumerator SoulDurabilityBuffRoutine(float durabilityPercent, float duration)
+    {
+        float previousMaxHealth = GetModifiedMaxHealth();
+        activeSoulDurabilityBuffs.Add(durabilityPercent);
+        float newMaxHealth = GetModifiedMaxHealth();
+
+        currentHealth = Mathf.Min(currentHealth + (newMaxHealth - previousMaxHealth), newMaxHealth);
+
+        yield return new WaitForSeconds(duration);
+
+        activeSoulDurabilityBuffs.Remove(durabilityPercent);
+        currentHealth = Mathf.Min(currentHealth, GetModifiedMaxHealth());
+    }
+
+    private float GetBuffedAttackDamage()
+    {
+        float totalPercent = 0f;
+        foreach (float bonus in activeSoulSupportBuffs)
+        {
+            totalPercent += bonus;
+        }
+
+        return attackDamage * (1f + (totalPercent / 100f));
+    }
+
+    private float GetModifiedMaxHealth()
+    {
+        float totalPercent = 0f;
+        foreach (float bonus in activeSoulDurabilityBuffs)
+        {
+            totalPercent += bonus;
+        }
+
+        return maxHealth * (1f + (totalPercent / 100f));
     }
 
     // Apply burning status effect to the ally
@@ -932,7 +1020,8 @@ public class AttackDummy : MonoBehaviour
         
         if (healthBarFill != null)
         {
-            float healthPercent = currentHealth / maxHealth;
+            float maxHealthForBar = Mathf.Max(1f, GetModifiedMaxHealth());
+            float healthPercent = currentHealth / maxHealthForBar;
             healthBarFill.fillAmount = healthPercent; // This makes it shrink from right to left
             
             // Change color based on health (ally blue scheme)

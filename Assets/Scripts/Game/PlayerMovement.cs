@@ -43,6 +43,7 @@ public class PlayerMovement : MonoBehaviour
     
     [Header("Animation System")]
     [SerializeField] private RuntimeAnimatorController defaultPlayerAnimController = null; // Default animation when no shards equipped
+    [SerializeField] private float soulShardDeathFizzleDuration = 1f;
     
     [Header("Buff Icon Fire Animation")]
     [SerializeField] private Sprite[] fireAnimationSprites; // Array of fire animation frames
@@ -137,6 +138,7 @@ public class PlayerMovement : MonoBehaviour
     private bool isPlayerJumping = false; 
     private bool isPlayerWalking = false;
     private bool isPlayerDead = false;
+    private bool isSoulShardRespawning = false;
     private int currentAttackType = 0; // 0=None, 1=Melee, 2=Projectile, 3=Ultimate
     private RuntimeAnimatorController currentAnimController = null;
 
@@ -357,6 +359,12 @@ public class PlayerMovement : MonoBehaviour
     
     private void HandleMovement()
     {
+        if (isSoulShardRespawning)
+        {
+            rb.linearVelocity = Vector2.zero;
+            return;
+        }
+
         // Check if weapon menu is open - disable movement if it is
         if (weaponController != null && weaponController.IsWeaponMenuOpen())
         {
@@ -430,6 +438,11 @@ public class PlayerMovement : MonoBehaviour
         {
             // Normal jumping - only if we have ceiling clearance
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+
+            if (weaponController != null)
+            {
+                weaponController.OnPlayerJumped();
+            }
         }
         
         // Drop down through one-way platform
@@ -853,6 +866,16 @@ public class PlayerMovement : MonoBehaviour
     {
         TakeDamage(damage);
     }
+
+    // Public method for support classes that heal allies (Soul Shard, etc.)
+    public void HealFromSupport(int healAmount)
+    {
+        if (healAmount <= 0 || currentHealth <= 0) return;
+
+        int maxAllowedHealth = GetModifiedMaxHealth();
+        currentHealth = Mathf.Min(currentHealth + healAmount, maxAllowedHealth);
+        UpdateHealthBar();
+    }
     
     // Public method for water state management
     public void SetWaterState(bool enteringWater, WaterProperties properties = null, Collider2D waterCollider = null)
@@ -995,6 +1018,53 @@ public class PlayerMovement : MonoBehaviour
     
     private void Die()
     {
+        if (isSoulShardRespawning)
+        {
+            return;
+        }
+
+        Vector3 deathPosition = transform.position;
+        StartCoroutine(SoulShardDeathRespawnRoutine(deathPosition));
+    }
+
+    private IEnumerator SoulShardDeathRespawnRoutine(Vector3 deathPosition)
+    {
+        isSoulShardRespawning = true;
+
+        bool useSoulShardFizzle = weaponController != null && weaponController.IsSoulShardActive;
+
+        if (useSoulShardFizzle && weaponController != null)
+        {
+            weaponController.OnPlayerDeathEffects(deathPosition);
+        }
+
+        StopBurningEffect();
+        SetDeathAnimation(true);
+
+        rb.linearVelocity = Vector2.zero;
+
+        if (useSoulShardFizzle)
+        {
+            SetPlayerVisualsEnabled(false);
+        }
+
+        float waitDuration = Mathf.Max(0.05f, soulShardDeathFizzleDuration);
+        yield return new WaitForSeconds(waitDuration);
+
+        if (useSoulShardFizzle)
+        {
+            SetPlayerVisualsEnabled(true);
+        }
+
+        SetDeathAnimation(false);
+
+        RespawnImmediately();
+
+        isSoulShardRespawning = false;
+    }
+
+    private void RespawnImmediately()
+    {
         // Stop any status effects
         StopBurningEffect();
         
@@ -1023,6 +1093,15 @@ public class PlayerMovement : MonoBehaviour
         if (cameraFollow != null)
         {
             cameraFollow.CenterOnTarget();
+        }
+    }
+
+    private void SetPlayerVisualsEnabled(bool enabled)
+    {
+        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            renderers[i].enabled = enabled;
         }
     }
     
@@ -1290,13 +1369,35 @@ public class PlayerMovement : MonoBehaviour
         if (isPlayerJumping != isJumping)
         {
             isPlayerJumping = isJumping;
-            playerAnimator.SetBool("isJumping", isPlayerJumping);
+
+            if (AnimatorHasParameter(playerAnimator, "isJumping", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isJumping", isPlayerJumping);
+            }
         }
         
         // Update other parameters
         playerAnimator.SetBool("isDead", isPlayerDead);
         playerAnimator.SetBool("isAttacking", isPlayerAttacking);
         playerAnimator.SetInteger("attackType", currentAttackType);
+    }
+
+    private bool AnimatorHasParameter(Animator animator, string parameterName, AnimatorControllerParameterType parameterType)
+    {
+        if (animator == null || animator.parameters == null)
+        {
+            return false;
+        }
+
+        foreach (AnimatorControllerParameter parameter in animator.parameters)
+        {
+            if (parameter.name == parameterName && parameter.type == parameterType)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
     
     /// <summary>
