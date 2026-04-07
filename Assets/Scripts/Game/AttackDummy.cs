@@ -72,6 +72,13 @@ public class AttackDummy : MonoBehaviour
     private float burnEndTime = 0f;
     private float nextBurnDamageTime = 0f;
     private GameObject burnVisualEffect;
+
+    // Shock Status Effect System
+    private bool isShocked = false;
+    private float shockEndTime = 0f;
+    private int shockStacks = 0;
+    private const int maxShockStacks = 8;
+    private const float shockBaseDuration = 1f;
     
     // Track active attacks for cleanup
     private System.Collections.Generic.List<GameObject> activeAttackObjects = new System.Collections.Generic.List<GameObject>();
@@ -202,8 +209,14 @@ public class AttackDummy : MonoBehaviour
         // Handle burning status effect
         HandleBurningEffect();
         
-        // Update state machine
-        UpdateStateMachine();
+        // Handle shock status effect
+        HandleShockEffect();
+
+        // Update state machine (skip if shocked)
+        if (!isShocked)
+        {
+            UpdateStateMachine();
+        }
         
         // Update animations based on current state
         UpdateAnimations();
@@ -807,6 +820,60 @@ public class AttackDummy : MonoBehaviour
         // Enemy entered attack range - this will be detected in FindNearestEnemy
         Debug.Log($"AttackDummy: Enemy {enemy.name} entered attack range");
     }
+
+    // ===== SHOCK STATUS EFFECT =====
+
+    private void HandleShockEffect()
+    {
+        if (!isShocked) return;
+
+        if (Time.time >= shockEndTime)
+        {
+            isShocked = false;
+            shockStacks = 0;
+            if (spriteRenderer != null)
+                spriteRenderer.color = originalColor;
+            Debug.Log("AttackDummy: Shock ended");
+        }
+        else
+        {
+            // Halt horizontal movement while stunned
+            if (rb != null)
+                rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+        }
+    }
+
+    /// <summary>
+    /// Apply the Shock stun status effect. Stacks up to 8 seconds total.
+    /// </summary>
+    public void ApplyShock(float duration = -1f)
+    {
+        if (isDead) return;
+
+        float shockDuration = duration > 0f ? duration : shockBaseDuration;
+
+        if (isShocked)
+        {
+            if (shockStacks < maxShockStacks)
+            {
+                shockStacks++;
+                float timeRemaining = Mathf.Max(shockEndTime - Time.time, 0f);
+                shockEndTime = Time.time + timeRemaining + shockDuration;
+                Debug.Log($"AttackDummy: Shock stacked to {shockStacks}. Duration: {shockEndTime - Time.time:F1}s");
+            }
+        }
+        else
+        {
+            isShocked = true;
+            shockStacks = 1;
+            shockEndTime = Time.time + shockDuration;
+            if (spriteRenderer != null)
+                spriteRenderer.color = new Color(0f, 0.9f, 1f, 1f); // Cyan tint
+            Debug.Log($"AttackDummy: Shock applied for {shockDuration:F1}s");
+        }
+    }
+
+    // ===== END SHOCK STATUS EFFECT =====
     
     public void OnEnemyExited(GameObject enemy)
     {
@@ -836,6 +903,10 @@ public class AttackDummy : MonoBehaviour
         
         // Stop burning effect when dead
         StopBurningEffect();
+
+        // Clear shock when dying
+        isShocked = false;
+        shockStacks = 0;
         
         // Stop all movement when dead
         if (rb != null)

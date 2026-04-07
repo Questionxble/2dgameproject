@@ -93,10 +93,10 @@ namespace Tests.EditMode
         public void GameController_SceneObjectCounting()
         {
             // Test we can count objects in scene
-            var initialCount = Object.FindObjectsOfType<GameObject>().Length;
+            var initialCount = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None).Length;
             
             var tempObject = new GameObject("TempObject");
-            var newCount = Object.FindObjectsOfType<GameObject>().Length;
+            var newCount = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None).Length;
             
             Assert.AreEqual(initialCount + 1, newCount);
             

@@ -59,6 +59,13 @@ public class EnemyBehavior : MonoBehaviour
     private bool inDamageZone = false;
     private float lastDamageTime = 0f;
     private DamageObject currentDamageObject;
+
+    // Shock Status Effect System
+    private bool isShocked = false;
+    private float shockEndTime = 0f;
+    private int shockStacks = 0;
+    private const int maxShockStacks = 8;
+    private const float shockBaseDuration = 1f;
     
     // Public Properties
     public bool IsDead => isDead;
@@ -170,7 +177,10 @@ public class EnemyBehavior : MonoBehaviour
         
         UpdateHealthBarPosition();
         UpdateHealthBar(); // Animate health bar continuously
-        
+
+        // Handle shock status effect (must be before aggression check)
+        HandleShockEffect();
+
         // Ensure enemy rotation stays at zero (additional safety)
         if (transform.rotation != Quaternion.identity)
         {
@@ -209,7 +219,7 @@ public class EnemyBehavior : MonoBehaviour
         }
         
         // Handle aggression behavior
-        if (isAggressive && playerTransform != null)
+        if (isAggressive && playerTransform != null && !isShocked)
         {
             try
             {
@@ -655,6 +665,60 @@ public class EnemyBehavior : MonoBehaviour
         // Make entities ignore collisions with each other
         SetupEntityToEntityCollisionIgnoring();
     }
+
+    // ===== SHOCK STATUS EFFECT =====
+
+    private void HandleShockEffect()
+    {
+        if (!isShocked) return;
+
+        if (Time.time >= shockEndTime)
+        {
+            isShocked = false;
+            shockStacks = 0;
+            if (spriteRenderer != null)
+                spriteRenderer.color = originalColor;
+            Debug.Log($"Enemy {gameObject.name}: Shock ended");
+        }
+        else
+        {
+            // Halt horizontal movement while stunned
+            if (rb != null)
+                rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+        }
+    }
+
+    /// <summary>
+    /// Apply the Shock stun status effect. Each application adds shockBaseDuration, capped at maxShockStacks seconds total.
+    /// </summary>
+    public void ApplyShock(float duration = -1f)
+    {
+        if (isDead) return;
+
+        float shockDuration = duration > 0f ? duration : shockBaseDuration;
+
+        if (isShocked)
+        {
+            if (shockStacks < maxShockStacks)
+            {
+                shockStacks++;
+                float timeRemaining = Mathf.Max(shockEndTime - Time.time, 0f);
+                shockEndTime = Time.time + timeRemaining + shockDuration;
+                Debug.Log($"Enemy {gameObject.name}: Shock stacked to {shockStacks}. Duration: {shockEndTime - Time.time:F1}s");
+            }
+        }
+        else
+        {
+            isShocked = true;
+            shockStacks = 1;
+            shockEndTime = Time.time + shockDuration;
+            if (spriteRenderer != null)
+                spriteRenderer.color = new Color(0f, 0.9f, 1f, 1f); // Cyan tint
+            Debug.Log($"Enemy {gameObject.name}: Shock applied for {shockDuration:F1}s");
+        }
+    }
+
+    // ===== END SHOCK STATUS EFFECT =====
     
     private void SetupEntityToEntityCollisionIgnoring()
     {
@@ -697,6 +761,11 @@ public class EnemyBehavior : MonoBehaviour
         if (isDead) return;
         
         isDead = true;
+
+        // Clear shock when dying
+        isShocked = false;
+        shockStacks = 0;
+
         Debug.Log($"Enemy {gameObject.name} died");
         
         // Stop all movement when dead
@@ -811,6 +880,10 @@ public class EnemyBehavior : MonoBehaviour
         // Reset aggression state
         lastAttackTime = 0f;
         
+        // Reset shock state
+        isShocked = false;
+        shockStacks = 0;
+
         // Update health bar
         UpdateHealthBar();
         
