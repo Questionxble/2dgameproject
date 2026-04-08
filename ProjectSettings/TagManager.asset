@@ -66,8 +66,14 @@ TagManager:
   - name: middle
     uniqueID: 1617858225
     locked: 0
+  - name: 'Player Effects Bg '
+    uniqueID: 3350491103
+    locked: 0
   - name: 'player '
     uniqueID: 475557053
+    locked: 0
+  - name: Player Effects Fg
+    uniqueID: 313975313
     locked: 0
   - name: 'f1 '
     uniqueID: 256988333
