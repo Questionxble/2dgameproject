@@ -1,0 +1,58 @@
+name: Trivy Security Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy:
+    name: Scan Secrets and Configs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Trivy (secrets + config)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret,config
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Print severity summary
+        if: always()
+        run: |
+          echo "=== Trivy Severity Summary ==="
+          jq -r '
+            [.runs[].results[] | .level] |
+            {
+              CRITICAL: (map(select(. == "error")) | length),
+              HIGH:     (map(select(. == "warning")) | length),
+              MEDIUM:   (map(select(. == "note")) | length),
+              LOW:      (map(select(. == "none")) | length)
+            } |
+            "CRITICAL : \(.CRITICAL)",
+            "HIGH     : \(.HIGH)",
+            "MEDIUM   : \(.MEDIUM)",
+            "LOW      : \(.LOW)"
+          ' trivy-results.sarif || echo "No findings or jq unavailable."
