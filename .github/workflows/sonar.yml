@@ -1,3 +1,17 @@
+name: SonarQube Cloud PR Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   sonar:
     name: Build and Analyze
@@ -14,6 +28,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify Sonar Token
+        id: sonar_token
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace("$env:SONAR_TOKEN")) {
+            "available=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Warning "SONAR_TOKEN is missing; skipping Sonar analysis for this run."
+          } else {
+            "available=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -26,14 +51,13 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Install SonarScanner for .NET
-        if: ${{ env.SONAR_TOKEN != '' }}
         shell: pwsh
         run: |
           dotnet tool update --global dotnet-sonarscanner
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Sonar Begin
-        if: ${{ env.SONAR_TOKEN != '' }}
+        if: steps.sonar_token.outputs.available == 'true'
         shell: pwsh
         run: |
           dotnet-sonarscanner begin `
@@ -43,15 +67,68 @@ jobs:
             /d:sonar.host.url="$env:SONAR_HOST_URL" `
             /d:sonar.sources="Assets,Packages,ProjectSettings" `
             /d:sonar.tests="Assets/Tests" `
+            /d:sonar.cs.opencover.reportsPaths="**/TestResults/*.opencover.xml" `
             /d:sonar.exclusions="**/Library/**,**/Temp/**,**/Logs/**,**/CodeCoverage/**,**/obj/**,**/bin/**"
 
       - name: Build Solution
         shell: pwsh
         run: |
-          dotnet build 2dgameproject.sln --no-incremental
+          $sln = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1
+          if ($sln) {
+            Write-Host "Building solution: $($sln.FullName)"
+            dotnet build "$($sln.FullName)" --no-incremental
+            exit 0
+          }
+          
+          $csproj = Get-ChildItem -Recurse -Filter *.csproj | Select-Object -First 1
+          if ($csproj) {
+            Write-Host "Building project: $($csproj.FullName)"
+            dotnet build "$($csproj.FullName)" --no-incremental
+            exit 0
+          }
+          
+          Write-Warning "No .sln or .csproj found (common for Unity repos). Skipping dotnet build."
+          exit 0
+
+      - name: Run EditMode Tests with Coverage
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "TestResults" -Force | Out-Null
+          if (Test-Path "Tests.EditMode.csproj") {
+            dotnet test Tests.EditMode.csproj --no-build `
+              /p:CollectCoverage=true `
+              /p:CoverletOutputFormat=opencover `
+              /p:CoverletOutput=./TestResults/coverage.editmode.opencover.xml
+          } else {
+            Write-Warning "Tests.EditMode.csproj not found; skipping EditMode coverage."
+          }
+
+      - name: Run Editor Tests with Coverage
+        shell: pwsh
+        run: |
+          if (Test-Path "Tests.Editor.csproj") {
+            dotnet test Tests.Editor.csproj --no-build `
+              /p:CollectCoverage=true `
+              /p:CoverletOutputFormat=opencover `
+              /p:CoverletOutput=./TestResults/coverage.editor.opencover.xml
+          } else {
+            Write-Warning "Tests.Editor.csproj not found; skipping Editor coverage."
+          }
+
+      - name: Run PlayMode Tests with Coverage
+        shell: pwsh
+        run: |
+          if (Test-Path "Tests.PlayMode.csproj") {
+            dotnet test Tests.PlayMode.csproj --no-build `
+              /p:CollectCoverage=true `
+              /p:CoverletOutputFormat=opencover `
+              /p:CoverletOutput=./TestResults/coverage.playmode.opencover.xml
+          } else {
+            Write-Warning "Tests.PlayMode.csproj not found; skipping PlayMode coverage."
+          }
 
       - name: Sonar End
-        if: ${{ env.SONAR_TOKEN != '' }}
+        if: steps.sonar_token.outputs.available == 'true'
         shell: pwsh
         run: |
           dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"

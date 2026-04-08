@@ -19,7 +19,7 @@ public class GorgonEnemyBehavior : MonoBehaviour
     [Header("Aggression Settings")]
     [SerializeField] private bool isAggressive = false; // Enable enemy aggression
     [SerializeField] private float detectionRadius = 5f; // Radius to detect and follow player
-    [SerializeField] private float followSpeed = 2f; // Speed when following player
+    [SerializeField] private float followSpeed = 3f; // Speed when following player
     [SerializeField] private float attackRange = 2f; // Range to attack player
     [SerializeField] private float attackCooldown = 2f; // Time between attacks
     [SerializeField] private float attackDamage = 15f; // Damage dealt by enemy attacks

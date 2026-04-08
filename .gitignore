@@ -55,6 +55,13 @@ ExportedObj/
 *.opendb
 *.VC.db
 
+# Exception: Allow project files for this repo
+!2dgameproject.sln
+!Game.csproj
+!Tests.EditMode.csproj
+!Tests.Editor.csproj
+!Tests.PlayMode.csproj
+
 # Unity3D generated meta files
 *.pidb.meta
 *.pdb.meta
