@@ -73,7 +73,21 @@ jobs:
       - name: Build Solution
         shell: pwsh
         run: |
-          dotnet build 2dgameproject.sln --no-incremental
+          $sln = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1
+          if ($sln) {
+            Write-Host "Building solution: $($sln.FullName)"
+            dotnet build "$($sln.FullName)" --no-incremental
+            exit 0
+          }
+          
+          $csproj = Get-ChildItem -Recurse -Filter *.csproj | Select-Object -First 1
+          if ($csproj) {
+            Write-Host "Building project: $($csproj.FullName)"
+            dotnet build "$($csproj.FullName)" --no-incremental
+            exit 0
+          }
+          
+          throw "No .sln or .csproj found to build."
 
       - name: Run EditMode Tests with Coverage
         shell: pwsh
