@@ -21,6 +21,7 @@ public class WeaponClassController : MonoBehaviour
     [SerializeField] private RuntimeAnimatorController valorShardPlayerAnimController = null; // Animation when Valor Shard equipped
     [SerializeField] private RuntimeAnimatorController whisperShardPlayerAnimController = null; // Animation when Whisper Shard equipped  
     [SerializeField] private RuntimeAnimatorController stormShardPlayerAnimController = null; // Animation when Storm Shard equipped
+    [SerializeField] private RuntimeAnimatorController soulShardPlayerAnimController = null; // Animation when Soul Shard equipped
     
     // ========== VALOR SHARD CONFIGURATION ==========
     [Header("Valor Shard - Melee Attack Settings")]
@@ -93,7 +94,7 @@ public class WeaponClassController : MonoBehaviour
     [SerializeField] private float redirectCooldownExtension = 0.5f; // Additional cooldown per redirect
     [SerializeField] private float projectileWidth = 0.4f; // Projectile collider width
     [SerializeField] private float projectileHeight = 0.6f; // Projectile collider height
-    [SerializeField] private Sprite daggerSprite = null; // Sprite for dagger projectile (faces flight direction)
+    [SerializeField] private GameObject daggerPrefab = null; // Prefab for dagger projectile (supports particles and trail)
     [SerializeField] private float projectileThrowAnimationDelay = 0.3f; // Delay after throw animation before projectile spawns
     [SerializeField] private float projectileRedirectDelay = 0.1f; // Delay between projectile redirects
     [SerializeField] private float projectileCleanupDelay = 0.5f; // Delay before cleaning up redirected projectiles
@@ -108,6 +109,14 @@ public class WeaponClassController : MonoBehaviour
     [SerializeField] private float whisperAttackBuffPercent = 3f; // 3% attack buff per enemy hit
     [SerializeField] private float whisperAttackBuffDuration = 8f; // 8 seconds per buff
     [SerializeField] private int maxWhisperAttackStacks = 15; // Maximum attack buff stacks
+
+    [Header("Whisper Shard - Ultimate Settings")]
+    [SerializeField] private int whisperUltimateDaggerCount = 7; // Number of daggers thrown
+    [SerializeField] private float whisperUltimateSpread = 15f; // Angle spread between daggers
+    [SerializeField] private Vector2 whisperUltimateBoxSize = new Vector2(10f, 8f); // Size of the redirect zone box
+    [SerializeField] private int whisperUltimateRedirects = 3; // Number of auto-redirects inside the box
+    [SerializeField] private float whisperUltimateRedirectDelay = 0.5f; // Delay in seconds between auto-redirects
+    [SerializeField] private int whisperUltimateDamage = 60; // Damage per dagger during ultimate
     
     // ========== STORM SHARD CONFIGURATION ==========
     [Header("Storm Shard - Lightning Arc Settings")]
@@ -143,6 +152,84 @@ public class WeaponClassController : MonoBehaviour
     [SerializeField] private float stormMovementBuffDuration = 2f; // Duration per stack when moving
     [SerializeField] private int maxStormMovementStacks = 10; // Maximum swiftness stacks
     [SerializeField] private float stormMovementCheckInterval = 0.1f; // How often to check movement (10 times per second)
+
+    [Header("Storm Shard - Ultimate Settings")]
+    [SerializeField] private int stormUltimateOrbCount = 10; // Number of orbs summoned
+    [SerializeField] private float stormOrbOrbitRadius = 2f; // Radius of the orbit circle above the target
+    [SerializeField] private float stormOrbOrbitSpeed = 200f; // Degrees per second the ring rotates
+    [SerializeField] private float stormOrbRingTiltSpeed = 60f; // Degrees per second the ring angle tilts
+    [SerializeField] private float stormOrbFormationTime = 1f; // Seconds orbs orbit before scattering
+    [SerializeField] private float stormOrbFlySpeed = 12f; // Speed orbs fly to targets
+    [SerializeField] private float stormOrbDetectionRange = 10f; // Range from orbiting target to detect enemies
+    [SerializeField] private int stormOrbDamage = 45; // Damage per orb hit
+    [SerializeField] private float stormOrbArcRange = 6f; // Range to arc/chain to additional enemies after a hit
+    [SerializeField] private float stormOrbShockDuration = 1f; // Shock duration applied on hit
+    [SerializeField] private float stormOrbReleaseInterval = 0.25f; // Delay between each orb leaving the orbit ring
+
+    // ========== SOUL SHARD CONFIGURATION ==========
+    [Header("Soul Shard - Vortex Settings")]
+    [SerializeField] private float soulVortexRadius = 3.5f;
+    [SerializeField] private float soulVortexPullForce = 14f;
+    [SerializeField] private int soulVortexTickDamage = 3;
+    [SerializeField] private float soulVortexTickInterval = 0.35f;
+    [SerializeField] private int soulVortexBurstDamage = 12;
+    [SerializeField] private float soulVortexDuration = 1.25f;
+    [SerializeField] private float soulVortexYOffset = 1.2f;
+    [SerializeField] private float soulVortexForwardOffset = 1.1f;
+    [SerializeField] private float soulVortexEndVisualLinger = 0.3f;
+
+    [Header("Soul Shard - Ally Support Settings")]
+    [SerializeField] private float soulSupportRadius = 5f;
+    [SerializeField] private int soulSupportPulseHeal = 6;
+    [SerializeField] private float soulSupportStrengthPercent = 10f;
+    [SerializeField] private float soulSupportFluxPercent = 12f;
+    [SerializeField] private float soulSupportDurabilityPercent = 8f;
+    [SerializeField] private float soulSupportBuffDuration = 5f;
+    [SerializeField] private float soulHoldActivationTime = 0.3f;
+    [SerializeField] private float soulHoldPulseInterval = 0.4f;
+    [SerializeField] private int soulHoldPulseHeal = 2;
+
+    [Header("Soul Shard - Ultimate Settings")]
+    [SerializeField] private float soulUltimateDuration = 10f;
+    [SerializeField] private float soulBarrierRadius = 6f;
+    [SerializeField] private float soulBarrierRadiusScale = 1.2f;
+    [SerializeField] private float soulBarrierVisualScale = 0.82f;
+    [SerializeField] private float soulBarrierRepelForce = 20f;
+    [SerializeField] private float soulFloorHealInterval = 0.75f;
+    [SerializeField] private float soulFloorBuffCooldown = 1.5f;
+    [SerializeField] private int soulFloorHealAmount = 3;
+    [SerializeField] private float soulFloorVisualYOffset = -0.2f;
+    [SerializeField] private float soulButterflySpawnInterval = 0.35f;
+    [SerializeField] private float soulButterflySeekRange = 12f;
+    [SerializeField] private int soulButterflyDamage = 4;
+
+    [Header("Soul Shard - Shared FX")]
+    [SerializeField] private GameObject soulMagicDespawnEffectPrefab = null; // Optional standardized exit effect prefab
+    [SerializeField] private ParticleSystem soulShardJumpMagicDustEmitter = null;
+    [SerializeField] private Vector3 soulShardJumpMagicDustOffset = new Vector3(0f, -0.85f, 0f);
+    [SerializeField] private float soulShardJumpMagicDustLifetime = 1f;
+    [SerializeField] private bool soulAttachAmbientDustOnSpawn = true;
+    [SerializeField] private float soulSpawnDustLinger = 0.35f;
+    [SerializeField] private bool soulUseUniversalDespawnDust = true;
+    [SerializeField] private Vector3 soulDespawnDustMinBounds = new Vector3(0.3f, 0.3f, 0.3f);
+    [SerializeField] private Vector3 soulDespawnDustMaxBounds = new Vector3(4f, 4f, 4f);
+    [SerializeField] private GameObject meleeAtkBuffPrefab = null;
+    [SerializeField] private GameObject magicAtkBuffPrefab = null;
+    [SerializeField] private GameObject healPrefab = null;
+    [SerializeField] private GameObject durabilityPrefab = null;
+    [SerializeField] private GameObject soulAttack2FxPrefab = null;
+    [SerializeField] private Vector3 soulAttack2FxOffset = new Vector3(0.6f, 0.8f, 0f);
+    [SerializeField] private RuntimeAnimatorController soulVortexFxAnim = null;
+    [SerializeField] private RuntimeAnimatorController soulUltimateForcefieldFxAnim = null;
+    [SerializeField] private GameObject soulButterflyFxPrefab = null;
+    [SerializeField] private Vector3 soulUltimateForcefieldOffset = new Vector3(0f, 1.5f, 0f);
+    [SerializeField] private Vector3 soulOverlayOffset = new Vector3(0f, 0.5f, 0f);
+    [SerializeField] private float soulOverlayLifetime = 1.2f;
+    [SerializeField] private int soulOverlaySortingOrderOffset = 2;
+    [SerializeField] private bool soulOverlayDebugLogs = true;
+    [SerializeField] private bool soulVortexFacingDebugLogs = true;
+    [SerializeField] private float soulVortexFacingDebugLogInterval = 0.12f;
+    private const string SoulOverlayTriggerName = "Trigger";
     
     [Header("Ultimate Charge Settings")]
     [SerializeField] private float valorLeftClickCharge = 5f; // Charge generated per valor left click attack
@@ -153,11 +240,15 @@ public class WeaponClassController : MonoBehaviour
     [SerializeField] private float stormConstantLeftClickCharge = 2f; // Charge generated per storm arc (auto-fire)
     [SerializeField] private float stormLeftClickCharge = 4f; // Charge generated per storm arc (manual)
     [SerializeField] private float stormRightClickCharge = 12f; // Charge generated per storm bolt attack
+    [SerializeField] private float soulLeftClickCharge = 4f;
+    [SerializeField] private float soulRightClickCharge = 7f;
+    [SerializeField] private float soulHoldTickCharge = 1f;
+    [SerializeField] private float soulUltimateButterflyCharge = 0.5f;
     [SerializeField] private float maxUltimateCharge = 100f; // Maximum ultimate charge required to fill bar completely
     private PlayerMovement playerMovement; // Reference to player movement for charge updates
     
     // Weapon System
-    private enum ShardType { None, ValorShard, WhisperShard, StormShard }
+    private enum ShardType { None, ValorShard, WhisperShard, StormShard, SoulShard }
     private ShardType[] equippedShards = new ShardType[2]; // Two slots
     private int activeSlotIndex = 0;
     private bool isWeaponMenuOpen = false;
@@ -568,8 +659,6 @@ public class WeaponClassController : MonoBehaviour
         
         // Start safety timeout to prevent permanent animation blocking
         currentAttackAnimationCoroutine = StartCoroutine(AttackAnimationSafetyTimeout());
-        
-        Debug.Log("Attack animation started - blocking new attacks");
     }
     
     /// <summary>
@@ -602,8 +691,6 @@ public class WeaponClassController : MonoBehaviour
             StopCoroutine(currentAttackAnimationCoroutine);
             currentAttackAnimationCoroutine = null;
         }
-        
-        Debug.Log("Attack animation ended - allowing new attacks");
     }
 
     // ========== END ANIMATION EVENT SYSTEM ==========
@@ -617,6 +704,26 @@ public class WeaponClassController : MonoBehaviour
     
     // Storm Shard Tracking
     private int stormClickCount = 0; // Alternates between 1 and 2 for attack types
+
+    // Soul Shard Tracking
+    private Animator soulShardAnimator = null; // Animator used by Soul Shard attack animations
+    private GameObject activeSoulVortex = null;
+    private Coroutine soulVortexTickCoroutine = null;
+    private bool isSoulRightHeld = false;
+    private float soulRightClickStartTime = 0f;
+    private bool isSoulHoldChanneling = false;
+    private Coroutine soulHoldPulseCoroutine = null;
+    private GameObject activeSoulUltimateRoot = null;
+    private Coroutine soulUltimateCoroutine = null;
+    private Coroutine soulUltimateAnimFlagResetCoroutine = null;
+    private int soulOverlaySpawnCount = 0;
+    private Dictionary<Transform, Coroutine> soulBuffQueueCoroutines = new Dictionary<Transform, Coroutine>();
+    private Dictionary<Transform, float> soulFloorBuffCooldownUntil = new Dictionary<Transform, float>();
+    private Transform activeSoulVortexFacingPivot = null;
+    private Transform activeSoulVortexFxRoot = null;
+    private float nextSoulVortexFacingDebugLogTime = 0f;
+    private int pendingSoulAttackType = -1; // 0=left vortex, 1=right support
+    private Coroutine soulAttackFallbackCoroutine = null;
     
     // Valor Shard Tracking
     private bool isPerformingThrust = false;
@@ -669,8 +776,19 @@ public class WeaponClassController : MonoBehaviour
     private Transform playerTransform;
     
     // Storm Shard Components
+    private GameObject stormParticlePoint0; // SSParticlePoint0 - used for ultimate orb spawning
     private GameObject stormParticlePoint1; // Invisible emission point for storm attack type 1
     private GameObject stormParticlePoint2; // Invisible emission point for storm attack type 2
+
+    // Storm Ultimate Tracking
+    private Coroutine stormUltimateCoroutine = null;
+    private List<GameObject> activeStormOrbs = new List<GameObject>();
+
+    // Whisper Ultimate Tracking
+    private Coroutine whisperUltimateCoroutine = null;
+
+    // Whisper Passive Incremental Stacking
+    private int whisperHitsTowardNextStack = 0; // Hits accumulated toward the next passive stack
     
     // Shard Sprites (will be loaded from the GameObjects)
     private Dictionary<ShardType, Sprite> shardSprites = new Dictionary<ShardType, Sprite>();
@@ -678,6 +796,7 @@ public class WeaponClassController : MonoBehaviour
     // Public Properties
     public bool IsChargingValorAttack => isChargingValorAttack;
     public bool IsWhisperShardActive => equippedShards[activeSlotIndex] == ShardType.WhisperShard;
+    public bool IsSoulShardActive => equippedShards[activeSlotIndex] == ShardType.SoulShard;
     
     void Start()
     {
@@ -697,9 +816,12 @@ public class WeaponClassController : MonoBehaviour
         InitializeGUI();
         LoadShardSprites();
         FindStormParticlePoint();
+        // Resolve the animator for Soul Shard attacks (same animator as the player)
+        soulShardAnimator = GetComponent<Animator>();
+        if (soulShardAnimator == null)
+            soulShardAnimator = GetComponentInChildren<Animator>();
         
         // Initialize animation controller based on current equipped shards
-        Debug.Log("WeaponClassController: Initializing animation controller...");
         UpdatePlayerAnimationController();
         
         // Sync ultimate charge configuration with PlayerMovement
@@ -859,8 +981,8 @@ public class WeaponClassController : MonoBehaviour
     private void LoadShardSprites()
     {
         // Find shard GameObjects and extract their sprites
-        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard" };
-        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard };
+        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard", "SoulShard" };
+        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard, ShardType.SoulShard };
         
         for (int i = 0; i < shardTags.Length; i++)
         {
@@ -881,8 +1003,8 @@ public class WeaponClassController : MonoBehaviour
         if (playerTransform == null) return;
         
         // Check for each shard type
-        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard" };
-        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard };
+        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard", "SoulShard" };
+        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard, ShardType.SoulShard };
         
         GameObject closestShard = null;
         ShardType closestShardType = ShardType.None;
@@ -1155,9 +1277,39 @@ public class WeaponClassController : MonoBehaviour
                 // Stop auto-fire when left click is released
                 isAutoFiring = false;
             }
-            else if (rightClickPressed && activeWeapon != ShardType.ValorShard)
+            else if (rightClickPressed && activeWeapon == ShardType.SoulShard)
+            {
+                isSoulRightHeld = true;
+                soulRightClickStartTime = Time.time;
+            }
+            else if (rightClickPressed && activeWeapon != ShardType.ValorShard && activeWeapon != ShardType.SoulShard)
             {
                 UseActiveWeapon(true); // Right-click attack for other weapons
+            }
+
+            if (activeWeapon == ShardType.SoulShard)
+            {
+                if (isSoulRightHeld && rightClickHeld && !isSoulHoldChanneling)
+                {
+                    if (Time.time - soulRightClickStartTime >= soulHoldActivationTime)
+                    {
+                        StartSoulHoldChannel();
+                    }
+                }
+
+                if (isSoulRightHeld && rightClickReleased)
+                {
+                    if (isSoulHoldChanneling)
+                    {
+                        StopSoulHoldChannel();
+                    }
+                    else
+                    {
+                        UseActiveWeapon(true);
+                    }
+
+                    isSoulRightHeld = false;
+                }
             }
             
             // Handle auto-fire for Storm Shard
@@ -1260,8 +1412,8 @@ public class WeaponClassController : MonoBehaviour
         SpriteRenderer spriteRenderer = shardObject.GetComponent<SpriteRenderer>();
         
         // Map shard types to their corresponding tags
-        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard" };
-        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard };
+        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard", "SoulShard" };
+        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard, ShardType.SoulShard };
         
         for (int i = 0; i < shardTypes.Length; i++)
         {
@@ -1292,6 +1444,18 @@ public class WeaponClassController : MonoBehaviour
     {
         if (slotIndex >= 0 && slotIndex < 2 && equippedShards[slotIndex] != ShardType.None)
         {
+            bool changingSlot = activeSlotIndex != slotIndex;
+
+            if (isSoulHoldChanneling)
+            {
+                StopSoulHoldChannel();
+            }
+
+            if (changingSlot)
+            {
+                ResetCombatStateForShardSwitch();
+            }
+
             activeSlotIndex = slotIndex;
             UpdateActiveSlotIndicator();
             
@@ -1314,6 +1478,9 @@ public class WeaponClassController : MonoBehaviour
                 break;
             case ShardType.StormShard:
                 UseStormShard(isRightClick);
+                break;
+            case ShardType.SoulShard:
+                UseSoulShard(isRightClick);
                 break;
             default:
                 break;
@@ -1552,89 +1719,63 @@ public class WeaponClassController : MonoBehaviour
 
     private GameObject CreateTripleDagger(Vector3 startPosition, Vector3 direction, int index)
     {
-        // Create projectile dagger similar to regular dagger but with special properties
-        GameObject projectile = new GameObject($"TripleDagger_{index}");
-        projectile.transform.position = startPosition;
-        
-        // Add rigidbody for physics
-        Rigidbody2D rb = projectile.AddComponent<Rigidbody2D>();
-        rb.gravityScale = 0.3f; // Same as regular dagger
-        rb.linearVelocity = direction * projectileSpeed;
-        
-        // Add collider
-        BoxCollider2D projectileCollider = projectile.AddComponent<BoxCollider2D>();
-        projectileCollider.size = new Vector2(projectileWidth, projectileHeight);
-        projectileCollider.isTrigger = true;
-        
-        // Add damage component
-        DamageObject damageComponent = projectile.AddComponent<DamageObject>();
-        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
-        damageComponent.damageRate = 0.3f; // Slower damage rate for thrown daggers
-        
-        // Add Whisper Shard passive callback
-        damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
-        
-        // Configure damage object
-        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (excludeField != null)
+        // Use prefab if assigned, otherwise create a bare GameObject
+        GameObject projectile;
+        if (daggerPrefab != null)
         {
-            excludeField.SetValue(damageComponent, true);
-        }
-        
-        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (enemyDamageField != null)
-        {
-            enemyDamageField.SetValue(damageComponent, true);
-        }
-        
-        // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
-        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
-        
-        // Visual indicator - white color for triple daggers
-        SpriteRenderer daggerRenderer = projectile.AddComponent<SpriteRenderer>();
-        Color tripleDaggerColor = new Color(1f, 1f, 1f, 1f); // White color
-        
-        if (daggerSprite != null)
-        {
-            daggerRenderer.sprite = daggerSprite;
-            daggerRenderer.color = tripleDaggerColor;
-            
-            // Add rotation controller for natural flight
-            projectile.AddComponent<DaggerRotationController>();
-            
-            // Add ground collision component to make dagger stick in ground
-            DaggerGroundCollision groundCollision = projectile.AddComponent<DaggerGroundCollision>();
-            groundCollision.weaponController = this;
+            projectile = Instantiate(daggerPrefab, startPosition, Quaternion.identity);
         }
         else
         {
-            // Fallback visual (purple rectangle)
-            int textureWidth = Mathf.RoundToInt(projectileWidth * 64);
-            int textureHeight = Mathf.RoundToInt(projectileHeight * 64);
-            
-            Texture2D daggerTexture = new Texture2D(textureWidth, textureHeight);
-            
-            for (int x = 0; x < textureWidth; x++)
-            {
-                for (int y = 0; y < textureHeight; y++)
-                {
-                    daggerTexture.SetPixel(x, y, tripleDaggerColor);
-                }
-            }
-            
-            daggerTexture.Apply();
-            Sprite daggerSprite = Sprite.Create(daggerTexture, new Rect(0, 0, textureWidth, textureHeight), new Vector2(0.5f, 0.5f));
-            daggerRenderer.sprite = daggerSprite;
-            
-            // Add rotation controller and ground collision for fallback daggers too
-            projectile.AddComponent<DaggerRotationController>();
-            DaggerGroundCollision groundCollision = projectile.AddComponent<DaggerGroundCollision>();
-            groundCollision.weaponController = this;
+            projectile = new GameObject($"TripleDagger_{index}");
+            projectile.transform.position = startPosition;
         }
-        
+        projectile.name = $"TripleDagger_{index}";
+
+        // Rigidbody
+        Rigidbody2D rb = projectile.GetComponent<Rigidbody2D>();
+        if (rb == null) rb = projectile.AddComponent<Rigidbody2D>();
+        rb.gravityScale = 0.3f;
+        rb.linearVelocity = direction * projectileSpeed;
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+
+        // Collider
+        BoxCollider2D projectileCollider = projectile.GetComponent<BoxCollider2D>();
+        if (projectileCollider == null) projectileCollider = projectile.AddComponent<BoxCollider2D>();
+        projectileCollider.size = new Vector2(projectileWidth, projectileHeight);
+        projectileCollider.isTrigger = true;
+
+        // Damage
+        DamageObject damageComponent = projectile.GetComponent<DamageObject>();
+        if (damageComponent == null) damageComponent = projectile.AddComponent<DamageObject>();
+        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
+        damageComponent.damageRate = 0.3f;
+        damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
+
+        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (excludeField != null) excludeField.SetValue(damageComponent, true);
+        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (enemyDamageField != null) enemyDamageField.SetValue(damageComponent, true);
+        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
+
+        // Rotation to face travel direction
+        if (projectile.GetComponent<DaggerRotationController>() == null)
+            projectile.AddComponent<DaggerRotationController>();
+
+        // Ground collision
+        DaggerGroundCollision groundCollision = projectile.GetComponent<DaggerGroundCollision>();
+        if (groundCollision == null) groundCollision = projectile.AddComponent<DaggerGroundCollision>();
+        groundCollision.weaponController = this;
+
+        // Whisper redirect VFX: keep child particle systems off until this dagger is actively redirecting.
+        DaggerRedirectVfxController redirectVfx = projectile.GetComponent<DaggerRedirectVfxController>();
+        if (redirectVfx == null) redirectVfx = projectile.AddComponent<DaggerRedirectVfxController>();
+        redirectVfx.SetDaggerSpawnedState(true);
+        redirectVfx.SetRedirectVfxActive(false);
+
         // Set lifetime and cleanup
         StartCoroutine(DestroyProjectileAfterTime(projectile, projectileLifetime));
-        
+
         return projectile;
     }
     
@@ -1681,6 +1822,1375 @@ public class WeaponClassController : MonoBehaviour
             
             // Generate ultimate charge for storm left click attack (manual click)
             GenerateUltimateCharge(stormLeftClickCharge);
+        }
+    }
+
+    private void UseSoulShard(bool isRightClick)
+    {
+        if (playerTransform == null) return;
+
+        if (isRightClick)
+        {
+            if (TriggerSoulAttackAnimation(1))
+            {
+                ScheduleSoulAttackFallback(1);
+                GenerateUltimateCharge(soulRightClickCharge);
+            }
+        }
+        else
+        {
+            if (TriggerSoulAttackAnimation(0))
+            {
+                ScheduleSoulAttackFallback(0);
+                GenerateUltimateCharge(soulLeftClickCharge);
+            }
+        }
+    }
+
+    private bool TriggerSoulAttackAnimation(int attackType)
+    {
+        if (soulShardAnimator != null)
+        {
+            soulShardAnimator.SetInteger("attackType", attackType);
+
+            // Pulse the bool to reliably retrigger Soul attack transitions/events on every click.
+            if (AnimatorHasBool(soulShardAnimator, "isAttacking"))
+            {
+                soulShardAnimator.SetBool("isAttacking", false);
+                soulShardAnimator.SetBool("isAttacking", true);
+            }
+
+            return true;
+        }
+
+        TriggerAttackAnimation(attackType);
+        return true;
+    }
+
+    private void StartSoulHoldChannel()
+    {
+        if (isSoulHoldChanneling) return;
+
+        isSoulHoldChanneling = true;
+        TriggerSoulAttackAnimation(1);
+
+        if (playerMovement != null)
+        {
+            playerMovement.enabled = false;
+        }
+
+        soulHoldPulseCoroutine = StartCoroutine(SoulHoldPulseRoutine());
+    }
+
+    private void StopSoulHoldChannel()
+    {
+        if (!isSoulHoldChanneling) return;
+
+        isSoulHoldChanneling = false;
+
+        if (soulHoldPulseCoroutine != null)
+        {
+            StopCoroutine(soulHoldPulseCoroutine);
+            soulHoldPulseCoroutine = null;
+        }
+
+        if (playerMovement != null && !playerMovement.enabled)
+        {
+            playerMovement.enabled = true;
+            playerMovement.OnAttackAnimationEnd();
+        }
+
+        if (soulShardAnimator != null)
+        {
+            soulShardAnimator.SetBool("isAttacking", false);
+        }
+    }
+
+    private IEnumerator SoulHoldPulseRoutine()
+    {
+        while (isSoulHoldChanneling)
+        {
+            ApplySoulSupportPulse(playerTransform.position, soulHoldPulseHeal);
+            GenerateUltimateCharge(soulHoldTickCharge);
+            yield return new WaitForSeconds(soulHoldPulseInterval);
+        }
+    }
+
+    // Animation Event: Soul left-click start vortex
+    public void SoulVortexStart()
+    {
+        if (playerTransform == null) return;
+
+        ClearSoulAttackFallback(0);
+
+        if (activeSoulVortex != null)
+        {
+            if (soulOverlayDebugLogs)
+            {
+                Debug.Log("SoulVortexStart ignored: vortex already active.");
+            }
+            return;
+        }
+
+        Vector3 vortexPos = GetSoulVortexAnchorPosition();
+        activeSoulVortex = new GameObject("SoulVortex");
+        activeSoulVortex.transform.position = vortexPos;
+        AttachSoulAmbientDustOnSpawn(activeSoulVortex, new Vector3(soulVortexRadius * 2f, soulVortexRadius * 2f, 1f));
+
+        // Dedicated facing pivot that is never animated directly.
+        GameObject facingPivot = new GameObject("SoulVortexFacingPivot");
+        activeSoulVortexFacingPivot = facingPivot.transform;
+        activeSoulVortexFacingPivot.SetParent(activeSoulVortex.transform, false);
+
+        float vortexFxLifetime = Mathf.Max(0.25f, soulVortexDuration + Mathf.Max(0f, soulVortexEndVisualLinger));
+        if (!SpawnTimedOverlayControllerEffect(soulVortexFxAnim, activeSoulVortexFacingPivot, vortexPos, vortexFxLifetime, "SoulVortexFX") && soulOverlayDebugLogs)
+        {
+            Debug.LogWarning("Soul Vortex FX controller not assigned. Vortex gameplay active with no animated visual.");
+        }
+
+        activeSoulVortexFxRoot = FindSoulVortexFxRoot(activeSoulVortexFacingPivot);
+        nextSoulVortexFacingDebugLogTime = 0f;
+        UpdateSoulVortexVisualFacing();
+
+        CircleCollider2D vortexTrigger = activeSoulVortex.AddComponent<CircleCollider2D>();
+        vortexTrigger.radius = soulVortexRadius;
+        vortexTrigger.isTrigger = true;
+
+        if (soulVortexTickCoroutine != null)
+        {
+            StopCoroutine(soulVortexTickCoroutine);
+        }
+        soulVortexTickCoroutine = StartCoroutine(SoulVortexTickRoutine(activeSoulVortex));
+    }
+
+    // Animation Event: Soul left-click end vortex and burst
+    public void SoulVortexEnd()
+    {
+        if (soulVortexTickCoroutine != null)
+        {
+            StopCoroutine(soulVortexTickCoroutine);
+            soulVortexTickCoroutine = null;
+        }
+
+        if (activeSoulVortex == null) return;
+
+        GameObject vortexToDespawn = activeSoulVortex;
+        Vector3 burstCenter = vortexToDespawn.transform.position;
+        Collider2D[] colliders = Physics2D.OverlapCircleAll(burstCenter, soulVortexRadius);
+        foreach (Collider2D hit in colliders)
+        {
+            if (hit == null || !IsEnemy(hit.gameObject)) continue;
+            DealMagicDamageToEnemy(hit.gameObject, soulVortexBurstDamage);
+        }
+
+        CircleCollider2D trigger = vortexToDespawn.GetComponent<CircleCollider2D>();
+        if (trigger != null)
+        {
+            trigger.enabled = false;
+        }
+
+        float linger = Mathf.Max(0f, soulVortexEndVisualLinger);
+        if (linger > 0f)
+        {
+            StartCoroutine(DespawnSoulVortexAfterDelay(vortexToDespawn, linger));
+        }
+        else
+        {
+            DespawnSoulMagicObject(vortexToDespawn);
+        }
+
+        activeSoulVortex = null;
+        activeSoulVortexFacingPivot = null;
+        activeSoulVortexFxRoot = null;
+    }
+
+    private IEnumerator DespawnSoulVortexAfterDelay(GameObject vortex, float delay)
+    {
+        if (vortex == null)
+        {
+            yield break;
+        }
+
+        yield return new WaitForSeconds(delay);
+
+        if (vortex != null)
+        {
+            DespawnSoulMagicObject(vortex);
+        }
+    }
+
+    // Animation Event: Soul right-click pulse support
+    public void SoulSupportPulseEvent()
+    {
+        if (playerTransform == null) return;
+
+        ClearSoulAttackFallback(1);
+
+        ApplySoulSupportPulse(playerTransform.position, soulSupportPulseHeal);
+
+        if (soulAttack2FxPrefab != null)
+        {
+            SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
+            if (playerSprite == null) playerSprite = GetComponentInChildren<SpriteRenderer>();
+            bool facingLeft = playerSprite != null ? playerSprite.flipX : false;
+            Vector3 offset = new Vector3(facingLeft ? -soulAttack2FxOffset.x : soulAttack2FxOffset.x, soulAttack2FxOffset.y, soulAttack2FxOffset.z);
+            GameObject fx = Instantiate(soulAttack2FxPrefab, playerTransform.position + offset, Quaternion.identity);
+            Destroy(fx, soulOverlayLifetime);
+        }
+
+        if (!isSoulHoldChanneling && playerMovement != null)
+        {
+            // Let the animation clip's own end event release attack lock.
+        }
+    }
+
+    private IEnumerator SoulVortexTickRoutine(GameObject vortex)
+    {
+        float endTime = Time.time + soulVortexDuration;
+        float nextTickTime = Time.time;
+
+        while (vortex != null && Time.time < endTime)
+        {
+            // Keep vortex aligned with current facing so it stays in front of the player.
+            if (playerTransform != null)
+            {
+                vortex.transform.position = GetSoulVortexAnchorPosition();
+                UpdateSoulVortexVisualFacing();
+            }
+
+            if (Time.time >= nextTickTime)
+            {
+                Vector3 center = vortex.transform.position;
+                Collider2D[] colliders = Physics2D.OverlapCircleAll(center, soulVortexRadius);
+
+                foreach (Collider2D hit in colliders)
+                {
+                    if (hit == null || !IsEnemy(hit.gameObject)) continue;
+
+                    Rigidbody2D enemyRb = hit.attachedRigidbody;
+                    if (enemyRb != null)
+                    {
+                        Vector2 pullDirection = ((Vector2)center - enemyRb.position).normalized;
+                        enemyRb.AddForce(pullDirection * soulVortexPullForce, ForceMode2D.Force);
+                    }
+
+                    DealMagicDamageToEnemy(hit.gameObject, soulVortexTickDamage);
+                }
+
+                nextTickTime = Time.time + soulVortexTickInterval;
+            }
+
+            yield return null;
+        }
+
+        SoulVortexEnd();
+    }
+
+    private void ScheduleSoulAttackFallback(int attackType)
+    {
+        pendingSoulAttackType = attackType;
+
+        if (soulAttackFallbackCoroutine != null)
+        {
+            StopCoroutine(soulAttackFallbackCoroutine);
+        }
+
+        soulAttackFallbackCoroutine = StartCoroutine(SoulAttackEventFallbackRoutine(attackType));
+    }
+
+    private void ClearSoulAttackFallback(int attackType)
+    {
+        if (pendingSoulAttackType != attackType)
+        {
+            return;
+        }
+
+        pendingSoulAttackType = -1;
+        if (soulAttackFallbackCoroutine != null)
+        {
+            StopCoroutine(soulAttackFallbackCoroutine);
+            soulAttackFallbackCoroutine = null;
+        }
+    }
+
+    private IEnumerator SoulAttackEventFallbackRoutine(int expectedAttackType)
+    {
+        yield return new WaitForSeconds(0.12f);
+
+        if (pendingSoulAttackType != expectedAttackType)
+        {
+            yield break;
+        }
+
+        if (expectedAttackType == 0)
+        {
+            if (soulOverlayDebugLogs)
+            {
+                Debug.LogWarning("Soul left-click animation event fallback triggered: invoking SoulVortexStart directly.");
+            }
+            SoulVortexStart();
+        }
+        else
+        {
+            if (soulOverlayDebugLogs)
+            {
+                Debug.LogWarning("Soul right-click animation event fallback triggered: invoking SoulSupportPulseEvent directly.");
+            }
+            SoulSupportPulseEvent();
+        }
+
+        pendingSoulAttackType = -1;
+        soulAttackFallbackCoroutine = null;
+    }
+
+    private void ResetCombatStateForShardSwitch()
+    {
+        // Clear universal attack lock and queued Valor state so other shards are not blocked.
+        EndAttackAnimation();
+        isPerformingSpecialAttack = false;
+        isPerformingThrust = false;
+        clickCount = 0;
+        currentClickCount = 0;
+        attackQueue.Clear();
+
+        if (attackQueueProcessor != null)
+        {
+            StopCoroutine(attackQueueProcessor);
+            attackQueueProcessor = null;
+        }
+
+        // Clear Soul input state carry-over.
+        isSoulRightHeld = false;
+        pendingSoulAttackType = -1;
+        if (soulAttackFallbackCoroutine != null)
+        {
+            StopCoroutine(soulAttackFallbackCoroutine);
+            soulAttackFallbackCoroutine = null;
+        }
+
+        if (soulShardAnimator != null && AnimatorHasBool(soulShardAnimator, "isAttacking"))
+        {
+            soulShardAnimator.SetBool("isAttacking", false);
+        }
+
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+
+    private void ApplySoulSupportPulse(Vector3 center, int healAmount, bool useFloorBuffCooldown = false)
+    {
+        if (playerMovement != null)
+        {
+            playerMovement.HealFromSupport(healAmount);
+
+            bool canApplyBuffs = CanApplySoulFloorBuffs(playerTransform, useFloorBuffCooldown);
+            if (canApplyBuffs)
+            {
+                playerMovement.ApplyBuff(PlayerMovement.BuffType.Strength, soulSupportStrengthPercent, soulSupportBuffDuration, "Soul shard strength aura");
+                playerMovement.ApplyBuff(PlayerMovement.BuffType.Flux, soulSupportFluxPercent, soulSupportBuffDuration, "Soul shard flux aura");
+                playerMovement.ApplyBuff(PlayerMovement.BuffType.Durability, soulSupportDurabilityPercent, soulSupportBuffDuration, "Soul shard durability aura");
+            }
+
+            PlaySoulSupportOverlayEffects(playerTransform, healAmount > 0, canApplyBuffs);
+        }
+
+        AttackDummy[] dummies = FindObjectsByType<AttackDummy>(FindObjectsSortMode.None);
+        foreach (AttackDummy dummy in dummies)
+        {
+            if (dummy == null || dummy.IsDead) continue;
+
+            if (Vector3.Distance(center, dummy.transform.position) <= soulSupportRadius)
+            {
+                dummy.HealFromSupport(healAmount);
+
+                bool canApplyBuffs = CanApplySoulFloorBuffs(dummy.transform, useFloorBuffCooldown);
+                if (canApplyBuffs)
+                {
+                    dummy.ApplySoulSupportBuffs(soulSupportStrengthPercent, soulSupportFluxPercent, soulSupportDurabilityPercent, soulSupportBuffDuration);
+                }
+
+                PlaySoulSupportOverlayEffects(dummy.transform, healAmount > 0, canApplyBuffs);
+            }
+        }
+    }
+
+    private bool CanApplySoulFloorBuffs(Transform target, bool useFloorBuffCooldown)
+    {
+        if (!useFloorBuffCooldown || target == null)
+        {
+            return true;
+        }
+
+        if (soulFloorBuffCooldown <= 0f)
+        {
+            return true;
+        }
+
+        if (soulFloorBuffCooldownUntil.TryGetValue(target, out float nextAllowedTime) && Time.time < nextAllowedTime)
+        {
+            return false;
+        }
+
+        soulFloorBuffCooldownUntil[target] = Time.time + soulFloorBuffCooldown;
+        return true;
+    }
+
+    public void OnPlayerJumped()
+    {
+        if (!IsSoulShardActive || playerTransform == null)
+        {
+            return;
+        }
+
+        SpawnSoulJumpDust(playerTransform.position, true);
+    }
+
+    public void OnPlayerDeathEffects(Vector3 deathPosition)
+    {
+        if (!IsSoulShardActive)
+        {
+            return;
+        }
+
+        SpawnSoulJumpDust(deathPosition);
+    }
+
+    private void PlaySoulSupportOverlayEffects(Transform target, bool includeHeal, bool includeBuffEffects = true)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        Vector3 effectPosition = target.position + soulOverlayOffset;
+
+        // Heal plays immediately and overlaps everything.
+        if (includeHeal)
+        {
+            SpawnOverlayPrefab(healPrefab, target, effectPosition);
+        }
+
+        if (!includeBuffEffects)
+        {
+            return;
+        }
+
+        // Build queue of buff prefabs that are actually active.
+        List<GameObject> buffQueue = new List<GameObject>();
+        if (soulSupportStrengthPercent > 0f && meleeAtkBuffPrefab != null)
+            buffQueue.Add(meleeAtkBuffPrefab);
+        if (soulSupportFluxPercent > 0f && magicAtkBuffPrefab != null)
+            buffQueue.Add(magicAtkBuffPrefab);
+        if (soulSupportDurabilityPercent > 0f && durabilityPrefab != null)
+            buffQueue.Add(durabilityPrefab);
+
+        if (buffQueue.Count == 0)
+        {
+            return;
+        }
+
+        // Cancel any in-progress queue for this target before starting a new one.
+        if (soulBuffQueueCoroutines.TryGetValue(target, out Coroutine existing) && existing != null)
+        {
+            StopCoroutine(existing);
+        }
+
+        Coroutine queued = StartCoroutine(PlayBuffQueueRoutine(target, buffQueue));
+        soulBuffQueueCoroutines[target] = queued;
+    }
+
+    private IEnumerator PlayBuffQueueRoutine(Transform target, List<GameObject> buffPrefabs)
+    {
+        foreach (GameObject prefab in buffPrefabs)
+        {
+            if (target == null)
+            {
+                yield break;
+            }
+
+            Vector3 effectPosition = target.position + soulOverlayOffset;
+            SpawnOverlayPrefab(prefab, target, effectPosition);
+            yield return new WaitForSeconds(soulOverlayLifetime);
+        }
+
+        if (soulBuffQueueCoroutines.ContainsKey(target))
+        {
+            soulBuffQueueCoroutines.Remove(target);
+        }
+    }
+
+    private void SpawnSoulJumpDust(Vector3 origin, bool attachToPlayerFeet = false)
+    {
+        if (soulShardJumpMagicDustEmitter == null)
+        {
+            if (soulOverlayDebugLogs)
+            {
+                Debug.LogWarning("Soul Jump Dust skipped: emitter is not assigned.");
+            }
+            return;
+        }
+
+        Vector3 spawnPosition = origin + soulShardJumpMagicDustOffset;
+        ParticleSystem effectInstance = Instantiate(soulShardJumpMagicDustEmitter, spawnPosition, Quaternion.identity);
+        Vector3 volumeSize = new Vector3(0.9f, 0.35f, 1f);
+
+        if (playerTransform != null)
+        {
+            Collider2D playerCollider2D = playerTransform.GetComponent<Collider2D>();
+            if (playerCollider2D == null)
+            {
+                playerCollider2D = playerTransform.GetComponentInChildren<Collider2D>();
+            }
+
+            if (playerCollider2D != null)
+            {
+                volumeSize = new Vector3(playerCollider2D.bounds.size.x, Mathf.Max(0.25f, playerCollider2D.bounds.size.y * 0.22f), 1f);
+            }
+        }
+
+        ConfigureSoulDustShape(effectInstance, volumeSize, attachToPlayerFeet ? ParticleSystemSimulationSpace.Local : ParticleSystemSimulationSpace.World);
+
+        if (attachToPlayerFeet && playerTransform != null)
+        {
+            effectInstance.transform.SetParent(playerTransform, false);
+            effectInstance.transform.localPosition = soulShardJumpMagicDustOffset;
+        }
+
+        effectInstance.Play();
+
+        if (soulOverlayDebugLogs)
+        {
+            string attachState = attachToPlayerFeet && playerTransform != null ? "attached-to-feet" : "world-space";
+            Debug.Log($"Soul Jump Dust spawned ({attachState}) at {effectInstance.transform.position}.");
+        }
+
+        float lifetime = soulShardJumpMagicDustLifetime;
+        if (lifetime <= 0f)
+        {
+            ParticleSystem.MainModule main = effectInstance.main;
+            lifetime = main.duration + main.startLifetime.constantMax;
+        }
+
+        Destroy(effectInstance.gameObject, Mathf.Max(0.25f, lifetime));
+    }
+
+    private bool SpawnTimedOverlayControllerEffect(RuntimeAnimatorController controller, Transform parent, Vector3 worldPosition, float lifetime, string debugSuffix)
+    {
+        if (controller == null)
+        {
+            if (soulOverlayDebugLogs)
+            {
+                Debug.LogWarning($"Soul Overlay skipped: controller missing at {worldPosition} (parent={(parent != null ? parent.name : "none")}).");
+            }
+            return false;
+        }
+
+        GameObject effectRoot = new GameObject($"{controller.name}_{debugSuffix}");
+        effectRoot.transform.position = worldPosition;
+
+        if (parent != null)
+        {
+            effectRoot.transform.SetParent(parent, true);
+        }
+
+        SpriteRenderer sr = effectRoot.AddComponent<SpriteRenderer>();
+        sr.sortingOrder = soulOverlaySortingOrderOffset;
+
+        if (parent != null)
+        {
+            SpriteRenderer parentRenderer = parent.GetComponentInChildren<SpriteRenderer>();
+            if (parentRenderer != null)
+            {
+                sr.sortingLayerID = parentRenderer.sortingLayerID;
+                sr.sortingOrder = parentRenderer.sortingOrder + soulOverlaySortingOrderOffset;
+            }
+        }
+
+        Animator animator = effectRoot.AddComponent<Animator>();
+        animator.runtimeAnimatorController = controller;
+
+        soulOverlaySpawnCount++;
+        if (soulOverlayDebugLogs)
+        {
+            Debug.Log($"Soul Overlay #{soulOverlaySpawnCount} created: {effectRoot.name}, controller={controller.name}, parent={(parent != null ? parent.name : "none")}, position={worldPosition}.");
+            StartCoroutine(LogSoulOverlayAnimationSnapshot(animator, effectRoot.name, soulOverlaySpawnCount));
+        }
+
+        Destroy(effectRoot, Mathf.Max(0.1f, lifetime));
+        return true;
+    }
+
+    private bool SpawnOverlayPrefab(GameObject prefab, Transform parent, Vector3 worldPosition)
+    {
+        return SpawnTimedOverlayPrefab(prefab, parent, worldPosition, Mathf.Max(0.1f, soulOverlayLifetime), "OverlayFX");
+    }
+
+    private bool SpawnTimedOverlayPrefab(GameObject prefab, Transform parent, Vector3 worldPosition, float lifetime, string debugSuffix)
+    {
+        if (prefab == null)
+        {
+            if (soulOverlayDebugLogs)
+            {
+                Debug.LogWarning($"Soul Overlay skipped: prefab missing at {worldPosition} (parent={(parent != null ? parent.name : "none")}).");
+            }
+            return false;
+        }
+
+        GameObject effectRoot = Instantiate(prefab, worldPosition, Quaternion.identity);
+        effectRoot.name = $"{prefab.name}_{debugSuffix}";
+
+        if (parent != null)
+        {
+            effectRoot.transform.SetParent(parent, true);
+        }
+
+        soulOverlaySpawnCount++;
+        if (soulOverlayDebugLogs)
+        {
+            Animator animator = effectRoot.GetComponentInChildren<Animator>();
+            Debug.Log($"Soul Overlay #{soulOverlaySpawnCount} created: {effectRoot.name}, prefab={prefab.name}, parent={(parent != null ? parent.name : "none")}, position={worldPosition}, animator={(animator != null ? "found" : "none")}.");
+            if (animator != null)
+            {
+                StartCoroutine(LogSoulOverlayAnimationSnapshot(animator, effectRoot.name, soulOverlaySpawnCount));
+            }
+        }
+
+        Destroy(effectRoot, Mathf.Max(0.1f, lifetime));
+        return true;
+    }
+
+    private IEnumerator LogSoulOverlayAnimationSnapshot(Animator animator, string effectName, int overlayId)
+    {
+        yield return null;
+
+        if (!soulOverlayDebugLogs || animator == null)
+        {
+            yield break;
+        }
+
+        AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+        Debug.Log($"Soul Overlay #{overlayId} runtime snapshot: effect={effectName}, stateHash={stateInfo.shortNameHash}, normalizedTime={stateInfo.normalizedTime:F2}.");
+    }
+
+    private bool AnimatorHasTrigger(Animator animator, string parameterName)
+    {
+        if (animator == null || string.IsNullOrWhiteSpace(parameterName))
+        {
+            return false;
+        }
+
+        AnimatorControllerParameter[] parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (parameters[i].name == parameterName && parameters[i].type == AnimatorControllerParameterType.Trigger)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool AnimatorHasBool(Animator animator, string parameterName)
+    {
+        if (animator == null || string.IsNullOrWhiteSpace(parameterName))
+        {
+            return false;
+        }
+
+        AnimatorControllerParameter[] parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (parameters[i].name == parameterName && parameters[i].type == AnimatorControllerParameterType.Bool)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void ActivateSoulUltimate()
+    {
+        if (playerTransform == null) return;
+
+        if (activeSoulUltimateRoot != null)
+        {
+            DespawnSoulMagicObject(activeSoulUltimateRoot);
+            activeSoulUltimateRoot = null;
+        }
+
+        if (soulUltimateCoroutine != null)
+        {
+            StopCoroutine(soulUltimateCoroutine);
+            soulUltimateCoroutine = null;
+        }
+
+        // Pulse the bool so any-state transition can enter ultimate, then reset it to avoid lock-in.
+        if (soulShardAnimator != null && AnimatorHasBool(soulShardAnimator, "ultimateUsed"))
+        {
+            soulShardAnimator.SetBool("ultimateUsed", false);
+            soulShardAnimator.SetBool("ultimateUsed", true);
+
+            if (soulUltimateAnimFlagResetCoroutine != null)
+            {
+                StopCoroutine(soulUltimateAnimFlagResetCoroutine);
+            }
+            soulUltimateAnimFlagResetCoroutine = StartCoroutine(ResetSoulUltimateAnimationFlag());
+        }
+
+        Vector3 center = playerTransform.position;
+        float effectiveBarrierRadius = GetEffectiveSoulBarrierRadius();
+        float visualBarrierRadius = effectiveBarrierRadius * Mathf.Clamp(soulBarrierVisualScale, 0.2f, 1f);
+        float feetY = GetPlayerFeetY();
+        float floorY = feetY + soulFloorVisualYOffset;
+        Vector3 floorCenter = new Vector3(center.x, floorY, center.z);
+
+        activeSoulUltimateRoot = new GameObject("SoulUltimateRoot");
+        activeSoulUltimateRoot.transform.position = center;
+
+        // Create a clear half-dome baseline forcefield so the protective area is always readable.
+        GameObject barrierVisual = CreateSoulHalfDomeVisual("SoulBarrierVisual", new Color(0.2f, 0.7f, 1f, 0.95f), visualBarrierRadius, 5);
+        barrierVisual.transform.SetParent(activeSoulUltimateRoot.transform, true);
+        barrierVisual.transform.position = floorCenter;
+        AttachSoulAmbientDustOnSpawn(barrierVisual, new Vector3(visualBarrierRadius * 2f, visualBarrierRadius * 1.2f, 1f));
+
+        // Optional authored forcefield animation can play on top without replacing the baseline ring.
+        if (soulUltimateForcefieldFxAnim != null)
+        {
+            SpawnTimedOverlayControllerEffect(soulUltimateForcefieldFxAnim, activeSoulUltimateRoot.transform, center + soulUltimateForcefieldOffset, soulUltimateDuration, "SoulUltimateForcefieldFX");
+        }
+
+        GameObject barrierZone = new GameObject("SoulBarrierZone");
+        barrierZone.transform.SetParent(activeSoulUltimateRoot.transform, false);
+        barrierZone.transform.position = center;
+        CircleCollider2D barrierCollider = barrierZone.AddComponent<CircleCollider2D>();
+        barrierCollider.radius = effectiveBarrierRadius;
+        barrierCollider.isTrigger = true;
+
+        SoulBarrierZone barrierComponent = barrierZone.AddComponent<SoulBarrierZone>();
+        barrierComponent.weaponController = this;
+        barrierComponent.barrierCenter = center;
+        barrierComponent.barrierRadius = effectiveBarrierRadius;
+        barrierComponent.repelForce = soulBarrierRepelForce;
+
+        GameObject floor = CreateSoulFloorVisual(floorCenter, visualBarrierRadius * 2f);
+        floor.transform.SetParent(activeSoulUltimateRoot.transform, true);
+
+        soulUltimateCoroutine = StartCoroutine(SoulUltimateRoutine(center, visualBarrierRadius, floorY));
+    }
+
+    private IEnumerator SoulUltimateRoutine(Vector3 center, float visualBarrierRadius, float floorY)
+    {
+        float endTime = Time.time + soulUltimateDuration;
+        float nextHealTick = Time.time;
+        float nextButterflyTick = Time.time;
+
+        while (Time.time < endTime)
+        {
+            if (Time.time >= nextHealTick)
+            {
+                ApplySoulSupportPulse(center, soulFloorHealAmount, true);
+                nextHealTick = Time.time + soulFloorHealInterval;
+            }
+
+            if (Time.time >= nextButterflyTick)
+            {
+                TrySpawnSoulButterfly(center, GetEffectiveSoulBarrierRadius(), visualBarrierRadius, floorY);
+                nextButterflyTick = Time.time + soulButterflySpawnInterval;
+            }
+
+            yield return null;
+        }
+
+        if (activeSoulUltimateRoot != null)
+        {
+            DespawnSoulMagicObject(activeSoulUltimateRoot);
+            activeSoulUltimateRoot = null;
+        }
+
+        if (soulUltimateAnimFlagResetCoroutine != null)
+        {
+            StopCoroutine(soulUltimateAnimFlagResetCoroutine);
+            soulUltimateAnimFlagResetCoroutine = null;
+        }
+
+        if (soulShardAnimator != null && AnimatorHasBool(soulShardAnimator, "ultimateUsed"))
+        {
+            soulShardAnimator.SetBool("ultimateUsed", false);
+        }
+
+        soulUltimateCoroutine = null;
+    }
+
+    private IEnumerator ResetSoulUltimateAnimationFlag()
+    {
+        yield return new WaitForSeconds(0.12f);
+
+        if (soulShardAnimator != null && AnimatorHasBool(soulShardAnimator, "ultimateUsed"))
+        {
+            soulShardAnimator.SetBool("ultimateUsed", false);
+        }
+
+        soulUltimateAnimFlagResetCoroutine = null;
+    }
+
+    private void TrySpawnSoulButterfly(Vector3 center, float barrierRadius, float visualBarrierRadius, float floorY)
+    {
+        GameObject target = FindEnemyOutsideBarrier(center, soulButterflySeekRange, barrierRadius);
+        Vector3 spawnPosition = new Vector3(
+            center.x + Random.Range(-visualBarrierRadius, visualBarrierRadius),
+            floorY + 0.35f + Random.Range(0f, 0.2f),
+            center.z);
+        GameObject butterfly = CreateSoulButterflyVisual(spawnPosition);
+
+        StartCoroutine(SoulButterflyFlight(butterfly, target, floorY));
+    }
+
+    private IEnumerator SoulButterflyFlight(GameObject butterfly, GameObject target, float floorY)
+    {
+        float moveSpeed = 5f;
+        float maxLife = 2.5f;
+        float life = 0f;
+        float nextWanderRefresh = 0f;
+        Vector2 wanderDirection = Random.insideUnitCircle.normalized;
+        float randomPhase = Random.Range(0f, 6.28318f);
+        float flutterFrequency = Random.Range(7f, 14f);
+        float minY = floorY + 0.15f;
+        float maxY = floorY + 1.2f;
+
+        while (butterfly != null && life < maxLife)
+        {
+            life += Time.deltaTime;
+
+            if (target == null)
+            {
+                target = FindEnemyOutsideBarrier(butterfly.transform.position, soulButterflySeekRange, 0f);
+            }
+
+            if (Time.time >= nextWanderRefresh)
+            {
+                wanderDirection = Random.insideUnitCircle.normalized;
+                if (target == null)
+                {
+                    wanderDirection.y = Mathf.Abs(wanderDirection.y) + 0.2f;
+                    wanderDirection = wanderDirection.normalized;
+                }
+                nextWanderRefresh = Time.time + Random.Range(0.08f, 0.22f);
+            }
+
+            Vector2 towardEnemy = target != null ? ((Vector2)target.transform.position - (Vector2)butterfly.transform.position).normalized : wanderDirection;
+            Vector2 erraticSteer = target != null
+                ? (towardEnemy * 0.72f + wanderDirection * 0.28f).normalized
+                : wanderDirection;
+
+            Vector3 nextPos = butterfly.transform.position + (Vector3)(erraticSteer * moveSpeed * Time.deltaTime);
+            float flutter = Mathf.Sin((life * flutterFrequency) + randomPhase) * 0.08f;
+            nextPos.y = Mathf.Clamp(nextPos.y + flutter, minY, maxY);
+            butterfly.transform.position = nextPos;
+
+            if (target != null && Vector3.Distance(butterfly.transform.position, target.transform.position) <= 0.25f)
+            {
+                DealMagicDamageToEnemy(target, soulButterflyDamage);
+                GenerateUltimateCharge(soulUltimateButterflyCharge);
+                DespawnSoulMagicObject(butterfly);
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        if (butterfly != null)
+        {
+            DespawnSoulMagicObject(butterfly);
+        }
+    }
+
+    private GameObject CreateSoulButterflyVisual(Vector3 position)
+    {
+        if (soulButterflyFxPrefab != null)
+        {
+            return Instantiate(soulButterflyFxPrefab, position, Quaternion.identity);
+        }
+
+        GameObject cubeButterfly = CreateSoulCubeVisual("SoulButterfly", new Color(0.55f, 0.3f, 1f, 1f), 0.13f, 4);
+        cubeButterfly.transform.position = position;
+        return cubeButterfly;
+    }
+
+    private GameObject FindEnemyOutsideBarrier(Vector3 center, float maxRange, float minRange)
+    {
+        GameObject nearest = null;
+        float nearestDistance = float.MaxValue;
+
+        EnemyBehavior[] enemies = FindObjectsByType<EnemyBehavior>(FindObjectsSortMode.None);
+        foreach (EnemyBehavior enemy in enemies)
+        {
+            if (enemy == null || enemy.IsDead) continue;
+
+            float dist = Vector3.Distance(center, enemy.transform.position);
+            if (dist > minRange && dist <= maxRange && dist < nearestDistance)
+            {
+                nearest = enemy.gameObject;
+                nearestDistance = dist;
+            }
+        }
+
+        DragonBoss[] dragons = FindObjectsByType<DragonBoss>(FindObjectsSortMode.None);
+        foreach (DragonBoss dragon in dragons)
+        {
+            if (dragon == null || dragon.IsDead) continue;
+
+            float dist = Vector3.Distance(center, dragon.transform.position);
+            if (dist > minRange && dist <= maxRange && dist < nearestDistance)
+            {
+                nearest = dragon.gameObject;
+                nearestDistance = dist;
+            }
+        }
+
+        return nearest;
+    }
+
+    private void DealMagicDamageToEnemy(GameObject enemy, int baseDamage)
+    {
+        if (enemy == null || playerMovement == null) return;
+
+        int finalDamage = playerMovement.GetModifiedMagicDamage(baseDamage);
+
+        EnemyBehavior enemyBehavior = enemy.GetComponent<EnemyBehavior>();
+        if (enemyBehavior == null)
+        {
+            enemyBehavior = enemy.GetComponentInParent<EnemyBehavior>();
+        }
+        if (enemyBehavior != null)
+        {
+            enemyBehavior.TakeDamage(finalDamage);
+            return;
+        }
+
+        DragonBoss dragonBoss = enemy.GetComponent<DragonBoss>();
+        if (dragonBoss == null)
+        {
+            dragonBoss = enemy.GetComponentInParent<DragonBoss>();
+        }
+        if (dragonBoss != null)
+        {
+            dragonBoss.TakeDamage(finalDamage);
+        }
+    }
+
+    public void RepelEnemyFromSoulBarrier(Collider2D collider, Vector3 center, float radius, float force)
+    {
+        if (collider == null || !IsEnemy(collider.gameObject)) return;
+
+        Vector2 outward = ((Vector2)collider.transform.position - (Vector2)center).normalized;
+        Vector2 targetPos = (Vector2)center + outward * (radius + 0.2f);
+
+        Rigidbody2D rb = collider.attachedRigidbody;
+        if (rb != null)
+        {
+            rb.MovePosition(targetPos);
+            rb.AddForce(outward * force, ForceMode2D.Impulse);
+        }
+        else
+        {
+            collider.transform.position = targetPos;
+        }
+    }
+
+    private GameObject CreateSoulGlowCircle(string objectName, Color color, float radius, int sortingOrder)
+    {
+        GameObject circle = new GameObject(objectName);
+        SpriteRenderer renderer = circle.AddComponent<SpriteRenderer>();
+
+        int textureSize = Mathf.Max(32, Mathf.RoundToInt(radius * 64f));
+        Texture2D texture = new Texture2D(textureSize, textureSize);
+        Color clear = new Color(0f, 0f, 0f, 0f);
+        Vector2 center = new Vector2(textureSize * 0.5f, textureSize * 0.5f);
+        float maxDist = textureSize * 0.5f;
+
+        for (int x = 0; x < textureSize; x++)
+        {
+            for (int y = 0; y < textureSize; y++)
+            {
+                float dist = Vector2.Distance(new Vector2(x, y), center);
+                float alpha = Mathf.Clamp01(1f - (dist / maxDist));
+                texture.SetPixel(x, y, Color.Lerp(clear, color, alpha));
+            }
+        }
+
+        texture.Apply();
+        renderer.sprite = Sprite.Create(texture, new Rect(0, 0, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize / (radius * 2f));
+        renderer.sortingLayerName = "Player";
+        renderer.sortingOrder = sortingOrder;
+
+        return circle;
+    }
+
+    private GameObject CreateSoulCubeVisual(string objectName, Color color, float size, int sortingOrder)
+    {
+        GameObject cube = new GameObject(objectName);
+        SpriteRenderer renderer = cube.AddComponent<SpriteRenderer>();
+
+        int textureSize = Mathf.Max(8, Mathf.RoundToInt(size * 64f));
+        Texture2D texture = new Texture2D(textureSize, textureSize);
+        Color[] pixels = new Color[textureSize * textureSize];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            pixels[i] = color;
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+        renderer.sprite = Sprite.Create(texture, new Rect(0, 0, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize / size);
+        renderer.sortingLayerName = "Player";
+        renderer.sortingOrder = sortingOrder;
+
+        BoxCollider2D collider = cube.AddComponent<BoxCollider2D>();
+        collider.isTrigger = true;
+
+        return cube;
+    }
+
+    private GameObject CreateSoulFloorVisual(Vector3 position, float width)
+    {
+        GameObject floor = CreateSoulCubeVisual("SoulHealingFloor", new Color(0.6f, 0.25f, 1f, 0.65f), 0.25f, 3);
+        floor.transform.position = position;
+        floor.transform.localScale = new Vector3(width, 0.8f, 1f);
+        AttachSoulAmbientDustOnSpawn(floor, new Vector3(width, 0.8f, 1f));
+        return floor;
+    }
+
+    private float GetEffectiveSoulBarrierRadius()
+    {
+        return Mathf.Max(0.5f, soulBarrierRadius * Mathf.Max(0.2f, soulBarrierRadiusScale));
+    }
+
+    private float GetPlayerFeetY()
+    {
+        if (playerTransform == null)
+        {
+            return 0f;
+        }
+
+        Collider2D playerCollider2D = playerTransform.GetComponent<Collider2D>();
+        if (playerCollider2D == null)
+        {
+            playerCollider2D = playerTransform.GetComponentInChildren<Collider2D>();
+        }
+
+        if (playerCollider2D != null)
+        {
+            return playerCollider2D.bounds.min.y;
+        }
+
+        return playerTransform.position.y - 0.9f;
+    }
+
+    private void AttachSoulAmbientDustOnSpawn(GameObject target, Vector3 volumeSize)
+    {
+        if (!soulAttachAmbientDustOnSpawn || soulShardJumpMagicDustEmitter == null || target == null)
+        {
+            return;
+        }
+
+        ParticleSystem ambient = Instantiate(soulShardJumpMagicDustEmitter, target.transform.position, Quaternion.identity, target.transform);
+        ambient.transform.localPosition = Vector3.zero;
+
+        ConfigureSoulDustShape(ambient, volumeSize, ParticleSystemSimulationSpace.Local);
+
+        ambient.Play();
+    }
+
+    private GameObject CreateSoulHalfDomeVisual(string objectName, Color color, float radius, int sortingOrder)
+    {
+        GameObject dome = new GameObject(objectName);
+        LineRenderer line = dome.AddComponent<LineRenderer>();
+        line.material = new Material(Shader.Find("Sprites/Default"));
+        line.startColor = color;
+        line.endColor = color;
+        line.startWidth = 0.08f;
+        line.endWidth = 0.08f;
+        line.useWorldSpace = false;
+        line.loop = false;
+        line.sortingLayerName = "Player";
+        line.sortingOrder = sortingOrder;
+
+        const int segments = 36;
+        line.positionCount = segments;
+        for (int i = 0; i < segments; i++)
+        {
+            float t = i / (float)(segments - 1);
+            float angle = Mathf.PI * t;
+            float x = Mathf.Cos(angle) * radius;
+            float y = Mathf.Sin(angle) * (radius * 0.65f);
+            line.SetPosition(i, new Vector3(x, y, 0f));
+        }
+
+        return dome;
+    }
+
+    private void DespawnSoulMagicObject(GameObject obj)
+    {
+        if (obj == null) return;
+        PlaySoulExitEffect(obj);
+        Destroy(obj);
+    }
+
+    private void PlaySoulExitEffect(GameObject source)
+    {
+        Vector3 position = source != null ? source.transform.position : Vector3.zero;
+
+        DetachSoulAmbientDustForLinger(source);
+
+        if (soulMagicDespawnEffectPrefab != null)
+        {
+            Instantiate(soulMagicDespawnEffectPrefab, position, Quaternion.identity);
+            return;
+        }
+
+        if (soulUseUniversalDespawnDust && source != null)
+        {
+            SpawnSoulUniversalDespawnDust(source);
+            return;
+        }
+
+        SpawnSoulJumpDust(position);
+    }
+
+    private Vector3 GetSoulVortexAnchorPosition()
+    {
+        if (playerTransform == null)
+        {
+            return Vector3.zero;
+        }
+
+        SpriteRenderer playerSprite = playerTransform.GetComponent<SpriteRenderer>();
+        if (playerSprite == null)
+        {
+            playerSprite = playerTransform.GetComponentInChildren<SpriteRenderer>();
+        }
+
+        bool facingLeft = playerSprite != null && playerSprite.flipX;
+        float forwardX = facingLeft ? -soulVortexForwardOffset : soulVortexForwardOffset;
+        return playerTransform.position + new Vector3(forwardX, soulVortexYOffset, 0f);
+    }
+
+    private void UpdateSoulVortexVisualFacing()
+    {
+        if (activeSoulVortexFacingPivot == null && activeSoulVortex != null)
+        {
+            Transform pivot = activeSoulVortex.transform.Find("SoulVortexFacingPivot");
+            if (pivot != null)
+            {
+                activeSoulVortexFacingPivot = pivot;
+            }
+        }
+
+        if (activeSoulVortexFxRoot == null && activeSoulVortexFacingPivot != null)
+        {
+            activeSoulVortexFxRoot = FindSoulVortexFxRoot(activeSoulVortexFacingPivot);
+        }
+
+        if (activeSoulVortexFxRoot == null || activeSoulVortexFacingPivot == null)
+        {
+            return;
+        }
+
+        bool facingLeft = IsPlayerFacingLeft();
+
+        // Mirror using a non-animated pivot so Animator keyframes cannot override facing.
+        Vector3 scale = activeSoulVortexFacingPivot.localScale;
+        scale.x = Mathf.Abs(scale.x) * (facingLeft ? -1f : 1f);
+        activeSoulVortexFacingPivot.localScale = scale;
+
+        SpriteRenderer[] fxRenderers = activeSoulVortexFxRoot.GetComponentsInChildren<SpriteRenderer>(true);
+
+        if (soulVortexFacingDebugLogs && Time.time >= nextSoulVortexFacingDebugLogTime)
+        {
+            string rendererFacing = "none";
+            if (fxRenderers.Length > 0 && fxRenderers[0] != null)
+            {
+                rendererFacing = fxRenderers[0].flipX ? "LEFT" : "RIGHT";
+            }
+
+            Debug.Log($"[SoulVortexFacing] playerFacing={(facingLeft ? "LEFT" : "RIGHT")}, vortexRendererFacing={rendererFacing}, pivotScaleX={activeSoulVortexFacingPivot.localScale.x:F2}, fxRoot={activeSoulVortexFxRoot.name}, time={Time.time:F2}");
+            nextSoulVortexFacingDebugLogTime = Time.time + Mathf.Max(0.01f, soulVortexFacingDebugLogInterval);
+        }
+    }
+
+    private bool IsPlayerFacingLeft()
+    {
+        if (playerTransform == null)
+        {
+            return false;
+        }
+
+        SpriteRenderer playerSprite = playerTransform.GetComponent<SpriteRenderer>();
+        if (playerSprite == null)
+        {
+            playerSprite = playerTransform.GetComponentInChildren<SpriteRenderer>();
+        }
+
+        return playerSprite != null && playerSprite.flipX;
+    }
+
+    private Transform FindSoulVortexFxRoot(Transform vortexRoot)
+    {
+        if (vortexRoot == null)
+        {
+            return null;
+        }
+
+        // Prefer the actual spawned vortex overlay object, not ambient dust children.
+        for (int i = 0; i < vortexRoot.childCount; i++)
+        {
+            Transform child = vortexRoot.GetChild(i);
+            if (child == null)
+            {
+                continue;
+            }
+
+            if (child.name.Contains("SoulVortexFX") && child.GetComponent<Animator>() != null)
+            {
+                return child;
+            }
+        }
+
+        // Fallback: first child with an Animator.
+        for (int i = 0; i < vortexRoot.childCount; i++)
+        {
+            Transform child = vortexRoot.GetChild(i);
+            if (child != null && child.GetComponent<Animator>() != null)
+            {
+                return child;
+            }
+        }
+
+        return null;
+    }
+
+    private void SpawnSoulUniversalDespawnDust(GameObject source)
+    {
+        if (soulShardJumpMagicDustEmitter == null || source == null)
+        {
+            return;
+        }
+
+        Bounds bounds;
+        bool hasBounds = TryGetSoulSourceBounds(source, out bounds);
+        Vector3 spawnPos = hasBounds ? bounds.center : source.transform.position;
+
+        ParticleSystem effectInstance = Instantiate(soulShardJumpMagicDustEmitter, spawnPos, Quaternion.identity);
+        ConfigureSoulDustShape(effectInstance, hasBounds ? bounds.size : Vector3.one, ParticleSystemSimulationSpace.World);
+        effectInstance.Play();
+
+        float lifetime = soulShardJumpMagicDustLifetime;
+        if (lifetime <= 0f)
+        {
+            ParticleSystem.MainModule main = effectInstance.main;
+            lifetime = main.duration + main.startLifetime.constantMax;
+        }
+
+        Destroy(effectInstance.gameObject, Mathf.Max(0.25f, lifetime));
+    }
+
+    private bool TryGetSoulSourceBounds(GameObject source, out Bounds bounds)
+    {
+        bounds = new Bounds(source.transform.position, Vector3.zero);
+        bool found = false;
+
+        SpriteRenderer[] renderers = source.GetComponentsInChildren<SpriteRenderer>();
+        foreach (SpriteRenderer sr in renderers)
+        {
+            if (!sr.enabled) continue;
+            if (!found)
+            {
+                bounds = sr.bounds;
+                found = true;
+            }
+            else
+            {
+                bounds.Encapsulate(sr.bounds);
+            }
+        }
+
+        Collider2D[] colliders = source.GetComponentsInChildren<Collider2D>();
+        foreach (Collider2D col in colliders)
+        {
+            if (!found)
+            {
+                bounds = col.bounds;
+                found = true;
+            }
+            else
+            {
+                bounds.Encapsulate(col.bounds);
+            }
+        }
+
+        return found;
+    }
+
+    private void ConfigureSoulDustShape(ParticleSystem effect, Vector3 sourceSize, ParticleSystemSimulationSpace simulationSpace)
+    {
+        if (effect == null)
+        {
+            return;
+        }
+
+        Vector3 clampedSize = new Vector3(
+            Mathf.Clamp(sourceSize.x, soulDespawnDustMinBounds.x, soulDespawnDustMaxBounds.x),
+            Mathf.Clamp(sourceSize.y, soulDespawnDustMinBounds.y, soulDespawnDustMaxBounds.y),
+            Mathf.Clamp(sourceSize.z, soulDespawnDustMinBounds.z, soulDespawnDustMaxBounds.z));
+
+        ParticleSystem.ShapeModule shape = effect.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = clampedSize;
+        shape.position = Vector3.zero;
+        shape.randomDirectionAmount = 1f;
+
+        ParticleSystem.MainModule main = effect.main;
+        main.simulationSpace = simulationSpace;
+
+        ParticleSystemRenderer renderer = effect.GetComponent<ParticleSystemRenderer>();
+        if (renderer != null)
+        {
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.lengthScale = 1f;
+            renderer.velocityScale = 1f;
+        }
+    }
+
+    private void DetachSoulAmbientDustForLinger(GameObject source)
+    {
+        if (source == null)
+        {
+            return;
+        }
+
+        ParticleSystem[] childParticles = source.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < childParticles.Length; i++)
+        {
+            ParticleSystem particle = childParticles[i];
+            if (particle == null || particle.gameObject == source)
+            {
+                continue;
+            }
+
+            if (particle.transform.parent != source.transform)
+            {
+                continue;
+            }
+
+            particle.transform.SetParent(null, true);
+            var emission = particle.emission;
+            emission.enabled = false;
+            Destroy(particle.gameObject, Mathf.Max(0.1f, soulSpawnDustLinger));
         }
     }
     
@@ -1887,6 +3397,23 @@ public class WeaponClassController : MonoBehaviour
     
     private void FindStormParticlePoint()
     {
+        // Find SSParticlePoint0 (used for ultimate orb spawning)
+        Transform particlePoint0 = transform.Find("SSParticlePoint0");
+        if (particlePoint0 == null)
+            particlePoint0 = GetComponentInChildren<Transform>().Find("SSParticlePoint0");
+
+        if (particlePoint0 != null)
+        {
+            stormParticlePoint0 = particlePoint0.gameObject;
+        }
+        else
+        {
+            Debug.LogWarning("SSParticlePoint0 not found! Storm ultimate will spawn orbs at player position.");
+            stormParticlePoint0 = new GameObject("SSParticlePoint0_Fallback");
+            stormParticlePoint0.transform.SetParent(transform);
+            stormParticlePoint0.transform.localPosition = Vector3.zero;
+        }
+
         // Find existing SSParticlePoint1 and SSParticlePoint2 in player hierarchy
         Transform particlePoint1 = transform.Find("SSParticlePoint1");
         Transform particlePoint2 = transform.Find("SSParticlePoint2");
@@ -2226,6 +3753,10 @@ public class WeaponClassController : MonoBehaviour
     {
         // First check if it has EnemyBehavior component and verify it's alive
         EnemyBehavior enemyBehavior = obj.GetComponent<EnemyBehavior>();
+        if (enemyBehavior == null)
+        {
+            enemyBehavior = obj.GetComponentInParent<EnemyBehavior>();
+        }
         if (enemyBehavior != null)
         {
             // Only count as valid target if enemy is not dead
@@ -2234,6 +3765,10 @@ public class WeaponClassController : MonoBehaviour
         
         // Check for DragonBoss component and verify it's alive
         DragonBoss dragonBoss = obj.GetComponent<DragonBoss>();
+        if (dragonBoss == null)
+        {
+            dragonBoss = obj.GetComponentInParent<DragonBoss>();
+        }
         if (dragonBoss != null)
         {
             // Only count as valid target if dragon is not dead
@@ -2263,6 +3798,12 @@ public class WeaponClassController : MonoBehaviour
         
         Rigidbody2D daggerRb = dagger.GetComponent<Rigidbody2D>();
         if (daggerRb == null) yield break;
+
+        DaggerRedirectVfxController redirectVfx = dagger.GetComponent<DaggerRedirectVfxController>();
+        if (redirectVfx != null)
+        {
+            redirectVfx.SetRedirectVfxActive(true);
+        }
         
         // Change dagger color to indicate wind redirect (purple-ish wind effect)
         SpriteRenderer daggerRenderer = dagger.GetComponent<SpriteRenderer>();
@@ -2319,6 +3860,11 @@ public class WeaponClassController : MonoBehaviour
                     {
                         daggerRenderer.color = Color.white;
                     }
+
+                    if (redirectVfx != null)
+                    {
+                        redirectVfx.SetRedirectVfxActive(false);
+                    }
                     daggerRb.gravityScale = 1f; // Restore gravity
                     
                     // Continue moving in the same direction instead of stopping
@@ -2346,6 +3892,11 @@ public class WeaponClassController : MonoBehaviour
             if (daggerRenderer != null)
             {
                 daggerRenderer.color = Color.white;
+            }
+
+            if (redirectVfx != null)
+            {
+                redirectVfx.SetRedirectVfxActive(false);
             }
             
             if (daggerRb != null)
@@ -2431,98 +3982,86 @@ public class WeaponClassController : MonoBehaviour
 
     private IEnumerator CreateProjectileDagger(Vector3 startPosition, Vector3 direction)
     {
-        // Create projectile dagger (1/3 player size)
-        GameObject projectile = new GameObject("DaggerProjectile");
-        projectile.transform.position = startPosition;
-        
-        // Add rigidbody for physics
-        Rigidbody2D rb = projectile.AddComponent<Rigidbody2D>();
-        rb.gravityScale = 0.3f; // Reduced gravity for longer horizontal flight
-        rb.linearVelocity = direction * projectileSpeed;
-        
-        // Add collider (smaller size - 1/3 player size)
-        BoxCollider2D projectileCollider = projectile.AddComponent<BoxCollider2D>();
-        projectileCollider.size = new Vector2(projectileWidth, projectileHeight);
-        projectileCollider.isTrigger = true;
-        
-        // Add damage object component
-        DamageObject damageComponent = projectile.AddComponent<DamageObject>();
-        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
-        damageComponent.damageRate = 0.3f; // Slower damage rate for thrown daggers
-        
-        // Add Whisper Shard passive callback
-        damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
-        
-        // Configure damage object
-        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (excludeField != null)
+        // Create projectile dagger — use prefab if assigned, otherwise bare GameObject
+        GameObject projectile;
+        if (daggerPrefab != null)
         {
-            excludeField.SetValue(damageComponent, true);
-        }
-        
-        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (enemyDamageField != null)
-        {
-            enemyDamageField.SetValue(damageComponent, true);
-        }
-        
-        // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
-        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
-        
-        // Visual indicator (dagger sprite)
-        SpriteRenderer projectileRenderer = projectile.AddComponent<SpriteRenderer>();
-        
-        // Use custom dagger sprite if assigned, otherwise create fallback blue texture
-        if (daggerSprite != null)
-        {
-            projectileRenderer.sprite = daggerSprite;
+            projectile = Instantiate(daggerPrefab, startPosition, Quaternion.identity);
         }
         else
         {
-            // Fallback: Create texture scaled to match collider size - COMMENTED OUT FOR INVISIBILITY
-            int textureWidth = Mathf.RoundToInt(projectileWidth * 80);
-            int textureHeight = Mathf.RoundToInt(projectileHeight * 80);
-            Texture2D projectileTexture = new Texture2D(textureWidth, textureHeight);
-            Color[] pixels = new Color[textureWidth * textureHeight];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                // pixels[i] = new Color(0f, 0.7f, 1f, 0.9f); // Bright blue for projectile - VISIBLE
-                pixels[i] = new Color(0f, 0.7f, 1f, 0f); // Fully transparent (invisible)
-            }
-            projectileTexture.SetPixels(pixels);
-            projectileTexture.Apply();
-            projectileRenderer.sprite = Sprite.Create(projectileTexture, new Rect(0, 0, textureWidth, textureHeight), Vector2.one * 0.5f);
+            projectile = new GameObject("DaggerProjectile");
+            projectile.transform.position = startPosition;
         }
-        
-        projectileRenderer.sortingLayerName = "Player";
-        projectileRenderer.sortingOrder = 0;
-        
-        // Add rotation component to make dagger face travel direction
-        projectile.AddComponent<DaggerRotationController>();
-        
-        // Add ground collision component to make dagger stick in ground
-        DaggerGroundCollision groundCollision = projectile.AddComponent<DaggerGroundCollision>();
+        projectile.name = "DaggerProjectile";
+
+        // Add / configure rigidbody
+        Rigidbody2D rb = projectile.GetComponent<Rigidbody2D>();
+        if (rb == null) rb = projectile.AddComponent<Rigidbody2D>();
+        rb.gravityScale = 0.3f;
+        rb.linearVelocity = direction * projectileSpeed;
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+
+        // Add / configure collider
+        BoxCollider2D projectileCollider = projectile.GetComponent<BoxCollider2D>();
+        if (projectileCollider == null) projectileCollider = projectile.AddComponent<BoxCollider2D>();
+        projectileCollider.size = new Vector2(projectileWidth, projectileHeight);
+        projectileCollider.isTrigger = true;
+
+        // Add / configure damage component
+        DamageObject damageComponent = projectile.GetComponent<DamageObject>();
+        if (damageComponent == null) damageComponent = projectile.AddComponent<DamageObject>();
+        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
+        damageComponent.damageRate = 0.3f;
+        damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
+
+        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (excludeField != null) excludeField.SetValue(damageComponent, true);
+        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (enemyDamageField != null) enemyDamageField.SetValue(damageComponent, true);
+        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
+
+        // If no prefab, ensure there's at least a sprite renderer (invisible fallback)
+        if (daggerPrefab == null)
+        {
+            SpriteRenderer projectileRenderer = projectile.AddComponent<SpriteRenderer>();
+            projectileRenderer.sortingLayerName = "Player";
+            projectileRenderer.sortingOrder = 0;
+            // Invisible until a prefab with visuals is assigned
+        }
+
+        // Rotation to face travel direction (add if not already on the prefab)
+        if (projectile.GetComponent<DaggerRotationController>() == null)
+            projectile.AddComponent<DaggerRotationController>();
+
+        // Ground collision / sticking
+        DaggerGroundCollision groundCollision = projectile.GetComponent<DaggerGroundCollision>();
+        if (groundCollision == null) groundCollision = projectile.AddComponent<DaggerGroundCollision>();
         groundCollision.weaponController = this;
-        
-        // Add cleanup component to handle reference clearing
-        DaggerCleanup cleanup = projectile.AddComponent<DaggerCleanup>();
+
+        // Whisper redirect VFX: keep child particle systems off until this dagger is actively redirecting.
+        DaggerRedirectVfxController redirectVfx = projectile.GetComponent<DaggerRedirectVfxController>();
+        if (redirectVfx == null) redirectVfx = projectile.AddComponent<DaggerRedirectVfxController>();
+        redirectVfx.SetDaggerSpawnedState(true);
+        redirectVfx.SetRedirectVfxActive(false);
+
+        // Cleanup component
+        DaggerCleanup cleanup = projectile.GetComponent<DaggerCleanup>();
+        if (cleanup == null) cleanup = projectile.AddComponent<DaggerCleanup>();
         cleanup.weaponController = this;
-        
-        // Track this projectile for potential recall
+
+        // Track for potential recall
         currentThrownDagger = projectile;
-        
-        // Wait for projectile lifetime
+
         yield return new WaitForSeconds(projectileLifetime);
-        
-        // Clear reference when projectile expires naturally
+
         if (currentThrownDagger == projectile)
         {
             currentThrownDagger = null;
             currentRedirectCount = 0;
             daggerExpired = false;
         }
-            
-        // Destroy projectile
+
         Destroy(projectile);
     }
     
@@ -4022,8 +5561,6 @@ public class WeaponClassController : MonoBehaviour
         ShardType activeShard = equippedShards[activeSlotIndex];
         RuntimeAnimatorController targetController = defaultPlayerAnimController;
         
-        Debug.Log($"WeaponClassController: Updating animation controller for shard: {activeShard}");
-        
         // Select the appropriate animation controller based on active shard
         switch (activeShard)
         {
@@ -4036,13 +5573,14 @@ public class WeaponClassController : MonoBehaviour
             case ShardType.StormShard:
                 targetController = stormShardPlayerAnimController ?? defaultPlayerAnimController;
                 break;
+            case ShardType.SoulShard:
+                targetController = soulShardPlayerAnimController ?? defaultPlayerAnimController;
+                break;
             case ShardType.None:
             default:
                 targetController = defaultPlayerAnimController;
                 break;
         }
-        
-        Debug.Log($"WeaponClassController: Selected controller: {(targetController != null ? targetController.name : "null")}");
         
         // Pass the controller reference to PlayerMovement
         playerMovement.SetAnimationController(targetController);
@@ -4057,8 +5595,6 @@ public class WeaponClassController : MonoBehaviour
         
         // Don't pass duration - animation events will control the timing
         playerMovement.TriggerAttackAnimation(attackType);
-        
-        Debug.Log($"Triggered {GetActiveWeaponName()} attack animation: Type {attackType}");
     }
     
     // ===== WEAPON SHARD PASSIVE ABILITIES =====
@@ -4133,30 +5669,55 @@ public class WeaponClassController : MonoBehaviour
         // Only apply if Whisper Shard is equipped in either slot
         bool hasWhisperShard = equippedShards[0] == ShardType.WhisperShard || equippedShards[1] == ShardType.WhisperShard;
         if (!hasWhisperShard || playerMovement == null) return;
-        
+
         string buffKey = "WhisperAttackBuff";
-        
-        // Track current stacks
         if (!passiveBuffStacks.ContainsKey(buffKey))
         {
             passiveBuffStacks[buffKey] = 0;
+            whisperHitsTowardNextStack = 0;
         }
-        
-        // Only add if under stack limit
-        if (passiveBuffStacks[buffKey] < maxWhisperAttackStacks)
+
+        int currentStacks = passiveBuffStacks[buffKey];
+
+        // Incremental threshold: need (currentStacks + 1) hits to earn the next stack.
+        // Stack 1 = 1 hit, stack 2 = 2 more hits, stack 3 = 3 more hits, etc.
+        int hitsNeeded = currentStacks + 1;
+        whisperHitsTowardNextStack++;
+
+        Debug.Log($"Whisper Passive: hit {whisperHitsTowardNextStack}/{hitsNeeded} toward stack {currentStacks + 1}");
+
+        if (whisperHitsTowardNextStack >= hitsNeeded)
         {
-            passiveBuffStacks[buffKey]++;
-            
-            // Apply attack buff through PlayerMovement system
-            playerMovement.ApplyBuff(PlayerMovement.BuffType.Strength, whisperAttackBuffPercent, whisperAttackBuffDuration);
-            
-            Debug.Log($"Whisper Attack Passive: Applied {whisperAttackBuffPercent}% Attack buff (Stack {passiveBuffStacks[buffKey]}/{maxWhisperAttackStacks})");
+            whisperHitsTowardNextStack = 0;
+
+            if (currentStacks < maxWhisperAttackStacks)
+            {
+                passiveBuffStacks[buffKey]++;
+                playerMovement.ApplyBuff(PlayerMovement.BuffType.Strength, whisperAttackBuffPercent, whisperAttackBuffDuration);
+                Debug.Log($"Whisper Passive: Awarded stack {passiveBuffStacks[buffKey]}/{maxWhisperAttackStacks}");
+
+                // Decay this stack after duration expires
+                StartCoroutine(DecayWhisperPassiveStack(buffKey));
+            }
+            else
+            {
+                // Max stacks – just refresh
+                playerMovement.ApplyBuff(PlayerMovement.BuffType.Strength, whisperAttackBuffPercent, whisperAttackBuffDuration);
+                Debug.Log($"Whisper Passive: Refreshed at max stacks ({maxWhisperAttackStacks})");
+            }
         }
-        else
+    }
+
+    private System.Collections.IEnumerator DecayWhisperPassiveStack(string buffKey)
+    {
+        yield return new WaitForSeconds(whisperAttackBuffDuration);
+        if (passiveBuffStacks.ContainsKey(buffKey) && passiveBuffStacks[buffKey] > 0)
         {
-            // At max stacks - just refresh duration
-            playerMovement.ApplyBuff(PlayerMovement.BuffType.Strength, whisperAttackBuffPercent, whisperAttackBuffDuration);
-            Debug.Log($"Whisper Attack Passive: Refreshed attack buff (Max stacks: {maxWhisperAttackStacks})");
+            passiveBuffStacks[buffKey]--;
+            // Reset the hit accumulator so the current partial progress is not carried over unfairly
+            if (passiveBuffStacks[buffKey] == 0)
+                whisperHitsTowardNextStack = 0;
+            Debug.Log($"Whisper Passive stack decayed. Remaining: {passiveBuffStacks[buffKey]}/{maxWhisperAttackStacks}");
         }
     }
     
@@ -4282,10 +5843,13 @@ public class WeaponClassController : MonoBehaviour
                 ActivateValorUltimate();
                 break;
             case ShardType.WhisperShard:
-                Debug.Log("WhisperShard ultimate not yet implemented");
+                ActivateWhisperUltimate();
                 break;
             case ShardType.StormShard:
-                Debug.Log("StormShard ultimate not yet implemented");
+                ActivateStormUltimate();
+                break;
+            case ShardType.SoulShard:
+                ActivateSoulUltimate();
                 break;
             default:
                 Debug.Log("No shard equipped - cannot use ultimate");
@@ -4547,6 +6111,515 @@ public class WeaponClassController : MonoBehaviour
             }
         }
     }
+
+    // ===== STORM SHARD ULTIMATE =====
+
+    /// <summary>
+    /// Storm Shard Ultimate: Summons glowing cyan lightning orbs that orbit nearby targets then chase and shock enemies.
+    /// </summary>
+    private void ActivateStormUltimate()
+    {
+        if (stormUltimateCoroutine != null)
+            StopCoroutine(stormUltimateCoroutine);
+        stormUltimateCoroutine = StartCoroutine(StormUltimateSequence());
+    }
+
+    private IEnumerator StormUltimateSequence()
+    {
+        Vector3 spawnPos = stormParticlePoint0 != null ? stormParticlePoint0.transform.position : transform.position;
+
+        // Spawn all orbs at SSParticlePoint0
+        List<GameObject> orbs = new List<GameObject>();
+        for (int i = 0; i < stormUltimateOrbCount; i++)
+        {
+            GameObject orb = CreateLightningOrb(spawnPos);
+            orbs.Add(orb);
+            activeStormOrbs.Add(orb);
+        }
+
+        // Phase 1: Form a rotating circle above the player for stormOrbFormationTime
+        float elapsed = 0f;
+        float ringTilt = 0f;
+
+        while (elapsed < stormOrbFormationTime)
+        {
+            elapsed += Time.deltaTime;
+            ringTilt += stormOrbRingTiltSpeed * Time.deltaTime;
+            float baseAngle = elapsed * stormOrbOrbitSpeed;
+            Vector3 playerTopPos = transform.position + Vector3.up * 2.5f;
+
+            for (int i = 0; i < orbs.Count; i++)
+            {
+                if (orbs[i] == null) continue;
+                float rad = (baseAngle + (360f / orbs.Count) * i) * Mathf.Deg2Rad;
+                orbs[i].transform.position = playerTopPos + new Vector3(
+                    Mathf.Cos(rad) * stormOrbOrbitRadius,
+                    Mathf.Sin(ringTilt * Mathf.Deg2Rad) * 0.4f,
+                    0f);
+            }
+            yield return null;
+        }
+
+        // Phase 2: Find all targets (storm player + active attack dummies) and scatter orbs across them
+        List<Transform> targets = new List<Transform>();
+        targets.Add(transform); // Storm shard player
+
+        GameObject[] dummies = GameObject.FindGameObjectsWithTag("PlayerSummon");
+        foreach (GameObject d in dummies)
+        {
+            if (d == null) continue;
+            AttackDummy dummyComp = d.GetComponent<AttackDummy>();
+            if (dummyComp != null && !dummyComp.IsDead)
+                targets.Add(d.transform);
+        }
+
+        // Assign orbs to targets (spread as evenly as possible)
+        List<(GameObject orb, Transform target, int orbIndex)> assignments = new List<(GameObject, Transform, int)>();
+        int tCount = targets.Count;
+        for (int i = 0; i < orbs.Count; i++)
+        {
+            if (orbs[i] == null) continue;
+            assignments.Add((orbs[i], targets[i % tCount], i));
+        }
+
+        // Launch each orb in sequence so the ultimate behaves like timed AOE pressure.
+        float releaseDelay = Mathf.Max(0.05f, stormOrbReleaseInterval);
+        for (int i = 0; i < assignments.Count; i++)
+        {
+            var (orb, target, idx) = assignments[i];
+            StartCoroutine(OrbFlyToTargetAndHunt(orb, target, idx));
+
+            if (i < assignments.Count - 1)
+            {
+                yield return new WaitForSeconds(releaseDelay);
+            }
+        }
+
+        // Safety cleanup after a generous hunting window
+        yield return new WaitForSeconds(20f);
+
+        foreach (GameObject orb in activeStormOrbs)
+            if (orb != null) Destroy(orb);
+        activeStormOrbs.Clear();
+
+        stormUltimateCoroutine = null;
+    }
+
+    private IEnumerator OrbFlyToTargetAndHunt(GameObject orb, Transform orbitalTarget, int orbIndex)
+    {
+        if (orb == null) yield break;
+
+        float angleOffset = (360f / stormUltimateOrbCount) * orbIndex;
+
+        // Fly to the assigned target's overhead position
+        float flyDuration = 0.7f;
+        float flyElapsed = 0f;
+        Vector3 startPos = orb.transform.position;
+
+        while (flyElapsed < flyDuration)
+        {
+            if (orb == null) yield break;
+            if (orbitalTarget == null) break;
+
+            flyElapsed += Time.deltaTime;
+            float t = flyElapsed / flyDuration;
+            float rad = (angleOffset) * Mathf.Deg2Rad;
+            Vector3 destOrbit = orbitalTarget.position + Vector3.up * 2.5f +
+                new Vector3(Mathf.Cos(rad) * stormOrbOrbitRadius, 0f, 0f);
+            orb.transform.position = Vector3.Lerp(startPos, destOrbit, t);
+            yield return null;
+        }
+
+        // Orbit above the target while scanning for enemies
+        float orbAngle = angleOffset;
+        float ringAngle = 0f;
+
+        while (orb != null)
+        {
+            orbAngle += stormOrbOrbitSpeed * Time.deltaTime;
+            ringAngle += stormOrbRingTiltSpeed * Time.deltaTime;
+
+            if (orbitalTarget == null)
+            {
+                // Target gone – fall back to orbiting the player
+                orbitalTarget = transform;
+            }
+
+            Vector3 center = orbitalTarget.position + Vector3.up * 2.5f;
+            float rad = orbAngle * Mathf.Deg2Rad;
+            orb.transform.position = center + new Vector3(
+                Mathf.Cos(rad) * stormOrbOrbitRadius,
+                Mathf.Sin(ringAngle * Mathf.Deg2Rad) * 0.4f,
+                0f);
+
+            // Detect nearby enemies from the orb's current position
+            GameObject nearestEnemy = FindNearestEnemyFromPoint(orb.transform.position, stormOrbDetectionRange);
+            if (nearestEnemy != null)
+            {
+                activeStormOrbs.Remove(orb);
+                yield return StartCoroutine(OrbHitEnemy(orb, nearestEnemy));
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        // Expired without a hit
+        if (orb != null) { activeStormOrbs.Remove(orb); Destroy(orb); }
+    }
+
+    private IEnumerator OrbHitEnemy(GameObject orb, GameObject targetEnemy)
+    {
+        if (orb == null || targetEnemy == null) { if (orb != null) Destroy(orb); yield break; }
+
+        float maxFlyTime = 6f;
+        float elapsed = 0f;
+
+        while (orb != null && elapsed < maxFlyTime)
+        {
+            elapsed += Time.deltaTime;
+
+            if (targetEnemy == null)
+            {
+                targetEnemy = FindNearestEnemyFromPoint(orb.transform.position, stormOrbDetectionRange * 2f);
+                if (targetEnemy == null) { Destroy(orb); yield break; }
+            }
+
+            Vector3 dir = (targetEnemy.transform.position - orb.transform.position).normalized;
+            orb.transform.position += dir * stormOrbFlySpeed * Time.deltaTime;
+
+            if (Vector3.Distance(orb.transform.position, targetEnemy.transform.position) < 0.6f)
+            {
+                ApplyShockOrbHit(targetEnemy, orb.transform.position);
+                StartCoroutine(OrbArcToAdjacentEnemies(targetEnemy, orb.transform.position));
+                Destroy(orb);
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        if (orb != null) Destroy(orb);
+    }
+
+    private IEnumerator OrbArcToAdjacentEnemies(GameObject hitEnemy, Vector3 hitPosition)
+    {
+        List<GameObject> nearby = FindNearbyEnemiesForShockArc(hitEnemy, stormOrbArcRange, 3);
+        foreach (GameObject adjacent in nearby)
+        {
+            if (adjacent == null) continue;
+            ApplyShockOrbHit(adjacent, hitPosition);
+            if (lightningArcMaterial != null)
+                StartCoroutine(CreateLightningArc(hitPosition, adjacent.transform.position, adjacent));
+            yield return new WaitForSeconds(0.08f);
+        }
+    }
+
+    private void ApplyShockOrbHit(GameObject target, Vector3 hitPosition)
+    {
+        if (target == null) return;
+        int damage = playerMovement != null ? playerMovement.GetModifiedMeleeDamage(stormOrbDamage) : stormOrbDamage;
+
+        EnemyBehavior enemy = target.GetComponent<EnemyBehavior>();
+        if (enemy != null && !enemy.IsDead)
+        {
+            enemy.TakeDamage(damage);
+            enemy.ApplyShock(stormOrbShockDuration);
+        }
+
+        DragonBoss boss = target.GetComponent<DragonBoss>();
+        if (boss != null && !boss.IsDead)
+            boss.TakeDamage(damage);
+
+        if (lightningHitPrefab != null)
+        {
+            GameObject hit = Instantiate(lightningHitPrefab, hitPosition, Quaternion.identity);
+            Destroy(hit, 2f);
+        }
+
+        Debug.Log($"Storm Orb hit {target.name} for {damage} damage + Shock {stormOrbShockDuration}s");
+    }
+
+    private List<GameObject> FindNearbyEnemiesForShockArc(GameObject excludeEnemy, float range, int maxCount)
+    {
+        var results = new List<(GameObject enemy, float dist)>();
+
+        EnemyBehavior[] enemies = FindObjectsByType<EnemyBehavior>(FindObjectsSortMode.None);
+        foreach (EnemyBehavior e in enemies)
+        {
+            if (e == null || e.gameObject == excludeEnemy || e.IsDead) continue;
+            float d = Vector3.Distance(excludeEnemy.transform.position, e.transform.position);
+            if (d <= range) results.Add((e.gameObject, d));
+        }
+
+        results.Sort((a, b) => a.dist.CompareTo(b.dist));
+
+        var list = new List<GameObject>();
+        for (int i = 0; i < Mathf.Min(maxCount, results.Count); i++)
+            list.Add(results[i].enemy);
+        return list;
+    }
+
+    private GameObject FindNearestEnemyFromPoint(Vector3 point, float maxRange)
+    {
+        GameObject nearest = null;
+        float nearestDist = float.MaxValue;
+
+        EnemyBehavior[] enemies = FindObjectsByType<EnemyBehavior>(FindObjectsSortMode.None);
+        foreach (EnemyBehavior e in enemies)
+        {
+            if (e == null || e.IsDead) continue;
+            float d = Vector3.Distance(point, e.transform.position);
+            if (d <= maxRange && d < nearestDist) { nearestDist = d; nearest = e.gameObject; }
+        }
+
+        DragonBoss[] bosses = FindObjectsByType<DragonBoss>(FindObjectsSortMode.None);
+        foreach (DragonBoss b in bosses)
+        {
+            if (b == null || b.IsDead) continue;
+            float d = Vector3.Distance(point, b.transform.position);
+            if (d <= maxRange && d < nearestDist) { nearestDist = d; nearest = b.gameObject; }
+        }
+
+        return nearest;
+    }
+
+    private GameObject CreateLightningOrb(Vector3 position)
+    {
+        GameObject orb = new GameObject("StormUltimateOrb");
+        orb.transform.position = position;
+
+        // Glowing cyan sphere sprite
+        SpriteRenderer sr = orb.AddComponent<SpriteRenderer>();
+        int texSize = 64;
+        Texture2D tex = new Texture2D(texSize, texSize);
+        Color[] pixels = new Color[texSize * texSize];
+        Vector2 center = new Vector2(texSize / 2f, texSize / 2f);
+        float radius = texSize / 2f - 1f;
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            int x = i % texSize;
+            int y = i / texSize;
+            float dist = Vector2.Distance(new Vector2(x, y), center);
+            if (dist <= radius)
+            {
+                float t = 1f - (dist / radius);
+                // Core: bright white-cyan; edge: deep blue-cyan
+                pixels[i] = Color.Lerp(new Color(0f, 0.8f, 1f, 0.6f), new Color(0.5f, 1f, 1f, 1f), t * t);
+            }
+            else { pixels[i] = Color.clear; }
+        }
+        tex.SetPixels(pixels);
+        tex.Apply();
+        sr.sprite = Sprite.Create(tex, new Rect(0, 0, texSize, texSize), Vector2.one * 0.5f);
+        sr.color = new Color(0.1f, 0.95f, 1f, 0.95f);
+        sr.sortingLayerName = "Player";
+        sr.sortingOrder = 5;
+        orb.transform.localScale = Vector3.one * 0.3f;
+
+        // Attach the storm shard's lightning particle emitter onto the orb
+        if (lightningSparkPrefab != null)
+        {
+            GameObject sparkInst = Instantiate(lightningSparkPrefab, orb.transform.position, Quaternion.identity);
+            sparkInst.transform.SetParent(orb.transform);
+            sparkInst.transform.localPosition = Vector3.zero;
+            sparkInst.transform.localScale = Vector3.one * 0.5f;
+        }
+
+        return orb;
+    }
+
+    // ===== END STORM SHARD ULTIMATE =====
+
+    // ===== WHISPER SHARD ULTIMATE =====
+
+    /// <summary>
+    /// Whisper Shard Ultimate: Throws 7 daggers into a redirect zone and auto-redirects them 3 times.
+    /// </summary>
+    private void ActivateWhisperUltimate()
+    {
+        if (whisperUltimateCoroutine != null)
+            StopCoroutine(whisperUltimateCoroutine);
+        whisperUltimateCoroutine = StartCoroutine(WhisperUltimateSequence());
+    }
+
+    private IEnumerator WhisperUltimateSequence()
+    {
+        TriggerAttackAnimation(2);
+        yield return new WaitForSeconds(projectileThrowAnimationDelay);
+
+        // Determine throw direction (toward mouse / nearest enemy)
+        Vector3 throwDir = GetWhisperThrowDirection();
+        Vector3 startPos = transform.position + throwDir * 0.5f;
+
+        // Box center placed just beyond the player in the throw direction
+        Vector3 boxCenter = transform.position + throwDir * (whisperUltimateBoxSize.x * 0.6f);
+
+        // Spawn 7 daggers with spread
+        List<GameObject> daggers = new List<GameObject>();
+        for (int i = 0; i < whisperUltimateDaggerCount; i++)
+        {
+            float angleOffset = (i - (whisperUltimateDaggerCount - 1) / 2f) * whisperUltimateSpread;
+            Vector3 daggerDir = RotateVector2D(throwDir, angleOffset);
+            GameObject dagger = CreateUltimateDagger(startPos, daggerDir, i);
+            if (dagger != null) daggers.Add(dagger);
+            if (i < whisperUltimateDaggerCount - 1)
+                yield return new WaitForSeconds(tripleDaggerDelay);
+        }
+
+        // Auto-redirect passes inside the box
+        for (int pass = 0; pass < whisperUltimateRedirects; pass++)
+        {
+            yield return new WaitForSeconds(whisperUltimateRedirectDelay);
+            daggers.RemoveAll(d => d == null);
+            if (daggers.Count == 0) break;
+
+            foreach (GameObject dagger in daggers)
+            {
+                if (dagger == null) continue;
+                Vector3 randomTarget = GetRandomPointInBox(boxCenter, throwDir, whisperUltimateBoxSize);
+                Rigidbody2D daggerRb = dagger.GetComponent<Rigidbody2D>();
+                if (daggerRb != null)
+                {
+                    daggerRb.linearVelocity = (randomTarget - dagger.transform.position).normalized * projectileSpeed;
+                }
+
+                DaggerRedirectVfxController redirectVfx = dagger.GetComponent<DaggerRedirectVfxController>();
+                if (redirectVfx != null)
+                {
+                    redirectVfx.SetRedirectVfxActive(true);
+                }
+            }
+
+            // Damage enemies that are currently inside the redirect zone
+            ApplyDamageInsideBox(boxCenter, throwDir, whisperUltimateBoxSize);
+        }
+
+        // Brief grace period then clean up survivors
+        yield return new WaitForSeconds(1.5f);
+        foreach (GameObject d in daggers)
+            if (d != null) Destroy(d);
+
+        if (playerMovement != null) playerMovement.OnAttackAnimationEnd();
+        whisperUltimateCoroutine = null;
+    }
+
+    private GameObject CreateUltimateDagger(Vector3 startPos, Vector3 direction, int index)
+    {
+        GameObject dagger;
+
+        if (daggerPrefab != null)
+        {
+            dagger = Instantiate(daggerPrefab, startPos, Quaternion.identity);
+        }
+        else
+        {
+            dagger = new GameObject($"UltimateDagger_{index}");
+            dagger.transform.position = startPos;
+        }
+        dagger.name = $"UltimateDagger_{index}";
+
+        // Rigidbody
+        Rigidbody2D rb = dagger.GetComponent<Rigidbody2D>();
+        if (rb == null) rb = dagger.AddComponent<Rigidbody2D>();
+        rb.gravityScale = 0.1f;
+        rb.linearVelocity = direction * projectileSpeed;
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+
+        // Collider
+        BoxCollider2D col = dagger.GetComponent<BoxCollider2D>();
+        if (col == null) col = dagger.AddComponent<BoxCollider2D>();
+        col.size = new Vector2(projectileWidth, projectileHeight);
+        col.isTrigger = true;
+
+        // Damage
+        DamageObject dmg = dagger.GetComponent<DamageObject>();
+        if (dmg == null) dmg = dagger.AddComponent<DamageObject>();
+        dmg.damageAmount = playerMovement != null ? playerMovement.GetModifiedMeleeDamage(whisperUltimateDamage) : whisperUltimateDamage;
+        dmg.damageRate = 0.3f;
+        dmg.onEnemyHit = () => ApplyWhisperAttackPassive();
+
+        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (excludeField != null) excludeField.SetValue(dmg, true);
+        var enemyField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (enemyField != null) enemyField.SetValue(dmg, true);
+        dmg.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
+
+        // Rotation to face travel direction
+        if (dagger.GetComponent<DaggerRotationController>() == null)
+            dagger.AddComponent<DaggerRotationController>();
+
+        // Ground collision / sticking
+        DaggerGroundCollision groundCollision = dagger.GetComponent<DaggerGroundCollision>();
+        if (groundCollision == null) groundCollision = dagger.AddComponent<DaggerGroundCollision>();
+        groundCollision.weaponController = this;
+
+        // Redirect VFX/trail controller for ultimate redirects
+        DaggerRedirectVfxController redirectVfx = dagger.GetComponent<DaggerRedirectVfxController>();
+        if (redirectVfx == null) redirectVfx = dagger.AddComponent<DaggerRedirectVfxController>();
+        redirectVfx.SetDaggerSpawnedState(true);
+        redirectVfx.SetRedirectVfxActive(false);
+
+        // Cleanup hook so isActive resets on destroy
+        DaggerCleanup cleanup = dagger.GetComponent<DaggerCleanup>();
+        if (cleanup == null) cleanup = dagger.AddComponent<DaggerCleanup>();
+        cleanup.weaponController = this;
+
+        // Auto-destroy safety
+        StartCoroutine(DestroyProjectileAfterTime(dagger, projectileLifetime * 3f));
+
+        return dagger;
+    }
+
+    private Vector3 GetWhisperThrowDirection()
+    {
+        if (Mouse.current != null && Camera.main != null)
+        {
+            Vector2 msp = Mouse.current.position.ReadValue();
+            Vector3 mousePos = Camera.main.ScreenToWorldPoint(new Vector3(msp.x, msp.y, Camera.main.nearClipPlane));
+            mousePos.z = 0f;
+            Vector3 dir = (mousePos - transform.position).normalized;
+            if (dir.magnitude > 0.1f) return dir;
+        }
+        SpriteRenderer sprite = GetComponentInChildren<SpriteRenderer>();
+        return (sprite != null && sprite.flipX) ? Vector3.left : Vector3.right;
+    }
+
+    private Vector3 GetRandomPointInBox(Vector3 boxCenter, Vector3 forward, Vector2 boxSize)
+    {
+        Vector3 right = new Vector3(-forward.y, forward.x, 0f).normalized;
+        return boxCenter
+            + forward * Random.Range(-boxSize.x * 0.5f, boxSize.x * 0.5f)
+            + right * Random.Range(-boxSize.y * 0.5f, boxSize.y * 0.5f);
+    }
+
+    private void ApplyDamageInsideBox(Vector3 boxCenter, Vector3 forward, Vector2 boxSize)
+    {
+        float angle = Mathf.Atan2(forward.y, forward.x) * Mathf.Rad2Deg;
+        Collider2D[] hits = Physics2D.OverlapBoxAll(new Vector2(boxCenter.x, boxCenter.y), boxSize, angle);
+
+        int damage = playerMovement != null ? playerMovement.GetModifiedMeleeDamage(whisperUltimateDamage / 2) : whisperUltimateDamage / 2;
+        HashSet<GameObject> damaged = new HashSet<GameObject>();
+
+        foreach (Collider2D hit in hits)
+        {
+            if (hit == null) continue;
+            EnemyBehavior enemy = hit.GetComponent<EnemyBehavior>();
+            if (enemy != null && !enemy.IsDead && damaged.Add(hit.gameObject))
+            {
+                enemy.TakeDamage(damage);
+                ApplyWhisperAttackPassive();
+            }
+            DragonBoss boss = hit.GetComponent<DragonBoss>();
+            if (boss != null && !boss.IsDead && damaged.Add(hit.gameObject))
+                boss.TakeDamage(damage);
+        }
+
+        if (damaged.Count > 0)
+            Debug.Log($"Whisper Ultimate zone pulse hit {damaged.Count} enemies for {damage} each");
+    }
+
+    // ===== END WHISPER SHARD ULTIMATE =====
     
     // Method for dagger cleanup component to clear reference
     public void ClearDaggerReference(GameObject dagger)
@@ -4585,7 +6658,6 @@ public class WeaponClassController : MonoBehaviour
         {
             // Sync the max ultimate charge setting with PlayerMovement
             playerMovement.SetMaxUltimateCharge(maxUltimateCharge);
-            Debug.Log($"Ultimate charge system initialized - Max charge: {maxUltimateCharge}");
         }
     }
     
@@ -4594,7 +6666,6 @@ public class WeaponClassController : MonoBehaviour
         if (playerMovement != null)
         {
             playerMovement.AddUltimateCharge(chargeAmount);
-            Debug.Log($"Ultimate charge generated: +{chargeAmount}");
         }
         else
         {
@@ -4650,6 +6721,12 @@ public class DaggerCleanup : MonoBehaviour
     
     void OnDestroy()
     {
+        DaggerRedirectVfxController redirectVfx = GetComponent<DaggerRedirectVfxController>();
+        if (redirectVfx != null)
+        {
+            redirectVfx.SetDaggerSpawnedState(false);
+        }
+
         if (weaponController != null)
         {
             weaponController.ClearDaggerReference(gameObject);
@@ -4663,6 +6740,44 @@ public class DaggerGroundCollision : MonoBehaviour
     [System.NonSerialized]
     public WeaponClassController weaponController;
     private bool hasStuck = false;
+    private Vector2 lastPosition;
+    private LayerMask groundSweepMask;
+
+    void Start()
+    {
+        lastPosition = transform.position;
+
+        int groundLayer = LayerMask.NameToLayer("Ground");
+        int surfaceLayer = LayerMask.NameToLayer("Surface");
+        int terrainLayer = LayerMask.NameToLayer("Terrain");
+
+        int mask = 0;
+        if (groundLayer >= 0) mask |= 1 << groundLayer;
+        if (surfaceLayer >= 0) mask |= 1 << surfaceLayer;
+        if (terrainLayer >= 0) mask |= 1 << terrainLayer;
+        groundSweepMask = mask;
+    }
+
+    void FixedUpdate()
+    {
+        if (hasStuck)
+        {
+            return;
+        }
+
+        Vector2 currentPosition = transform.position;
+        if (groundSweepMask.value != 0)
+        {
+            RaycastHit2D hit = Physics2D.Linecast(lastPosition, currentPosition, groundSweepMask);
+            if (hit.collider != null)
+            {
+                StickToGround();
+                return;
+            }
+        }
+
+        lastPosition = currentPosition;
+    }
     
     void OnTriggerEnter2D(Collider2D other)
     {
@@ -4684,13 +6799,27 @@ public class DaggerGroundCollision : MonoBehaviour
     
     private bool IsGroundObject(Collider2D collider)
     {
-        // Check if object is on the Ground layer
-        return collider.gameObject.layer == LayerMask.NameToLayer("Ground");
+        int layer = collider.gameObject.layer;
+        if (layer == LayerMask.NameToLayer("Ground")) return true;
+        if (layer == LayerMask.NameToLayer("Surface")) return true;
+        if (layer == LayerMask.NameToLayer("Terrain")) return true;
+
+        // Fallback for projects using tagged ground objects.
+        if (collider.CompareTag("Ground")) return true;
+        if (collider.gameObject.name.ToLower().Contains("ground")) return true;
+
+        return false;
     }
     
     private void StickToGround()
     {
         hasStuck = true;
+
+        DaggerRedirectVfxController redirectVfx = GetComponent<DaggerRedirectVfxController>();
+        if (redirectVfx != null)
+        {
+            redirectVfx.SetRedirectVfxActive(false);
+        }
         
         // Stop all movement
         Rigidbody2D rb = GetComponent<Rigidbody2D>();
@@ -4710,6 +6839,99 @@ public class DaggerGroundCollision : MonoBehaviour
         }
         
         Debug.Log("WhisperShard: Dagger stuck in ground!");
+    }
+}
+
+public class DaggerRedirectVfxController : MonoBehaviour
+{
+    [SerializeField] private string redirectTriggerName = "RedirectTrigger";
+    [SerializeField] private string activeBoolName = "isActive";
+    private Animator animator;
+    private TrailRenderer[] trails;
+    private bool hasCached = false;
+    private bool trailUnlocked = false;
+
+    private void CacheComponents()
+    {
+        if (hasCached)
+        {
+            return;
+        }
+
+        animator = GetComponent<Animator>();
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>(true);
+        }
+
+        trails = GetComponentsInChildren<TrailRenderer>(true);
+        for (int i = 0; i < trails.Length; i++)
+        {
+            if (trails[i] == null) continue;
+            trails[i].enabled = false;
+        }
+
+        hasCached = true;
+    }
+
+    public void SetRedirectVfxActive(bool active)
+    {
+        CacheComponents();
+
+        if (active)
+        {
+            if (!trailUnlocked)
+            {
+                trailUnlocked = true;
+                for (int i = 0; i < trails.Length; i++)
+                {
+                    if (trails[i] == null) continue;
+                    trails[i].enabled = true;
+                }
+            }
+
+            if (animator != null && !string.IsNullOrWhiteSpace(redirectTriggerName))
+            {
+                animator.ResetTrigger(redirectTriggerName);
+                animator.SetTrigger(redirectTriggerName);
+            }
+        }
+
+        // When active == false we intentionally do not disable trails after first redirect.
+    }
+
+    public void SetDaggerSpawnedState(bool spawned)
+    {
+        CacheComponents();
+
+        if (animator == null || string.IsNullOrWhiteSpace(activeBoolName))
+        {
+            return;
+        }
+
+        if (AnimatorHasBool(animator, activeBoolName))
+        {
+            animator.SetBool(activeBoolName, spawned);
+        }
+    }
+
+    private bool AnimatorHasBool(Animator targetAnimator, string parameterName)
+    {
+        if (targetAnimator == null || string.IsNullOrWhiteSpace(parameterName))
+        {
+            return false;
+        }
+
+        AnimatorControllerParameter[] parameters = targetAnimator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (parameters[i].name == parameterName && parameters[i].type == AnimatorControllerParameterType.Bool)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
@@ -4805,4 +7027,18 @@ public class EnemyThrustAnchor : MonoBehaviour
 {
     public Vector3 originalOffset;
     public bool isAnchored = false;
+}
+
+public class SoulBarrierZone : MonoBehaviour
+{
+    [System.NonSerialized] public WeaponClassController weaponController;
+    [System.NonSerialized] public Vector3 barrierCenter;
+    [System.NonSerialized] public float barrierRadius;
+    [System.NonSerialized] public float repelForce;
+
+    void OnTriggerStay2D(Collider2D other)
+    {
+        if (weaponController == null) return;
+        weaponController.RepelEnemyFromSoulBarrier(other, barrierCenter, barrierRadius, repelForce);
+    }
 }
