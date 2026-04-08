@@ -80,8 +80,8 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: -958140371
-  m_SortingLayer: 1
+  m_SortingLayerID: 1617858225
+  m_SortingLayer: 3
   m_SortingOrder: 0
   m_Sprite: {fileID: 4723107735738678597, guid: b828b1d17f4fa49afa025f122c4aa707, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -151,6 +151,10 @@ MonoBehaviour:
     m_Bits: 1
   deathColor: {r: 0.5, g: 0.5, b: 0.5, a: 0.7}
   deathAnimationDuration: 2
+  burnDamageRate: 2
+  burnDamageInterval: 1
+  baseBurnDuration: 5
+  burnEffectSprite: {fileID: 0}
 --- !u!95 &4440877675735573460
 Animator:
   serializedVersion: 7
