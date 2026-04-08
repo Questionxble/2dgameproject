@@ -87,7 +87,8 @@ jobs:
             exit 0
           }
           
-          throw "No .sln or .csproj found to build."
+          Write-Warning "No .sln or .csproj found (common for Unity repos). Skipping dotnet build."
+          exit 0
 
       - name: Run EditMode Tests with Coverage
         shell: pwsh
