@@ -29,11 +29,14 @@ jobs:
           fetch-depth: 0
 
       - name: Verify Sonar Token
+        id: sonar_token
         shell: pwsh
         run: |
           if ([string]::IsNullOrWhiteSpace("$env:SONAR_TOKEN")) {
-            Write-Error "SONAR_TOKEN is missing. Add it in GitHub -> Settings -> Secrets and variables -> Actions."
-            exit 1
+            "available=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Warning "SONAR_TOKEN is missing; skipping Sonar analysis for this run."
+          } else {
+            "available=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
 
       - name: Setup Java
@@ -54,6 +57,7 @@ jobs:
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Sonar Begin
+        if: steps.sonar_token.outputs.available == 'true'
         shell: pwsh
         run: |
           dotnet-sonarscanner begin `
@@ -109,6 +113,7 @@ jobs:
           }
 
       - name: Sonar End
+        if: steps.sonar_token.outputs.available == 'true'
         shell: pwsh
         run: |
           dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
