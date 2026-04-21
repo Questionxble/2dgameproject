@@ -222,14 +222,11 @@ public class MultiplayerGameManager : NetworkBehaviour
             spawnPosition = player2SpawnPoint != null ? player2SpawnPoint.position : new Vector3(3, 0, 0);
         }
         
-        // Move player to spawn position and reset health
-        playerObject.transform.position = spawnPosition;
-        
-        // Reset player health and enable movement
+        // Reset player at the correct spawn position
         PlayerMovement playerMovement = playerObject.GetComponent<PlayerMovement>();
         if (playerMovement != null)
         {
-            playerMovement.RespawnPlayer(); // We'll need to add this method to PlayerMovement
+            playerMovement.RespawnPlayer(spawnPosition);
         }
         
         Debug.Log($"Respawned player for client {clientId} at position {spawnPosition}");

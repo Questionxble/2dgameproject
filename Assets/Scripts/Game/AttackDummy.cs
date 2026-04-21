@@ -72,10 +72,26 @@ public class AttackDummy : MonoBehaviour
     private float burnEndTime = 0f;
     private float nextBurnDamageTime = 0f;
     private GameObject burnVisualEffect;
+
+    // Shock Status Effect System
+    private bool isShocked = false;
+    private float shockEndTime = 0f;
+    private int shockStacks = 0;
+    private const int maxShockStacks = 8;
+    private const float shockBaseDuration = 1f;
+    private bool isPetrified = false;
+    private float petrificationEndTime = 0f;
+    private int petrificationStacks = 0;
+    private const int maxPetrificationStacks = 8;
+    private const float petrificationBaseDuration = 1f;
+    private bool wasAnimatorEnabledBeforePetrification = true;
     
     // Track active attacks for cleanup
     private System.Collections.Generic.List<GameObject> activeAttackObjects = new System.Collections.Generic.List<GameObject>();
     private System.Collections.Generic.List<Coroutine> activeAttackCoroutines = new System.Collections.Generic.List<Coroutine>();
+    private readonly System.Collections.Generic.List<float> activeSoulSupportBuffs = new System.Collections.Generic.List<float>();
+    private readonly System.Collections.Generic.List<float> activeSoulFluxBuffs = new System.Collections.Generic.List<float>();
+    private readonly System.Collections.Generic.List<float> activeSoulDurabilityBuffs = new System.Collections.Generic.List<float>();
     private bool hasBeenCleaned = false;
     
     void Start()
@@ -198,9 +214,16 @@ public class AttackDummy : MonoBehaviour
         
         // Handle burning status effect
         HandleBurningEffect();
+
+        // Handle shock and petrification status effects
+        HandleShockEffect();
+        HandlePetrificationEffect();
         
         // Update state machine
-        UpdateStateMachine();
+        if (!isShocked && !isPetrified)
+        {
+            UpdateStateMachine();
+        }
         
         // Update animations based on current state
         UpdateAnimations();
@@ -576,7 +599,7 @@ public class AttackDummy : MonoBehaviour
         
         // Add damage object component
         DamageObject damageComponent = attack.AddComponent<DamageObject>();
-        damageComponent.damageAmount = (int)attackDamage;
+        damageComponent.damageAmount = Mathf.RoundToInt(GetBuffedAttackDamage());
         damageComponent.damageRate = 0.1f; // Fast damage rate
         
         // Set that this should ONLY damage enemies (not player or other dummies)
@@ -628,13 +651,98 @@ public class AttackDummy : MonoBehaviour
         
         currentHealth -= damage;
         currentHealth = Mathf.Max(0f, currentHealth);
+        float modifiedMaxHealth = GetModifiedMaxHealth();
         
-        Debug.Log($"Attack Dummy took {damage} damage. Health: {currentHealth}/{maxHealth}");
+        Debug.Log($"Attack Dummy took {damage} damage. Health: {currentHealth}/{modifiedMaxHealth}");
         
         if (currentHealth <= 0f)
         {
             Die();
         }
+    }
+
+    public bool IsDead => isDead;
+
+    public void HealFromSupport(int healAmount)
+    {
+        if (isDead || healAmount <= 0) return;
+
+        currentHealth = Mathf.Min(currentHealth + healAmount, GetModifiedMaxHealth());
+    }
+
+    public void ApplySoulSupportBuff(float attackPercent, float duration)
+    {
+        ApplySoulSupportBuffs(attackPercent, 0f, 0f, duration);
+    }
+
+    public void ApplySoulSupportBuffs(float attackPercent, float fluxPercent, float durabilityPercent, float duration)
+    {
+        if (isDead || duration <= 0f) return;
+
+        if (attackPercent > 0f)
+        {
+            StartCoroutine(SoulSupportBuffRoutine(attackPercent, duration));
+        }
+
+        if (fluxPercent > 0f)
+        {
+            StartCoroutine(SoulFluxBuffRoutine(fluxPercent, duration));
+        }
+
+        if (durabilityPercent > 0f)
+        {
+            StartCoroutine(SoulDurabilityBuffRoutine(durabilityPercent, duration));
+        }
+    }
+
+    private IEnumerator SoulSupportBuffRoutine(float attackPercent, float duration)
+    {
+        activeSoulSupportBuffs.Add(attackPercent);
+        yield return new WaitForSeconds(duration);
+        activeSoulSupportBuffs.Remove(attackPercent);
+    }
+
+    private IEnumerator SoulFluxBuffRoutine(float fluxPercent, float duration)
+    {
+        activeSoulFluxBuffs.Add(fluxPercent);
+        yield return new WaitForSeconds(duration);
+        activeSoulFluxBuffs.Remove(fluxPercent);
+    }
+
+    private IEnumerator SoulDurabilityBuffRoutine(float durabilityPercent, float duration)
+    {
+        float previousMaxHealth = GetModifiedMaxHealth();
+        activeSoulDurabilityBuffs.Add(durabilityPercent);
+        float newMaxHealth = GetModifiedMaxHealth();
+
+        currentHealth = Mathf.Min(currentHealth + (newMaxHealth - previousMaxHealth), newMaxHealth);
+
+        yield return new WaitForSeconds(duration);
+
+        activeSoulDurabilityBuffs.Remove(durabilityPercent);
+        currentHealth = Mathf.Min(currentHealth, GetModifiedMaxHealth());
+    }
+
+    private float GetBuffedAttackDamage()
+    {
+        float totalPercent = 0f;
+        foreach (float bonus in activeSoulSupportBuffs)
+        {
+            totalPercent += bonus;
+        }
+
+        return attackDamage * (1f + (totalPercent / 100f));
+    }
+
+    private float GetModifiedMaxHealth()
+    {
+        float totalPercent = 0f;
+        foreach (float bonus in activeSoulDurabilityBuffs)
+        {
+            totalPercent += bonus;
+        }
+
+        return maxHealth * (1f + (totalPercent / 100f));
     }
 
     // Apply burning status effect to the ally
@@ -713,6 +821,130 @@ public class AttackDummy : MonoBehaviour
             burnVisualEffect = burnEffect;
         }
     }
+
+    private void HandleShockEffect()
+    {
+        if (!isShocked) return;
+
+        if (Time.time >= shockEndTime)
+        {
+            isShocked = false;
+            shockStacks = 0;
+            if (spriteRenderer != null && !isPetrified)
+                spriteRenderer.color = originalColor;
+            Debug.Log("AttackDummy: Shock ended");
+        }
+        else if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+        }
+    }
+
+    private void HandlePetrificationEffect()
+    {
+        if (!isPetrified) return;
+
+        if (Time.time >= petrificationEndTime)
+        {
+            isPetrified = false;
+            petrificationStacks = 0;
+            SetPetrificationVisualState(false);
+            Debug.Log("AttackDummy: Petrification ended");
+        }
+        else if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+        }
+    }
+
+    public void ApplyShock(float duration = -1f)
+    {
+        if (isDead) return;
+
+        float shockDuration = duration > 0f ? duration : shockBaseDuration;
+
+        if (isShocked)
+        {
+            if (shockStacks < maxShockStacks)
+            {
+                shockStacks++;
+                float timeRemaining = Mathf.Max(shockEndTime - Time.time, 0f);
+                shockEndTime = Time.time + timeRemaining + shockDuration;
+                Debug.Log($"AttackDummy: Shock stacked to {shockStacks}. Duration: {shockEndTime - Time.time:F1}s");
+            }
+        }
+        else
+        {
+            isShocked = true;
+            shockStacks = 1;
+            shockEndTime = Time.time + shockDuration;
+            if (spriteRenderer != null && !isPetrified)
+                spriteRenderer.color = new Color(0f, 0.9f, 1f, 1f);
+            Debug.Log($"AttackDummy: Shock applied for {shockDuration:F1}s");
+        }
+    }
+
+    public void ApplyPetrification(float duration = -1f)
+    {
+        if (isDead) return;
+
+        float appliedDuration = duration > 0f ? duration : petrificationBaseDuration;
+
+        if (isPetrified)
+        {
+            if (petrificationStacks < maxPetrificationStacks)
+            {
+                petrificationStacks++;
+                float timeRemaining = Mathf.Max(petrificationEndTime - Time.time, 0f);
+                petrificationEndTime = Time.time + timeRemaining + appliedDuration;
+                Debug.Log($"AttackDummy: Petrification stacked to {petrificationStacks}. Duration: {petrificationEndTime - Time.time:F1}s");
+            }
+
+            return;
+        }
+
+        isPetrified = true;
+        petrificationStacks = 1;
+        petrificationEndTime = Time.time + appliedDuration;
+        SetPetrificationVisualState(true);
+        Debug.Log($"AttackDummy: Petrified for {appliedDuration:F1}s");
+    }
+
+    private void SetPetrificationVisualState(bool isActive)
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = isActive
+                ? GetDesaturatedColor(originalColor)
+                : (isShocked ? new Color(0f, 0.9f, 1f, 1f) : originalColor);
+        }
+
+        if (animator == null)
+        {
+            return;
+        }
+
+        if (isActive)
+        {
+            wasAnimatorEnabledBeforePetrification = animator.enabled;
+            isAttacking = false;
+            animator.SetBool("isAttacking", false);
+            animator.SetBool("isWalking", false);
+            animator.SetInteger("attackType", 0);
+            animator.enabled = false;
+        }
+        else if (!isDead)
+        {
+            animator.enabled = wasAnimatorEnabledBeforePetrification;
+            animator.Update(0f);
+        }
+    }
+
+    private Color GetDesaturatedColor(Color sourceColor)
+    {
+        float luminance = (sourceColor.r * 0.299f) + (sourceColor.g * 0.587f) + (sourceColor.b * 0.114f);
+        return new Color(luminance, luminance, luminance, sourceColor.a);
+    }
     
     public void OnEnemyEntered(GameObject enemy)
     {
@@ -748,6 +980,12 @@ public class AttackDummy : MonoBehaviour
         
         // Stop burning effect when dead
         StopBurningEffect();
+
+        // Clear status effects when dead
+        isShocked = false;
+        shockStacks = 0;
+        isPetrified = false;
+        petrificationStacks = 0;
         
         // Stop all movement when dead
         if (rb != null)

@@ -19,6 +19,7 @@ public class ClientDebugger : MonoBehaviour
     private string debugInfo = "";
     private bool isConnecting = false;
     private float connectionStartTime;
+    private string playerNameInput = PlayerSessionSettings.DefaultPlayerName;
     
     // UI Layout
     private Rect debugWindowRect;
@@ -26,6 +27,10 @@ public class ClientDebugger : MonoBehaviour
     private GUIStyle centerButtonStyle;
     private GUIStyle debugWindowStyle;
     private GUIStyle debugTextStyle;
+    private GUIStyle playerNameLabelStyle;
+    private GUIStyle playerNameFieldStyle;
+    private Texture2D playerNameFieldBackground;
+    private Texture2D playerNameFieldFocusedBackground;
     
     void Start()
     {
@@ -53,6 +58,8 @@ public class ClientDebugger : MonoBehaviour
         {
             LogDebug("ERROR: NetworkManager not found!");
         }
+
+        playerNameInput = GetInitialPlayerNameInput();
         
         InitializeUI();
     }
@@ -192,6 +199,9 @@ public class ClientDebugger : MonoBehaviour
     {
         LogDebug("=== Attempting Connection ===");
         LogCurrentNetworkSettings();
+
+        PlayerSessionSettings.LocalPlayerName = playerNameInput;
+        LogDebug($"Using player name: {PlayerSessionSettings.LocalPlayerName}");
         
         isConnecting = true;
         connectionStartTime = Time.time;
@@ -331,10 +341,57 @@ public class ClientDebugger : MonoBehaviour
             debugTextStyle.normal.textColor = Color.white;
             debugTextStyle.wordWrap = true;
         }
+
+        if (playerNameLabelStyle == null)
+        {
+            playerNameLabelStyle = new GUIStyle(GUI.skin.label);
+            playerNameLabelStyle.fontSize = 16;
+            playerNameLabelStyle.fontStyle = FontStyle.Bold;
+            playerNameLabelStyle.alignment = TextAnchor.MiddleCenter;
+            playerNameLabelStyle.normal.textColor = Color.white;
+        }
+
+        if (playerNameFieldStyle == null)
+        {
+            playerNameFieldStyle = new GUIStyle(GUI.skin.textField);
+            playerNameFieldStyle.fontSize = 18;
+            playerNameFieldStyle.alignment = TextAnchor.MiddleLeft;
+            playerNameFieldStyle.padding = new RectOffset(10, 10, 6, 6);
+
+            playerNameFieldBackground = CreateSolidTexture(new Color(0.12f, 0.12f, 0.12f, 0.95f));
+            playerNameFieldFocusedBackground = CreateSolidTexture(new Color(0.18f, 0.18f, 0.18f, 1f));
+
+            playerNameFieldStyle.normal.background = playerNameFieldBackground;
+            playerNameFieldStyle.hover.background = playerNameFieldFocusedBackground;
+            playerNameFieldStyle.focused.background = playerNameFieldFocusedBackground;
+            playerNameFieldStyle.active.background = playerNameFieldFocusedBackground;
+
+            playerNameFieldStyle.normal.textColor = Color.white;
+            playerNameFieldStyle.hover.textColor = Color.white;
+            playerNameFieldStyle.focused.textColor = Color.white;
+            playerNameFieldStyle.active.textColor = Color.white;
+        }
     }
     
     private void DrawCenterConnectButton()
     {
+        Rect nameLabelRect = new Rect(
+            centerButtonRect.x,
+            centerButtonRect.y - 68,
+            centerButtonRect.width,
+            24
+        );
+
+        Rect nameFieldRect = new Rect(
+            centerButtonRect.x,
+            centerButtonRect.y - 40,
+            centerButtonRect.width,
+            32
+        );
+
+        GUI.Label(nameLabelRect, "Player Name", playerNameLabelStyle);
+        playerNameInput = DrawPlayerNameField(nameFieldRect, "CenterPlayerNameField");
+
         // Large center connect button
         string buttonText = isConnecting ? "Connecting..." : "CONNECT TO SERVER";
         
@@ -358,6 +415,7 @@ public class ClientDebugger : MonoBehaviour
         {
             connectionInfo = $"Connecting to: {transport.ConnectionData.Address}:{transport.ConnectionData.Port}\n";
         }
+        connectionInfo += $"Player name: {PlayerSessionSettings.SanitizePlayerName(playerNameInput)}\n";
         connectionInfo += $"Press F11 for debug info";
         
         GUIStyle infoStyle = new GUIStyle(GUI.skin.label);
@@ -377,6 +435,11 @@ public class ClientDebugger : MonoBehaviour
     private void DrawDebugWindowContent(int windowID)
     {
         GUILayout.BeginVertical();
+
+        GUILayout.Label("Player Name", GUILayout.Height(22));
+        GUI.SetNextControlName("DebugPlayerNameField");
+        playerNameInput = GUILayout.TextField(playerNameInput ?? string.Empty, 24, playerNameFieldStyle, GUILayout.Height(28));
+        GUILayout.Space(8);
         
         // Debug information
         GUILayout.Label(debugInfo, debugTextStyle, GUILayout.ExpandHeight(true));
@@ -418,6 +481,26 @@ public class ClientDebugger : MonoBehaviour
         
         // Make window draggable
         GUI.DragWindow();
+    }
+
+    private string DrawPlayerNameField(Rect fieldRect, string controlName)
+    {
+        GUI.SetNextControlName(controlName);
+        return GUI.TextField(fieldRect, playerNameInput ?? string.Empty, 24, playerNameFieldStyle);
+    }
+
+    private string GetInitialPlayerNameInput()
+    {
+        string storedName = PlayerSessionSettings.LocalPlayerName;
+        return storedName == PlayerSessionSettings.DefaultPlayerName ? string.Empty : storedName;
+    }
+
+    private Texture2D CreateSolidTexture(Color color)
+    {
+        Texture2D texture = new Texture2D(1, 1);
+        texture.SetPixel(0, 0, color);
+        texture.Apply();
+        return texture;
     }
 }
 

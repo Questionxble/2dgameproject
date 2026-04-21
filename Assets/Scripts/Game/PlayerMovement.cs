@@ -7,6 +7,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
+using Unity.Collections;
 
 public class PlayerMovement : NetworkBehaviour
 {
@@ -151,6 +152,7 @@ public class PlayerMovement : NetworkBehaviour
     // Network Synchronized Variables
     private NetworkVariable<int> networkHealth = new NetworkVariable<int>(100, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<bool> networkIsBurning = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> networkIsPetrified = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<bool> networkIsPlayerDead = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<int> networkEquippedShardType = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<float> networkCurrentShield = new NetworkVariable<float>(0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -159,6 +161,7 @@ public class PlayerMovement : NetworkBehaviour
     private NetworkVariable<bool> networkIsWalking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     private NetworkVariable<bool> networkIsAttacking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     private NetworkVariable<int> networkAttackType = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<FixedString64Bytes> networkDisplayName = new NetworkVariable<FixedString64Bytes>(new FixedString64Bytes(PlayerSessionSettings.DefaultPlayerName), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     
     // Health Regeneration System
     private float lastDamageTime;
@@ -170,6 +173,15 @@ public class PlayerMovement : NetworkBehaviour
     private float burnEndTime = 0f;
     private float nextBurnDamageTime = 0f;
     private GameObject burnEffectObject;
+
+    // Petrification Status Effect System
+    private bool isPetrified = false;
+    private float petrificationEndTime = 0f;
+    private int petrificationStacks = 0;
+    private const int maxPetrificationStacks = 8;
+    private const float petrificationBaseDuration = 1f;
+    private Color defaultSpriteColor = Color.white;
+    private bool wasAnimatorEnabledBeforePetrification = true;
     
     // Fall Damage System
     private bool isFalling = false;
@@ -195,6 +207,7 @@ public class PlayerMovement : NetworkBehaviour
     private Canvas healthBarCanvas;
     private Image healthBarBackground;
     private Image healthBarFill;
+    private Text healthBarNameText;
     
     // Screen-Space UI System
     private Canvas screenUICanvas;
@@ -226,6 +239,8 @@ public class PlayerMovement : NetworkBehaviour
     // Weapon System
     private WeaponClassController weaponController;
 
+    public bool IsDead => isPlayerDead;
+
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -242,6 +257,8 @@ public class PlayerMovement : NetworkBehaviour
         spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         if (spriteRenderer == null)
             spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null)
+            defaultSpriteColor = spriteRenderer.color;
             
         // Try to get Animator component
         playerAnimator = GetComponentInChildren<Animator>();
@@ -276,13 +293,8 @@ public class PlayerMovement : NetworkBehaviour
         originalJumpForce = jumpForce;
         originalGravityScale = rb.gravityScale;
         
-        // Create screen UI system (replaces world-space health bar)
-        // UI creation will be handled in OnNetworkSpawn() for proper network ownership
-        if (!useScreenUI)
-        {
-            // Only create world-space health bar if screen UI is disabled
-            CreateHealthBar();
-        }
+        // Create world-space health bar for all player instances.
+        CreateHealthBar();
         
         // Get weapon controller (should be on the same GameObject)
         weaponController = GetComponent<WeaponClassController>();
@@ -312,6 +324,7 @@ public class PlayerMovement : NetworkBehaviour
             {
                 networkHealth.Value = maxHealth;
                 networkIsBurning.Value = false;
+                networkIsPetrified.Value = false;
                 networkIsPlayerDead.Value = false;
                 networkEquippedShardType.Value = 0; // No shard equipped initially
                 networkCurrentShield.Value = 0f;
@@ -327,6 +340,7 @@ public class PlayerMovement : NetworkBehaviour
         // Subscribe to network variable changes for all clients
         networkHealth.OnValueChanged += OnHealthChanged;
         networkIsBurning.OnValueChanged += OnBurningStatusChanged;
+        networkIsPetrified.OnValueChanged += OnPetrificationStatusChanged;
         networkFacingLeft.OnValueChanged += OnFacingDirectionChanged;
         networkIsPlayerDead.OnValueChanged += OnDeathStatusChanged;
         networkEquippedShardType.OnValueChanged += OnShardEquipChanged;
@@ -334,11 +348,20 @@ public class PlayerMovement : NetworkBehaviour
         networkIsWalking.OnValueChanged += OnWalkingStatusChanged;
         networkIsAttacking.OnValueChanged += OnAttackingStatusChanged;
         networkAttackType.OnValueChanged += OnAttackTypeChanged;
+        networkDisplayName.OnValueChanged += OnDisplayNameChanged;
         
         // Sync current health with network variable
         currentHealth = networkHealth.Value;
         isBurning = networkIsBurning.Value;
+        isPetrified = networkIsPetrified.Value;
         isPlayerDead = networkIsPlayerDead.Value;
+        SetPetrificationVisualState(isPetrified);
+        UpdateDisplayNameLabel();
+
+        if (IsOwner)
+        {
+            SubmitDisplayNameServerRpc(new FixedString64Bytes(PlayerSessionSettings.LocalPlayerName));
+        }
     }
     
     public override void OnNetworkDespawn()
@@ -348,6 +371,7 @@ public class PlayerMovement : NetworkBehaviour
         {
             networkHealth.OnValueChanged -= OnHealthChanged;
             networkIsBurning.OnValueChanged -= OnBurningStatusChanged;
+            networkIsPetrified.OnValueChanged -= OnPetrificationStatusChanged;
             networkFacingLeft.OnValueChanged -= OnFacingDirectionChanged;
             networkIsPlayerDead.OnValueChanged -= OnDeathStatusChanged;
             networkEquippedShardType.OnValueChanged -= OnShardEquipChanged;
@@ -355,9 +379,16 @@ public class PlayerMovement : NetworkBehaviour
             networkIsWalking.OnValueChanged -= OnWalkingStatusChanged;
             networkIsAttacking.OnValueChanged -= OnAttackingStatusChanged;
             networkAttackType.OnValueChanged -= OnAttackTypeChanged;
+            networkDisplayName.OnValueChanged -= OnDisplayNameChanged;
         }
         
         base.OnNetworkDespawn();
+    }
+
+    public override void OnDestroy()
+    {
+        CleanupGeneratedUI();
+        base.OnDestroy();
     }
     
     private void UpdateHealthUI()
@@ -399,6 +430,12 @@ public class PlayerMovement : NetworkBehaviour
         isBurning = newValue;
         UpdateBurningVisuals();
     }
+
+    private void OnPetrificationStatusChanged(bool previousValue, bool newValue)
+    {
+        isPetrified = newValue;
+        SetPetrificationVisualState(newValue);
+    }
     
     private void OnFacingDirectionChanged(bool previousValue, bool newValue)
     {
@@ -417,9 +454,23 @@ public class PlayerMovement : NetworkBehaviour
     private void OnDeathStatusChanged(bool previousValue, bool newValue)
     {
         isPlayerDead = newValue;
+        if (newValue && isPetrified)
+        {
+            isPetrified = false;
+            if (IsServer && IsSpawned)
+            {
+                networkIsPetrified.Value = false;
+            }
+            SetPetrificationVisualState(false);
+        }
+
         if (newValue)
         {
             HandlePlayerDeath();
+        }
+        else
+        {
+            HandlePlayerRespawned();
         }
     }
     
@@ -462,6 +513,11 @@ public class PlayerMovement : NetworkBehaviour
         }
         Debug.Log($"Network attack type changed to: {newValue}");
     }
+
+    private void OnDisplayNameChanged(FixedString64Bytes previousValue, FixedString64Bytes newValue)
+    {
+        UpdateDisplayNameLabel();
+    }
     
     private void UpdateShieldVisuals()
     {
@@ -502,6 +558,27 @@ public class PlayerMovement : NetworkBehaviour
 
     void Update()
     {
+        HandlePetrificationEffect();
+
+        if (isPlayerDead)
+        {
+            horizontalInput = 0f;
+            jumpInput = false;
+            leftInput = false;
+            rightInput = false;
+            downInput = false;
+
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector2.zero;
+                rb.angularVelocity = 0f;
+            }
+
+            UpdateHealthBarPosition();
+            UpdateScreenUI();
+            return;
+        }
+
         // Only process input and certain logic for the owning player
         // Handle networked vs non-networked movement
         if (IsOwner || !IsSpawned)
@@ -596,6 +673,12 @@ public class PlayerMovement : NetworkBehaviour
     
     private void HandleMovement()
     {
+        if (isPetrified)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            return;
+        }
+
         // Check if weapon menu is open - disable movement if it is
         if (weaponController != null && weaponController.IsWeaponMenuOpen())
         {
@@ -993,12 +1076,18 @@ public class PlayerMovement : NetworkBehaviour
             {
                 playerAnimator.SetBool("IsDead", true);
             }
-            
-            // Disable player control for the owner
-            if (IsOwner)
+
+            if (weaponController == null)
             {
-                enabled = false; // Disable this script's Update method
+                weaponController = GetComponent<WeaponClassController>();
             }
+
+            if (weaponController != null)
+            {
+                weaponController.CleanupOwnedEffectsAndState();
+            }
+
+            ResetMotionAndAnimationState(resetNetworkState: IsOwner);
             
             // Trigger respawn after delay (only on server)
             if (IsServer)
@@ -1006,6 +1095,12 @@ public class PlayerMovement : NetworkBehaviour
                 StartCoroutine(RespawnAfterDelay());
             }
         }
+    }
+
+    private void HandlePlayerRespawned()
+    {
+        ResetMotionAndAnimationState(resetNetworkState: false);
+        UpdateHealthUI();
     }
     
     // Coroutine to handle respawn delay
@@ -1155,6 +1250,247 @@ public class PlayerMovement : NetworkBehaviour
         spriteRenderer.sortingOrder = 1;
         
         Debug.Log("Burn visual effect created");
+    }
+
+    public void ApplyPetrification(float duration = -1f)
+    {
+        if (!IsSpawned)
+        {
+            ApplyLocalPetrification(duration);
+            return;
+        }
+
+        if (IsServer)
+        {
+            ApplyPetrificationServer(duration);
+            return;
+        }
+
+        ApplyPetrificationServerRpc(duration);
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void ApplyPetrificationServerRpc(float duration = -1f)
+    {
+        ApplyPetrificationServer(duration);
+    }
+
+    private void ApplyPetrificationServer(float duration)
+    {
+        float appliedDuration = duration > 0f ? duration : petrificationBaseDuration;
+
+        if (networkIsPetrified.Value)
+        {
+            if (petrificationStacks < maxPetrificationStacks)
+            {
+                petrificationStacks++;
+                float timeRemaining = Mathf.Max(petrificationEndTime - Time.time, 0f);
+                petrificationEndTime = Time.time + timeRemaining + appliedDuration;
+                Debug.Log($"Player: Petrification stacked to {petrificationStacks}. Duration: {petrificationEndTime - Time.time:F1}s");
+            }
+
+            return;
+        }
+
+        petrificationStacks = 1;
+        petrificationEndTime = Time.time + appliedDuration;
+        networkIsPetrified.Value = true;
+        Debug.Log($"Player: Petrified for {appliedDuration:F1}s");
+    }
+
+    public void HealFromSupport(int healAmount)
+    {
+        if (healAmount <= 0)
+        {
+            return;
+        }
+
+        if (!IsSpawned)
+        {
+            currentHealth = Mathf.Min(currentHealth + healAmount, GetModifiedMaxHealth());
+            UpdateHealthUI();
+            return;
+        }
+
+        if (IsServer)
+        {
+            ProcessSupportHealing(healAmount);
+            return;
+        }
+
+        HealFromSupportServerRpc(healAmount);
+    }
+
+    [ServerRpc]
+    private void HealFromSupportServerRpc(int healAmount)
+    {
+        ProcessSupportHealing(healAmount);
+    }
+
+    private void ProcessSupportHealing(int healAmount)
+    {
+        if (healAmount <= 0 || networkIsPlayerDead.Value)
+        {
+            return;
+        }
+
+        networkHealth.Value = Mathf.Min(networkHealth.Value + healAmount, GetModifiedMaxHealth());
+    }
+
+    public void ApplySoulSupportEffectsFromServer(int healAmount, bool applyBuffs, float strengthPercent, float fluxPercent, float durabilityPercent, float duration)
+    {
+        if (healAmount > 0)
+        {
+            if (IsSpawned)
+            {
+                ProcessSupportHealing(healAmount);
+            }
+            else
+            {
+                currentHealth = Mathf.Min(currentHealth + healAmount, GetModifiedMaxHealth());
+                UpdateHealthUI();
+            }
+        }
+
+        if (!applyBuffs)
+        {
+            return;
+        }
+
+        if (IsSpawned && IsServer)
+        {
+            ApplySoulSupportBuffsClientRpc(strengthPercent, fluxPercent, durabilityPercent, duration);
+            return;
+        }
+
+        ApplySoulSupportBuffsLocally(strengthPercent, fluxPercent, durabilityPercent, duration);
+    }
+
+    [ClientRpc]
+    private void ApplySoulSupportBuffsClientRpc(float strengthPercent, float fluxPercent, float durabilityPercent, float duration)
+    {
+        ApplySoulSupportBuffsLocally(strengthPercent, fluxPercent, durabilityPercent, duration);
+    }
+
+    private void ApplySoulSupportBuffsLocally(float strengthPercent, float fluxPercent, float durabilityPercent, float duration)
+    {
+        ApplyBuff(BuffType.Strength, strengthPercent, duration, "Soul support strength");
+        ApplyBuff(BuffType.Flux, fluxPercent, duration, "Soul support flux");
+        ApplyBuff(BuffType.Durability, durabilityPercent, duration, "Soul support durability");
+    }
+
+    private void ApplyLocalPetrification(float duration)
+    {
+        float appliedDuration = duration > 0f ? duration : petrificationBaseDuration;
+
+        if (isPetrified)
+        {
+            if (petrificationStacks < maxPetrificationStacks)
+            {
+                petrificationStacks++;
+                float timeRemaining = Mathf.Max(petrificationEndTime - Time.time, 0f);
+                petrificationEndTime = Time.time + timeRemaining + appliedDuration;
+                Debug.Log($"Player: Petrification stacked to {petrificationStacks}. Duration: {petrificationEndTime - Time.time:F1}s");
+            }
+
+            return;
+        }
+
+        isPetrified = true;
+        petrificationStacks = 1;
+        petrificationEndTime = Time.time + appliedDuration;
+        SetPetrificationVisualState(true);
+        Debug.Log($"Player: Petrified for {appliedDuration:F1}s");
+    }
+
+    private void HandlePetrificationEffect()
+    {
+        if (IsSpawned)
+        {
+            if (IsServer && networkIsPetrified.Value && Time.time >= petrificationEndTime)
+            {
+                networkIsPetrified.Value = false;
+                petrificationEndTime = 0f;
+                petrificationStacks = 0;
+                Debug.Log("Player: Petrification ended");
+            }
+
+            if (isPetrified && (IsOwner || IsServer) && rb != null)
+            {
+                rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            }
+
+            return;
+        }
+
+        if (!isPetrified)
+        {
+            return;
+        }
+
+        if (Time.time >= petrificationEndTime)
+        {
+            isPetrified = false;
+            petrificationEndTime = 0f;
+            petrificationStacks = 0;
+            SetPetrificationVisualState(false);
+            Debug.Log("Player: Petrification ended");
+        }
+        else if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+        }
+    }
+
+    private void SetPetrificationVisualState(bool isActive)
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = isActive ? GetDesaturatedColor(defaultSpriteColor) : defaultSpriteColor;
+        }
+
+        if (playerAnimator == null)
+        {
+            return;
+        }
+
+        if (isActive)
+        {
+            wasAnimatorEnabledBeforePetrification = playerAnimator.enabled;
+
+            if (AnimatorHasParameter(playerAnimator, "isAttacking", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isAttacking", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "isWalking", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isWalking", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "isJumping", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isJumping", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "attackType", AnimatorControllerParameterType.Int))
+            {
+                playerAnimator.SetInteger("attackType", 0);
+            }
+
+            playerAnimator.enabled = false;
+        }
+        else if (!isPlayerDead)
+        {
+            playerAnimator.enabled = wasAnimatorEnabledBeforePetrification;
+            playerAnimator.Update(0f);
+        }
+    }
+
+    private Color GetDesaturatedColor(Color sourceColor)
+    {
+        float luminance = (sourceColor.r * 0.299f) + (sourceColor.g * 0.587f) + (sourceColor.b * 0.114f);
+        return new Color(luminance, luminance, luminance, sourceColor.a);
     }
     
     // Public method to check if player is currently burning (for UI or other systems)
@@ -1401,6 +1737,16 @@ public class PlayerMovement : NetworkBehaviour
     
     private void CreateHealthBar()
     {
+        if (healthBarCanvas != null)
+        {
+            return;
+        }
+
+        float barWidth = healthBarSize.x * 100f;
+        float barHeight = healthBarSize.y * 100f;
+        float nameHeight = 22f;
+        float spacing = 4f;
+
         // Create a world space canvas for the health bar
         GameObject canvasGO = new GameObject("HealthBarCanvas");
         healthBarCanvas = canvasGO.AddComponent<Canvas>();
@@ -1409,8 +1755,26 @@ public class PlayerMovement : NetworkBehaviour
         
         // Set canvas size and position
         RectTransform canvasRect = healthBarCanvas.GetComponent<RectTransform>();
-        canvasRect.sizeDelta = new Vector2(healthBarSize.x * 100, healthBarSize.y * 100); // Scale up for world space
+        canvasRect.sizeDelta = new Vector2(barWidth + 20f, barHeight + nameHeight + spacing);
         canvasRect.localScale = Vector3.one * 0.01f; // Scale down for proper world size
+
+        GameObject nameGO = new GameObject("PlayerNameText");
+        nameGO.transform.SetParent(canvasGO.transform, false);
+
+        healthBarNameText = nameGO.AddComponent<Text>();
+        healthBarNameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        healthBarNameText.fontSize = 18;
+        healthBarNameText.color = Color.white;
+        healthBarNameText.alignment = TextAnchor.MiddleCenter;
+        healthBarNameText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        healthBarNameText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        RectTransform nameRect = healthBarNameText.GetComponent<RectTransform>();
+        nameRect.anchorMin = new Vector2(0f, 1f);
+        nameRect.anchorMax = new Vector2(1f, 1f);
+        nameRect.pivot = new Vector2(0.5f, 1f);
+        nameRect.sizeDelta = new Vector2(0f, nameHeight);
+        nameRect.anchoredPosition = Vector2.zero;
         
         // Create background (grey bar that shows full health bar area)
         GameObject backgroundGO = new GameObject("HealthBarBackground");
@@ -1427,9 +1791,10 @@ public class PlayerMovement : NetworkBehaviour
         healthBarBackground.color = new Color(1f, 1f, 1f, 0.9f); // White background
         
         RectTransform bgRect = backgroundGO.GetComponent<RectTransform>();
-        bgRect.anchorMin = Vector2.zero;
-        bgRect.anchorMax = Vector2.one;
-        bgRect.sizeDelta = Vector2.zero;
+        bgRect.anchorMin = new Vector2(0.5f, 0f);
+        bgRect.anchorMax = new Vector2(0.5f, 0f);
+        bgRect.pivot = new Vector2(0.5f, 0f);
+        bgRect.sizeDelta = new Vector2(barWidth, barHeight);
         bgRect.anchoredPosition = Vector2.zero;
         
         // Create fill (colored bar that shows current health)
@@ -1456,6 +1821,7 @@ public class PlayerMovement : NetworkBehaviour
         
         // Update initial health display
         UpdateHealthBar();
+        UpdateDisplayNameLabel();
     }
     
     private void UpdateHealthBarPosition()
@@ -1479,7 +1845,7 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (healthBarFill != null)
         {
-            float healthPercent = (float)currentHealth / maxHealth;
+            float healthPercent = Mathf.Clamp01(currentHealth / GetModifiedMaxHealth());
             healthBarFill.fillAmount = healthPercent;
             
             // Change color based on health percentage
@@ -1489,6 +1855,46 @@ public class PlayerMovement : NetworkBehaviour
                 healthBarFill.color = Color.yellow;
             else
                 healthBarFill.color = Color.red;
+        }
+    }
+
+    private void UpdateDisplayNameLabel()
+    {
+        if (healthBarNameText != null)
+        {
+            healthBarNameText.text = GetDisplayNameText();
+        }
+    }
+
+    private string GetDisplayNameText()
+    {
+        if (!IsSpawned)
+        {
+            return PlayerSessionSettings.LocalPlayerName;
+        }
+
+        return PlayerSessionSettings.SanitizePlayerName(networkDisplayName.Value.ToString());
+    }
+
+    [ServerRpc]
+    private void SubmitDisplayNameServerRpc(FixedString64Bytes requestedName)
+    {
+        string sanitizedName = PlayerSessionSettings.SanitizePlayerName(requestedName.ToString());
+        networkDisplayName.Value = new FixedString64Bytes(sanitizedName);
+    }
+
+    private void CleanupGeneratedUI()
+    {
+        if (healthBarCanvas != null)
+        {
+            Destroy(healthBarCanvas.gameObject);
+            healthBarCanvas = null;
+        }
+
+        if (screenUICanvas != null)
+        {
+            Destroy(screenUICanvas.gameObject);
+            screenUICanvas = null;
         }
     }
     
@@ -1665,6 +2071,7 @@ public class PlayerMovement : NetworkBehaviour
         if (controller.name.Contains("Valor")) return 1;
         if (controller.name.Contains("Whisper")) return 2;
         if (controller.name.Contains("Storm")) return 3;
+        if (controller.name.Contains("Soul")) return 4;
         
         return 0; // Default to no shard
     }
@@ -1689,6 +2096,8 @@ public class PlayerMovement : NetworkBehaviour
                 return weaponController.whisperShardPlayerAnimController ?? defaultPlayerAnimController;
             case 3: // Storm shard
                 return weaponController.stormShardPlayerAnimController ?? defaultPlayerAnimController;
+            case 4: // Soul shard
+                return weaponController.soulShardPlayerAnimController ?? defaultPlayerAnimController;
             default: 
                 return defaultPlayerAnimController;
         }
@@ -1833,6 +2242,38 @@ public class PlayerMovement : NetworkBehaviour
         }
         
         Debug.Log("Attack animation ended via animation event");
+    }
+
+    public void SetAnimatorBool(string parameterName, bool value)
+    {
+        if (playerAnimator == null)
+        {
+            return;
+        }
+
+        if (AnimatorHasParameter(playerAnimator, parameterName, AnimatorControllerParameterType.Bool))
+        {
+            playerAnimator.SetBool(parameterName, value);
+        }
+    }
+
+    private bool AnimatorHasParameter(Animator animator, string parameterName, AnimatorControllerParameterType parameterType)
+    {
+        if (animator == null || string.IsNullOrWhiteSpace(parameterName))
+        {
+            return false;
+        }
+
+        AnimatorControllerParameter[] parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (parameters[i].name == parameterName && parameters[i].type == parameterType)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
     
     /// <summary>
@@ -3269,61 +3710,95 @@ public class PlayerMovement : NetworkBehaviour
     }
     
     // Method to handle respawning the player after death
-    public void RespawnPlayer()
+    public void RespawnPlayer(Vector3 respawnPosition)
     {
         if (!IsServer) return;
-        
-        // Reset health and death status
+
         networkHealth.Value = maxHealth;
+        networkCurrentShield.Value = 0f;
+        networkIsBurning.Value = false;
+        ClearAllBuffs();
+
+        ApplyRespawnState(respawnPosition, resetNetworkState: false);
         networkIsPlayerDead.Value = false;
-        
-        // Reset velocity and physics
+        ApplyRespawnStateClientRpc(respawnPosition);
+
+        Debug.Log($"Player respawned with full health at position {transform.position}");
+    }
+
+    [ClientRpc]
+    private void ApplyRespawnStateClientRpc(Vector3 respawnPosition)
+    {
+        ApplyRespawnState(respawnPosition, resetNetworkState: IsOwner);
+    }
+
+    private void ApplyRespawnState(Vector3 respawnPosition, bool resetNetworkState)
+    {
+        transform.position = respawnPosition;
+        spawnPosition = respawnPosition;
+
+        currentHealth = maxHealth;
+        isPlayerDead = false;
+        isBurning = false;
+        currentAegisShield = 0f;
+
+        ResetMotionAndAnimationState(resetNetworkState);
+
+        if (burnEffectObject != null)
+        {
+            Destroy(burnEffectObject);
+            burnEffectObject = null;
+        }
+
+        activeBuffs.Clear();
+        UpdateBuffUI();
+        HideBuffTooltip();
+        UpdateAegisOutline();
+        UpdateHealthUI();
+    }
+
+    private void ResetMotionAndAnimationState(bool resetNetworkState)
+    {
+        horizontalInput = 0f;
+        jumpInput = false;
+        leftInput = false;
+        rightInput = false;
+        downInput = false;
+        wantsToSubmerge = false;
+        isPlayerWalking = false;
+        isPlayerAttacking = false;
+        currentAttackType = 0;
+        isPlayerJumping = false;
+        isFalling = false;
+        wasGroundedLastFrame = false;
+
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero;
             rb.angularVelocity = 0f;
         }
-        
-        // Re-enable player control
-        enabled = true;
-        
-        // Reset animation state
+
         if (playerAnimator != null)
         {
             playerAnimator.SetBool("IsDead", false);
-            playerAnimator.SetBool("isDead", false); // Both variants
+            playerAnimator.SetBool("isDead", false);
             playerAnimator.SetBool("IsAttacking", false);
+            playerAnimator.SetBool("isAttacking", false);
             playerAnimator.SetBool("IsWalking", false);
-            
-            // Reset all animation triggers
+            playerAnimator.SetBool("isWalking", false);
+            playerAnimator.SetBool("isJumping", false);
+            playerAnimator.SetInteger("attackType", 0);
             playerAnimator.ResetTrigger("Attack");
             playerAnimator.ResetTrigger("Jump");
             playerAnimator.ResetTrigger("Death");
         }
-        
-        // Reset any ongoing effects
-        if (isBurning)
+
+        if (resetNetworkState && IsOwner && IsSpawned)
         {
-            StopBurningEffect();
+            networkIsWalking.Value = false;
+            networkIsAttacking.Value = false;
+            networkAttackType.Value = 0;
         }
-        
-        // Reset burn effects for network sync
-        if (IsServer)
-        {
-            networkIsBurning.Value = false;
-        }
-        
-        // Reset shield values
-        networkCurrentShield.Value = 0f;
-        
-        // Clear any active buffs
-        ClearAllBuffs();
-        
-        // Reset local variables
-        currentHealth = maxHealth;
-        isPlayerDead = false;
-        
-        Debug.Log($"Player respawned with full health at position {transform.position}");
     }
     
     // Helper method to clear all active buffs

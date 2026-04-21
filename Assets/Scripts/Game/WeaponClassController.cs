@@ -21,7 +21,10 @@ public class WeaponClassController : NetworkBehaviour
     [SerializeField] private RuntimeAnimatorController defaultPlayerAnimController = null; // Default animation when no shards equipped
     [SerializeField] public RuntimeAnimatorController valorShardPlayerAnimController = null; // Animation when Valor Shard equipped (public for PlayerMovement access)
     [SerializeField] public RuntimeAnimatorController whisperShardPlayerAnimController = null; // Animation when Whisper Shard equipped (public for PlayerMovement access)
-    [SerializeField] public RuntimeAnimatorController stormShardPlayerAnimController = null; // Animation when Storm Shard equipped (public for PlayerMovement access)    // ========== VALOR SHARD CONFIGURATION ==========
+    [SerializeField] public RuntimeAnimatorController stormShardPlayerAnimController = null; // Animation when Storm Shard equipped (public for PlayerMovement access)
+    [SerializeField] public RuntimeAnimatorController soulShardPlayerAnimController = null; // Animation when Soul Shard equipped (public for PlayerMovement access)
+
+    // ========== VALOR SHARD CONFIGURATION ==========
     [Header("Valor Shard - Melee Attack Settings")]
     [SerializeField] private float swordRange = 0.8f; // Closer to player
     [SerializeField] private float swordWidth = 1.2f; // Wider to match player
@@ -134,6 +137,7 @@ public class WeaponClassController : NetworkBehaviour
     [SerializeField] private GameObject valorShardPrefab = null; // Prefab for dropping valor shards
     [SerializeField] private GameObject whisperShardPrefab = null; // Prefab for dropping whisper shards
     [SerializeField] private GameObject stormShardPrefab = null; // Prefab for dropping storm shards
+    [SerializeField] private GameObject soulShardPrefab = null; // Prefab for dropping soul shards
     
     [Header("Storm Shard - Chain Lightning Settings")]
     [SerializeField] private float chainRange = 8f; // Range to find nearby enemies for chaining
@@ -147,6 +151,39 @@ public class WeaponClassController : NetworkBehaviour
     [SerializeField] private float stormMovementBuffDuration = 2f; // Duration per stack when moving
     [SerializeField] private int maxStormMovementStacks = 10; // Maximum swiftness stacks
     [SerializeField] private float stormMovementCheckInterval = 0.1f; // How often to check movement (10 times per second)
+
+    // ========== SOUL SHARD CONFIGURATION ==========
+    [Header("Soul Shard - Vortex Settings")]
+    [SerializeField] private float soulVortexRadius = 3.5f;
+    [SerializeField] private float soulVortexPullForce = 14f;
+    [SerializeField] private int soulVortexTickDamage = 3;
+    [SerializeField] private float soulVortexTickInterval = 0.35f;
+    [SerializeField] private int soulVortexBurstDamage = 12;
+    [SerializeField] private float soulVortexDuration = 1.25f;
+    [SerializeField] private float soulVortexYOffset = 1.2f;
+    [SerializeField] private float soulVortexForwardOffset = 1.1f;
+
+    [Header("Soul Shard - Support Settings")]
+    [SerializeField] private float soulSupportRadius = 5f;
+    [SerializeField] private int soulSupportPulseHeal = 6;
+    [SerializeField] private float soulSupportStrengthPercent = 10f;
+    [SerializeField] private float soulSupportFluxPercent = 12f;
+    [SerializeField] private float soulSupportDurabilityPercent = 8f;
+    [SerializeField] private float soulSupportBuffDuration = 5f;
+    [SerializeField] private float soulHoldActivationTime = 0.3f;
+    [SerializeField] private float soulHoldPulseInterval = 0.4f;
+    [SerializeField] private int soulHoldPulseHeal = 2;
+
+    [Header("Soul Shard - Ultimate Settings")]
+    [SerializeField] private float soulUltimateDuration = 10f;
+    [SerializeField] private float soulBarrierRadius = 6f;
+    [SerializeField] private float soulBarrierRepelForce = 20f;
+    [SerializeField] private float soulFloorHealInterval = 0.75f;
+    [SerializeField] private float soulFloorBuffCooldown = 1.5f;
+    [SerializeField] private int soulFloorHealAmount = 3;
+    [SerializeField] private float soulButterflySpawnInterval = 0.35f;
+    [SerializeField] private float soulButterflySeekRange = 12f;
+    [SerializeField] private int soulButterflyDamage = 4;
     
     [Header("Ultimate Charge Settings")]
     [SerializeField] private float valorLeftClickCharge = 5f; // Charge generated per valor left click attack
@@ -157,11 +194,15 @@ public class WeaponClassController : NetworkBehaviour
     [SerializeField] private float stormConstantLeftClickCharge = 2f; // Charge generated per storm arc (auto-fire)
     [SerializeField] private float stormLeftClickCharge = 4f; // Charge generated per storm arc (manual)
     [SerializeField] private float stormRightClickCharge = 12f; // Charge generated per storm bolt attack
+    [SerializeField] private float soulLeftClickCharge = 4f;
+    [SerializeField] private float soulRightClickCharge = 7f;
+    [SerializeField] private float soulHoldTickCharge = 1f;
+    [SerializeField] private float soulUltimateButterflyCharge = 0.5f;
     [SerializeField] private float maxUltimateCharge = 100f; // Maximum ultimate charge required to fill bar completely
     private PlayerMovement playerMovement; // Reference to player movement for charge updates
     
     // Weapon System
-    private enum ShardType { None, ValorShard, WhisperShard, StormShard }
+    private enum ShardType { None, ValorShard, WhisperShard, StormShard, SoulShard }
     
     // Network Variables for multiplayer synchronization
     private NetworkVariable<int> networkEquippedShard1 = new NetworkVariable<int>();
@@ -180,6 +221,7 @@ public class WeaponClassController : NetworkBehaviour
     private bool isChargingValorAttack = false;
     private float chargeStartTime = 0f;
     private float currentChargeTime = 0f;
+    private Coroutine valorChargeReleaseCoroutine = null;
     
     // ValorShard Multi-Click System
     private int clickCount = 0;
@@ -834,6 +876,19 @@ public class WeaponClassController : NetworkBehaviour
     
     // Ultimate System Tracking
     private List<GameObject> activeDummies = new List<GameObject>(); // Track active summoned dummies
+
+    // Soul Shard Tracking
+    private Animator soulShardAnimator = null;
+    private GameObject activeSoulVortex = null;
+    private Coroutine soulVortexTickCoroutine = null;
+    private bool isSoulRightHeld = false;
+    private float soulRightClickStartTime = 0f;
+    private bool isSoulHoldChanneling = false;
+    private Coroutine soulHoldPulseCoroutine = null;
+    private GameObject activeSoulUltimateRoot = null;
+    private Coroutine soulUltimateCoroutine = null;
+    private float nextSoulFloorBuffTime = 0f;
+    private Sprite soulCircleSprite = null;
     
     // Passive System Tracking
     private float lastMovementCheckTime = 0f; // Track movement check timing
@@ -865,6 +920,7 @@ public class WeaponClassController : NetworkBehaviour
     private Image[] slotBackgrounds = new Image[2];
     private Image activeSlotIndicator;
     private Image swapTargetIndicator;
+    private bool hasLocalGuiInitialized = false;
     
     // Interaction System
     private GameObject nearbyShardObject;
@@ -885,6 +941,7 @@ public class WeaponClassController : NetworkBehaviour
     // Public Properties
     public bool IsChargingValorAttack => isChargingValorAttack;
     public bool IsWhisperShardActive => equippedShards[activeSlotIndex] == ShardType.WhisperShard;
+    public bool IsSoulShardActive => equippedShards[activeSlotIndex] == ShardType.SoulShard;
     
     public override void OnNetworkSpawn()
     {
@@ -906,6 +963,25 @@ public class WeaponClassController : NetworkBehaviour
             currentChargeTime = networkCurrentChargeTime.Value;
             isChargingValorAttack = networkIsChargingValorAttack.Value;
         }
+
+        if (playerMovement == null)
+        {
+            playerMovement = GetComponent<PlayerMovement>();
+        }
+
+        if (playerTransform == null)
+        {
+            playerTransform = transform;
+        }
+
+        if (IsOwner)
+        {
+            EnsureLocalGUIInitialized();
+        }
+
+        UpdateWeaponSlotVisuals();
+        UpdateActiveSlotVisuals();
+        UpdatePlayerAnimationController();
         
         base.OnNetworkSpawn();
     }
@@ -917,6 +993,8 @@ public class WeaponClassController : NetworkBehaviour
         {
             DropEquippedShards();
         }
+
+        CleanupOwnedEffectsAndState();
         
         // Unsubscribe from network variable changes
         if (networkEquippedShard1 != null)
@@ -931,6 +1009,8 @@ public class WeaponClassController : NetworkBehaviour
             networkCurrentChargeTime.OnValueChanged -= OnNetworkCurrentChargeTimeChanged;
         if (networkIsChargingValorAttack != null)
             networkIsChargingValorAttack.OnValueChanged -= OnNetworkChargingValorAttackChanged;
+
+        DestroyLocalGUI();
         
         base.OnNetworkDespawn();
     }
@@ -988,26 +1068,23 @@ public class WeaponClassController : NetworkBehaviour
     // Helper methods for updating visuals (to be implemented if needed)
     private void UpdateWeaponSlotVisuals()
     {
-        // Only update UI for the local player to prevent cross-client interference
-        if (!IsOwner) 
+        if (!IsOwner || weaponCanvas == null)
         {
-            Debug.Log($"UpdateWeaponSlotVisuals skipped - not owner. Owner: {OwnerClientId}, Local: {NetworkManager.Singleton.LocalClientId}");
             return;
         }
-        
-        // Update GUI weapon slot display
-        // This should trigger visual updates for weapon slots
-        Debug.Log($"UpdateWeaponSlotVisuals for local player (Owner {OwnerClientId}): Slot 0 = {equippedShards[0]}, Slot 1 = {equippedShards[1]}");
+
+        for (int i = 0; i < equippedShards.Length; i++)
+        {
+            UpdateSlotDisplay(i);
+        }
     }
     
     private void UpdateActiveSlotVisuals()
     {
-        // Only update UI for the local player to prevent cross-client interference
-        if (!IsOwner) return;
-        
-        // Update active slot highlighting
-        // This should update which slot appears selected
-        Debug.Log($"UpdateActiveSlotVisuals for local player: Active slot = {activeSlotIndex}");
+        if (!IsOwner || weaponCanvas == null) return;
+
+        UpdateActiveSlotIndicator();
+        UpdateSwapTargetIndicator();
     }
     
     private void UpdateChargeVisuals()
@@ -1021,6 +1098,11 @@ public class WeaponClassController : NetworkBehaviour
         // Get player components (this script is attached to the player)
         playerMovement = GetComponent<PlayerMovement>();
         playerTransform = transform;
+        soulShardAnimator = playerMovement != null ? playerMovement.playerAnimator : GetComponent<Animator>();
+        if (soulShardAnimator == null)
+        {
+            soulShardAnimator = GetComponentInChildren<Animator>();
+        }
         
         if (playerMovement == null)
         {
@@ -1031,16 +1113,16 @@ public class WeaponClassController : NetworkBehaviour
         
         // Initialize weapon system
         attackQueue = new Queue<int>(); // Initialize attack queue
-        InitializeGUI();
+
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening)
+        {
+            EnsureLocalGUIInitialized();
+        }
+
         LoadShardSprites();
         FindStormParticlePoint();
         
-        // Initialize animation controller based on current equipped shards (owner only)
-        if (IsOwner)
-        {
-            Debug.Log("WeaponClassController: Initializing animation controller...");
-            UpdatePlayerAnimationController();
-        }
+        UpdatePlayerAnimationController();
         
         // Sync ultimate charge configuration with PlayerMovement
         SyncUltimateChargeSettings();
@@ -1048,6 +1130,11 @@ public class WeaponClassController : NetworkBehaviour
     
     void Update()
     {
+        if (playerMovement != null && playerMovement.IsDead)
+        {
+            return;
+        }
+
         // Only process input and interactions for the owning player
         if (IsOwner)
         {
@@ -1103,6 +1190,129 @@ public class WeaponClassController : NetworkBehaviour
         
         // Create active slot indicator
         CreateActiveSlotIndicator(slotContainer);
+    }
+
+    private void EnsureLocalGUIInitialized()
+    {
+        if (hasLocalGuiInitialized || weaponCanvas != null)
+        {
+            return;
+        }
+
+        InitializeGUI();
+        hasLocalGuiInitialized = true;
+        UpdateWeaponSlotVisuals();
+        UpdateActiveSlotVisuals();
+    }
+
+    private void DestroyLocalGUI()
+    {
+        if (weaponCanvas != null)
+        {
+            Destroy(weaponCanvas.gameObject);
+            weaponCanvas = null;
+        }
+
+        if (promptCanvas != null)
+        {
+            Destroy(promptCanvas.gameObject);
+            promptCanvas = null;
+            promptText = null;
+        }
+
+        slotImages = new Image[2];
+        slotBackgrounds = new Image[2];
+        activeSlotIndicator = null;
+        swapTargetIndicator = null;
+        hasLocalGuiInitialized = false;
+    }
+
+    public void CleanupOwnedEffectsAndState()
+    {
+        StopAllCoroutines();
+
+        valorChargeReleaseCoroutine = null;
+        attackQueueProcessor = null;
+        currentAttackAnimationCoroutine = null;
+        resetClickCoroutine = null;
+        soulVortexTickCoroutine = null;
+        soulHoldPulseCoroutine = null;
+        soulUltimateCoroutine = null;
+
+        isChargingValorAttack = false;
+        currentChargeTime = 0f;
+        isPerformingSpecialAttack = false;
+        isPerformingThrust = false;
+        isSoulRightHeld = false;
+        isSoulHoldChanneling = false;
+        isAutoFiring = false;
+        currentRedirectCount = 0;
+        daggerExpired = false;
+        currentClickCount = 0;
+        stormClickCount = 0;
+
+        if (attackQueue != null)
+        {
+            attackQueue.Clear();
+        }
+
+        ReleasePiercedEnemies();
+        EndAttackAnimation();
+
+        if (soulShardAnimator != null && AnimatorHasParameter(soulShardAnimator, "isAttacking", AnimatorControllerParameterType.Bool))
+        {
+            soulShardAnimator.SetBool("isAttacking", false);
+        }
+
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+            if (!playerMovement.IsDead && !playerMovement.enabled)
+            {
+                playerMovement.enabled = true;
+            }
+        }
+
+        DestroyTrackedObject(ref activeValorMeleeAttack);
+        DestroyTrackedObject(ref activeWhisperMeleeAttack);
+        DestroyTrackedObject(ref currentThrownDagger);
+        DestroyTrackedObjects(activeDaggers);
+        DestroyTrackedObject(ref thrustDamageZone);
+        DestroyTrackedObjects(activeDummies);
+        DestroyTrackedObject(ref activeSoulVortex);
+        DestroyTrackedObject(ref activeSoulUltimateRoot);
+
+        nearbyShardObject = null;
+        isInSwapMode = false;
+        HideInteractionPrompt();
+        HideSwapTargetIndicator();
+    }
+
+    private void DestroyTrackedObject(ref GameObject trackedObject)
+    {
+        if (trackedObject != null)
+        {
+            Destroy(trackedObject);
+            trackedObject = null;
+        }
+    }
+
+    private void DestroyTrackedObjects(List<GameObject> trackedObjects)
+    {
+        if (trackedObjects == null)
+        {
+            return;
+        }
+
+        foreach (GameObject trackedObject in trackedObjects)
+        {
+            if (trackedObject != null)
+            {
+                Destroy(trackedObject);
+            }
+        }
+
+        trackedObjects.Clear();
     }
     
     private void CreateWeaponSlot(GameObject parent, int slotIndex)
@@ -1205,8 +1415,8 @@ public class WeaponClassController : NetworkBehaviour
     private void LoadShardSprites()
     {
         // Find shard GameObjects and extract their sprites
-        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard" };
-        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard };
+        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard", "SoulShard" };
+        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard, ShardType.SoulShard };
         
         for (int i = 0; i < shardTags.Length; i++)
         {
@@ -1227,8 +1437,8 @@ public class WeaponClassController : NetworkBehaviour
         if (playerTransform == null) return;
         
         // Check for each shard type
-        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard" };
-        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard };
+        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard", "SoulShard" };
+        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard, ShardType.SoulShard };
         
         GameObject closestShard = null;
         ShardType closestShardType = ShardType.None;
@@ -1288,6 +1498,11 @@ public class WeaponClassController : NetworkBehaviour
     
     private void ShowInteractionPrompt(string message)
     {
+        if (!IsOwner)
+        {
+            return;
+        }
+
         if (promptCanvas == null)
         {
             CreateInteractionPrompt();
@@ -1355,6 +1570,11 @@ public class WeaponClassController : NetworkBehaviour
     
     private void UpdatePromptPosition()
     {
+        if (!IsOwner)
+        {
+            return;
+        }
+
         if (promptCanvas != null && promptCanvas.gameObject.activeSelf && nearbyShardObject != null)
         {
             // Position the prompt above the shard, not the player
@@ -1471,25 +1691,63 @@ public class WeaponClassController : NetworkBehaviour
         
         if (!isWeaponMenuOpen)
         {
-            // Handle ValorShard charging attack
             ShardType activeWeapon = equippedShards[activeSlotIndex];
+            if (activeWeapon != ShardType.SoulShard && (isSoulHoldChanneling || isSoulRightHeld))
+            {
+                RequestStopSoulHoldChannel();
+                isSoulRightHeld = false;
+            }
+
             if (activeWeapon == ShardType.ValorShard && rightClickPressed)
             {
-                // Start charging
-                isChargingValorAttack = true;
-                chargeStartTime = Time.time;
+                StartValorChargeAttack();
+            }
+            else if (activeWeapon == ShardType.SoulShard && rightClickPressed)
+            {
+                isSoulRightHeld = true;
+                soulRightClickStartTime = Time.time;
             }
             
             if (isChargingValorAttack)
             {
                 currentChargeTime = Time.time - chargeStartTime;
+                if (IsOwner)
+                {
+                    networkCurrentChargeTime.Value = currentChargeTime;
+                }
                 
                 if (rightClickReleased)
                 {
-                    // Release charge attack
-                    UseActiveWeapon(true); // Right-click attack
-                    isChargingValorAttack = false;
-                    currentChargeTime = 0f;
+                    ReleaseValorChargeAttack();
+                }
+            }
+            else if (activeWeapon == ShardType.SoulShard)
+            {
+                if (isSoulRightHeld && rightClickHeld && !isSoulHoldChanneling && Time.time - soulRightClickStartTime >= soulHoldActivationTime)
+                {
+                    RequestStartSoulHoldChannel();
+                }
+
+                if (isSoulRightHeld && rightClickReleased)
+                {
+                    if (isSoulHoldChanneling)
+                    {
+                        RequestStopSoulHoldChannel();
+                    }
+                    else
+                    {
+                        UseActiveWeapon(true);
+                    }
+
+                    isSoulRightHeld = false;
+                }
+                else if (leftClickPressed)
+                {
+                    HandleLeftClickInput(activeWeapon);
+                }
+                else if (leftClickReleased)
+                {
+                    isAutoFiring = false;
                 }
             }
             else if (leftClickPressed)
@@ -1571,13 +1829,13 @@ public class WeaponClassController : NetworkBehaviour
     private void DestroyShardClientRpc(int shardInstanceID)
     {
         // Find and destroy the shard by instance ID for all clients
-        GameObject[] allObjects = FindObjectsOfType<GameObject>();
+        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
         foreach (GameObject obj in allObjects)
         {
             if (obj.GetInstanceID() == shardInstanceID)
             {
                 // Check if it's a shard by tag
-                if (obj.CompareTag("ValorShard") || obj.CompareTag("WhisperShard") || obj.CompareTag("StormShard"))
+                if (obj.CompareTag("ValorShard") || obj.CompareTag("WhisperShard") || obj.CompareTag("StormShard") || obj.CompareTag("SoulShard"))
                 {
                     Destroy(obj);
                     Debug.Log($"Shard destroyed for all clients: {obj.name}");
@@ -1664,8 +1922,8 @@ public class WeaponClassController : NetworkBehaviour
         SpriteRenderer spriteRenderer = shardObject.GetComponent<SpriteRenderer>();
         
         // Map shard types to their corresponding tags
-        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard" };
-        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard };
+        string[] shardTags = { "ValorShard", "WhisperShard", "StormShard", "SoulShard" };
+        ShardType[] shardTypes = { ShardType.ValorShard, ShardType.WhisperShard, ShardType.StormShard, ShardType.SoulShard };
         
         for (int i = 0; i < shardTypes.Length; i++)
         {
@@ -1742,6 +2000,9 @@ public class WeaponClassController : NetworkBehaviour
             case ShardType.StormShard:
                 UseStormShard(isRightClick);
                 break;
+            case ShardType.SoulShard:
+                UseSoulShard(isRightClick);
+                break;
             default:
                 break;
         }
@@ -1753,16 +2014,7 @@ public class WeaponClassController : NetworkBehaviour
         
         if (isRightClick)
         {
-            // Right-click: Wave attack with cooldown
-            float timeSinceLastWave = Time.time - lastWaveAttackTime;
-            if (timeSinceLastWave < waveCooldown)
-            {
-                Debug.Log($"Wave attack blocked by cooldown - timeSince: {timeSinceLastWave:F3}, cooldown: {waveCooldown}");
-                return;
-            }
-            
-            CreateWaveAttack();
-            lastWaveAttackTime = Time.time;
+            StartValorChargeAttack();
         }
         else
         {
@@ -2111,9 +2363,673 @@ public class WeaponClassController : NetworkBehaviour
             GenerateUltimateCharge(stormLeftClickCharge);
         }
     }
-    
 
-    
+    private void UseSoulShard(bool isRightClick)
+    {
+        if (playerTransform == null) return;
+
+        if (isRightClick)
+        {
+            if (isSoulHoldChanneling || IsPlayingAttackAnimation())
+            {
+                return;
+            }
+
+            GenerateUltimateCharge(soulRightClickCharge);
+
+            if (IsSpawned)
+            {
+                TriggerSoulSupportPulseServerRpc();
+            }
+            else
+            {
+                PlaySoulSupportPulse();
+                ApplySoulSupportPulse(playerTransform.position, soulSupportPulseHeal);
+            }
+
+            return;
+        }
+
+        if (activeSoulVortex != null || IsPlayingAttackAnimation())
+        {
+            return;
+        }
+
+        GenerateUltimateCharge(soulLeftClickCharge);
+
+        if (IsSpawned)
+        {
+            TriggerSoulVortexServerRpc();
+        }
+        else
+        {
+            PlaySoulVortex();
+        }
+    }
+
+    private void RequestStartSoulHoldChannel()
+    {
+        if (IsSpawned)
+        {
+            StartSoulHoldChannelServerRpc();
+            return;
+        }
+
+        StartSoulHoldChannel();
+    }
+
+    private void RequestStopSoulHoldChannel()
+    {
+        if (IsSpawned)
+        {
+            StopSoulHoldChannelServerRpc();
+            return;
+        }
+
+        StopSoulHoldChannel();
+    }
+
+    [ServerRpc]
+    private void StartSoulHoldChannelServerRpc()
+    {
+        StartSoulHoldChannel();
+        StartSoulHoldChannelClientRpc();
+    }
+
+    [ClientRpc]
+    private void StartSoulHoldChannelClientRpc()
+    {
+        if (IsServer) return;
+        StartSoulHoldChannel();
+    }
+
+    [ServerRpc]
+    private void StopSoulHoldChannelServerRpc()
+    {
+        StopSoulHoldChannel();
+        StopSoulHoldChannelClientRpc();
+    }
+
+    [ClientRpc]
+    private void StopSoulHoldChannelClientRpc()
+    {
+        if (IsServer) return;
+        StopSoulHoldChannel();
+    }
+
+    [ServerRpc]
+    private void TriggerSoulSupportPulseServerRpc()
+    {
+        PlaySoulSupportPulse();
+        ApplySoulSupportPulse(transform.position, soulSupportPulseHeal);
+        TriggerSoulSupportPulseClientRpc();
+    }
+
+    [ClientRpc]
+    private void TriggerSoulSupportPulseClientRpc()
+    {
+        if (IsServer) return;
+        PlaySoulSupportPulse();
+    }
+
+    [ServerRpc]
+    private void TriggerSoulVortexServerRpc()
+    {
+        PlaySoulVortex();
+        TriggerSoulVortexClientRpc();
+    }
+
+    [ClientRpc]
+    private void TriggerSoulVortexClientRpc()
+    {
+        if (IsServer) return;
+        PlaySoulVortex();
+    }
+
+    [ServerRpc]
+    private void ActivateSoulUltimateServerRpc()
+    {
+        ActivateSoulUltimate();
+        ActivateSoulUltimateClientRpc();
+    }
+
+    [ClientRpc]
+    private void ActivateSoulUltimateClientRpc()
+    {
+        if (IsServer) return;
+        ActivateSoulUltimate();
+    }
+
+    private void PlaySoulSupportPulse()
+    {
+        StartAttackAnimation();
+        TriggerSoulAttackAnimation(1);
+        StartCoroutine(EndSoulAttackAfterDelay(0.25f));
+    }
+
+    private void PlaySoulVortex()
+    {
+        StartAttackAnimation();
+        TriggerSoulAttackAnimation(0);
+        StartSoulVortex();
+    }
+
+    private bool TriggerSoulAttackAnimation(int attackType)
+    {
+        if (soulShardAnimator != null)
+        {
+            if (AnimatorHasParameter(soulShardAnimator, "attackType", AnimatorControllerParameterType.Int))
+            {
+                soulShardAnimator.SetInteger("attackType", attackType);
+            }
+
+            if (AnimatorHasParameter(soulShardAnimator, "isAttacking", AnimatorControllerParameterType.Bool))
+            {
+                soulShardAnimator.SetBool("isAttacking", false);
+                soulShardAnimator.SetBool("isAttacking", true);
+                return true;
+            }
+        }
+
+        TriggerAttackAnimation(attackType);
+        return true;
+    }
+
+    private void StartSoulHoldChannel()
+    {
+        if (isSoulHoldChanneling) return;
+
+        isSoulHoldChanneling = true;
+        StartAttackAnimation();
+        TriggerSoulAttackAnimation(1);
+
+        if (playerMovement != null)
+        {
+            playerMovement.enabled = false;
+        }
+
+        soulHoldPulseCoroutine = StartCoroutine(SoulHoldPulseRoutine());
+    }
+
+    private void StopSoulHoldChannel()
+    {
+        if (!isSoulHoldChanneling) return;
+
+        isSoulHoldChanneling = false;
+
+        if (soulHoldPulseCoroutine != null)
+        {
+            StopCoroutine(soulHoldPulseCoroutine);
+            soulHoldPulseCoroutine = null;
+        }
+
+        if (playerMovement != null && !playerMovement.enabled)
+        {
+            playerMovement.enabled = true;
+        }
+
+        EndSoulAttackAnimation();
+    }
+
+    private IEnumerator SoulHoldPulseRoutine()
+    {
+        while (isSoulHoldChanneling)
+        {
+            ApplySoulSupportPulse(playerTransform.position, soulHoldPulseHeal);
+            GenerateUltimateCharge(soulHoldTickCharge);
+            yield return new WaitForSeconds(soulHoldPulseInterval);
+        }
+    }
+
+    private IEnumerator EndSoulAttackAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        if (!isSoulHoldChanneling)
+        {
+            EndSoulAttackAnimation();
+        }
+    }
+
+    private void StartSoulVortex()
+    {
+        if (activeSoulVortex != null)
+        {
+            Destroy(activeSoulVortex);
+        }
+
+        activeSoulVortex = CreateSoulCircleVisual("SoulVortex", new Color(0.2f, 0.75f, 1f, 0.35f), soulVortexRadius, 6);
+        activeSoulVortex.transform.position = GetSoulVortexAnchorPosition();
+
+        CircleCollider2D vortexTrigger = activeSoulVortex.AddComponent<CircleCollider2D>();
+        vortexTrigger.radius = soulVortexRadius;
+        vortexTrigger.isTrigger = true;
+
+        if (soulVortexTickCoroutine != null)
+        {
+            StopCoroutine(soulVortexTickCoroutine);
+        }
+
+        soulVortexTickCoroutine = StartCoroutine(SoulVortexRoutine(activeSoulVortex));
+    }
+
+    private IEnumerator SoulVortexRoutine(GameObject vortex)
+    {
+        float endTime = Time.time + soulVortexDuration;
+        float nextTickTime = Time.time;
+
+        while (vortex != null && Time.time < endTime)
+        {
+            vortex.transform.position = GetSoulVortexAnchorPosition();
+
+            if (Time.time >= nextTickTime)
+            {
+                ApplySoulVortexTick(vortex.transform.position);
+                nextTickTime = Time.time + soulVortexTickInterval;
+            }
+
+            yield return null;
+        }
+
+        if (vortex != null)
+        {
+            Vector3 burstCenter = vortex.transform.position;
+            ApplySoulVortexTick(burstCenter, soulVortexBurstDamage, false);
+            Destroy(vortex);
+        }
+
+        activeSoulVortex = null;
+        soulVortexTickCoroutine = null;
+        EndSoulAttackAnimation();
+    }
+
+    private void ApplySoulVortexTick(Vector3 center, int damageOverride = -1, bool applyPull = true)
+    {
+        if (!ShouldApplyAuthoritativeMagicGameplay())
+        {
+            return;
+        }
+
+        Collider2D[] colliders = Physics2D.OverlapCircleAll(center, soulVortexRadius);
+        int damage = damageOverride >= 0 ? damageOverride : soulVortexTickDamage;
+
+        foreach (Collider2D hit in colliders)
+        {
+            if (hit == null || !IsEnemy(hit.gameObject))
+            {
+                continue;
+            }
+
+            Rigidbody2D enemyRb = hit.attachedRigidbody;
+            if (applyPull && enemyRb != null)
+            {
+                Vector2 pullDirection = ((Vector2)center - enemyRb.position).normalized;
+                enemyRb.AddForce(pullDirection * soulVortexPullForce, ForceMode2D.Force);
+            }
+
+            DealMagicDamageToEnemy(hit.gameObject, damage);
+        }
+    }
+
+    private void ApplySoulSupportPulse(Vector3 center, int healAmount, bool useBuffCooldown = false)
+    {
+        if (!ShouldApplyAuthoritativeMagicGameplay())
+        {
+            return;
+        }
+
+        bool canApplyBuffs = !useBuffCooldown || Time.time >= nextSoulFloorBuffTime;
+        if (useBuffCooldown && canApplyBuffs)
+        {
+            nextSoulFloorBuffTime = Time.time + soulFloorBuffCooldown;
+        }
+
+        PlayerMovement[] players = FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None);
+        foreach (PlayerMovement player in players)
+        {
+            if (player == null || !player.isActiveAndEnabled || !player.gameObject.activeInHierarchy || player.IsDead)
+            {
+                continue;
+            }
+
+            if (Vector3.Distance(center, player.transform.position) > soulSupportRadius)
+            {
+                continue;
+            }
+
+            player.ApplySoulSupportEffectsFromServer(
+                healAmount,
+                canApplyBuffs,
+                soulSupportStrengthPercent,
+                soulSupportFluxPercent,
+                soulSupportDurabilityPercent,
+                soulSupportBuffDuration);
+        }
+
+        AttackDummy[] dummies = FindObjectsByType<AttackDummy>(FindObjectsSortMode.None);
+        foreach (AttackDummy dummy in dummies)
+        {
+            if (dummy == null)
+            {
+                continue;
+            }
+
+            if (Vector3.Distance(center, dummy.transform.position) > soulSupportRadius)
+            {
+                continue;
+            }
+
+            dummy.HealFromSupport(healAmount);
+            if (canApplyBuffs)
+            {
+                dummy.ApplySoulSupportBuffs(soulSupportStrengthPercent, soulSupportFluxPercent, soulSupportDurabilityPercent, soulSupportBuffDuration);
+            }
+        }
+    }
+
+    private void DealMagicDamageToEnemy(GameObject enemy, int baseDamage)
+    {
+        if (!ShouldApplyAuthoritativeMagicGameplay() || enemy == null)
+        {
+            return;
+        }
+
+        int damage = playerMovement != null ? playerMovement.GetModifiedMagicDamage(baseDamage) : baseDamage;
+
+        EnemyBehavior enemyBehavior = enemy.GetComponent<EnemyBehavior>();
+        if (enemyBehavior != null && !enemyBehavior.IsDead)
+        {
+            enemyBehavior.TakeDamage(damage);
+            return;
+        }
+
+        DragonBoss dragonBoss = enemy.GetComponent<DragonBoss>();
+        if (dragonBoss != null && !dragonBoss.IsDead)
+        {
+            dragonBoss.TakeDamage(damage);
+        }
+    }
+
+    private bool ShouldApplyAuthoritativeMagicGameplay()
+    {
+        return !IsSpawned || IsServer;
+    }
+
+    private Vector3 GetSoulVortexAnchorPosition()
+    {
+        float horizontalOffset = IsPlayerFacingLeft() ? -soulVortexForwardOffset : soulVortexForwardOffset;
+        return playerTransform.position + new Vector3(horizontalOffset, soulVortexYOffset, 0f);
+    }
+
+    private bool IsPlayerFacingLeft()
+    {
+        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
+        if (playerSprite == null)
+        {
+            playerSprite = GetComponentInChildren<SpriteRenderer>();
+        }
+
+        return playerSprite != null && playerSprite.flipX;
+    }
+
+    private void EndSoulAttackAnimation()
+    {
+        if (soulShardAnimator != null && AnimatorHasParameter(soulShardAnimator, "isAttacking", AnimatorControllerParameterType.Bool))
+        {
+            soulShardAnimator.SetBool("isAttacking", false);
+        }
+
+        EndAttackAnimation();
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+
+    private GameObject CreateSoulCircleVisual(string objectName, Color color, float radius, int sortingOrder)
+    {
+        GameObject visual = new GameObject(objectName);
+        SpriteRenderer renderer = visual.AddComponent<SpriteRenderer>();
+        renderer.sprite = GetSoulCircleSprite();
+        renderer.color = color;
+        renderer.sortingOrder = sortingOrder;
+        visual.transform.localScale = Vector3.one * (radius * 2f);
+        return visual;
+    }
+
+    private Sprite GetSoulCircleSprite()
+    {
+        if (soulCircleSprite != null)
+        {
+            return soulCircleSprite;
+        }
+
+        const int size = 64;
+        Texture2D texture = new Texture2D(size, size);
+        Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+        float radius = size * 0.45f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float distance = Vector2.Distance(new Vector2(x, y), center);
+                float alpha = distance <= radius ? 1f : 0f;
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+
+        texture.Apply();
+        soulCircleSprite = Sprite.Create(texture, new Rect(0, 0, size, size), Vector2.one * 0.5f, size);
+        return soulCircleSprite;
+    }
+
+    private void ActivateSoulUltimate()
+    {
+        if (playerTransform == null) return;
+
+        if (activeSoulUltimateRoot != null)
+        {
+            Destroy(activeSoulUltimateRoot);
+        }
+
+        if (soulUltimateCoroutine != null)
+        {
+            StopCoroutine(soulUltimateCoroutine);
+        }
+
+        activeSoulUltimateRoot = new GameObject("SoulUltimateRoot");
+        activeSoulUltimateRoot.transform.position = playerTransform.position;
+
+        GameObject barrierVisual = CreateSoulCircleVisual("SoulBarrierVisual", new Color(0.25f, 0.85f, 1f, 0.18f), soulBarrierRadius, 4);
+        barrierVisual.transform.SetParent(activeSoulUltimateRoot.transform, false);
+
+        soulUltimateCoroutine = StartCoroutine(SoulUltimateRoutine());
+    }
+
+    private IEnumerator SoulUltimateRoutine()
+    {
+        float endTime = Time.time + soulUltimateDuration;
+        float nextHealTime = Time.time;
+        float nextButterflyTime = Time.time;
+
+        while (Time.time < endTime)
+        {
+            Vector3 center = playerTransform != null ? playerTransform.position : activeSoulUltimateRoot.transform.position;
+            if (activeSoulUltimateRoot != null)
+            {
+                activeSoulUltimateRoot.transform.position = center;
+            }
+
+            RepelEnemiesFromSoulBarrier(center);
+
+            if (Time.time >= nextHealTime)
+            {
+                ApplySoulSupportPulse(center, soulFloorHealAmount, true);
+                nextHealTime = Time.time + soulFloorHealInterval;
+            }
+
+            if (Time.time >= nextButterflyTime)
+            {
+                TrySpawnSoulButterfly(center);
+                nextButterflyTime = Time.time + soulButterflySpawnInterval;
+            }
+
+            yield return null;
+        }
+
+        if (activeSoulUltimateRoot != null)
+        {
+            Destroy(activeSoulUltimateRoot);
+            activeSoulUltimateRoot = null;
+        }
+
+        soulUltimateCoroutine = null;
+    }
+
+    private void RepelEnemiesFromSoulBarrier(Vector3 center)
+    {
+        Collider2D[] colliders = Physics2D.OverlapCircleAll(center, soulBarrierRadius);
+        foreach (Collider2D hit in colliders)
+        {
+            if (hit == null || !IsEnemy(hit.gameObject))
+            {
+                continue;
+            }
+
+            Rigidbody2D enemyRb = hit.attachedRigidbody;
+            if (enemyRb == null)
+            {
+                continue;
+            }
+
+            Vector2 pushDirection = (enemyRb.position - (Vector2)center).normalized;
+            if (pushDirection == Vector2.zero)
+            {
+                pushDirection = Vector2.up;
+            }
+
+            enemyRb.AddForce(pushDirection * soulBarrierRepelForce, ForceMode2D.Force);
+        }
+    }
+
+    private void TrySpawnSoulButterfly(Vector3 center)
+    {
+        GameObject target = FindEnemyOutsideBarrier(center, soulButterflySeekRange, soulBarrierRadius * 0.75f);
+        if (target == null)
+        {
+            return;
+        }
+
+        Vector2 offset = Random.insideUnitCircle * Mathf.Max(0.75f, soulBarrierRadius * 0.5f);
+        Vector3 spawnPosition = center + new Vector3(offset.x, Mathf.Abs(offset.y) + 0.9f, 0f);
+        GameObject butterfly = CreateSoulCircleVisual("SoulButterfly", new Color(0.85f, 1f, 0.95f, 0.95f), 0.2f, 7);
+        butterfly.transform.position = spawnPosition;
+
+        GenerateUltimateCharge(soulUltimateButterflyCharge);
+        StartCoroutine(SoulButterflyFlight(butterfly, target, center));
+    }
+
+    private IEnumerator SoulButterflyFlight(GameObject butterfly, GameObject target, Vector3 barrierCenter)
+    {
+        float lifetime = 3f;
+        float speed = 5.5f;
+        float elapsed = 0f;
+
+        while (butterfly != null && elapsed < lifetime)
+        {
+            elapsed += Time.deltaTime;
+
+            if (target == null || !IsEnemy(target))
+            {
+                target = FindEnemyOutsideBarrier(barrierCenter, soulButterflySeekRange, 0f);
+            }
+
+            Vector3 destination = target != null
+                ? target.transform.position + Vector3.up * 0.5f
+                : barrierCenter + new Vector3(0f, 1f, 0f);
+
+            butterfly.transform.position = Vector3.MoveTowards(butterfly.transform.position, destination, speed * Time.deltaTime);
+
+            if (target != null && Vector3.Distance(butterfly.transform.position, target.transform.position) <= 0.4f)
+            {
+                DealMagicDamageToEnemy(target, soulButterflyDamage);
+                Destroy(butterfly);
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        if (butterfly != null)
+        {
+            Destroy(butterfly);
+        }
+    }
+
+    private GameObject FindEnemyOutsideBarrier(Vector3 center, float maxRange, float minRange)
+    {
+        GameObject nearestTarget = null;
+        float nearestDistance = float.MaxValue;
+
+        EnemyBehavior[] enemies = FindObjectsByType<EnemyBehavior>(FindObjectsSortMode.None);
+        foreach (EnemyBehavior enemy in enemies)
+        {
+            if (enemy == null || enemy.IsDead)
+            {
+                continue;
+            }
+
+            float distance = Vector3.Distance(center, enemy.transform.position);
+            if (distance < minRange || distance > maxRange || distance >= nearestDistance)
+            {
+                continue;
+            }
+
+            nearestDistance = distance;
+            nearestTarget = enemy.gameObject;
+        }
+
+        DragonBoss[] dragons = FindObjectsByType<DragonBoss>(FindObjectsSortMode.None);
+        foreach (DragonBoss dragon in dragons)
+        {
+            if (dragon == null || dragon.IsDead)
+            {
+                continue;
+            }
+
+            float distance = Vector3.Distance(center, dragon.transform.position);
+            if (distance < minRange || distance > maxRange || distance >= nearestDistance)
+            {
+                continue;
+            }
+
+            nearestDistance = distance;
+            nearestTarget = dragon.gameObject;
+        }
+
+        return nearestTarget;
+    }
+
+    private bool AnimatorHasParameter(Animator animator, string parameterName, AnimatorControllerParameterType parameterType)
+    {
+        if (animator == null)
+        {
+            return false;
+        }
+
+        AnimatorControllerParameter[] parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (parameters[i].name == parameterName && parameters[i].type == parameterType)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private void CreateWaveAttack()
     {
         // Determine number of blocks based on charge time
@@ -2142,6 +3058,123 @@ public class WeaponClassController : NetworkBehaviour
         else if (chargeTime < 0.8f) return 2;   // 0.5-0.8 seconds = 2 blocks
         else if (chargeTime < 1.2f) return 3;   // 0.8-1.2 seconds = 3 blocks
         else return 5;                          // 1.2+ seconds = 5 blocks
+    }
+
+    private bool StartValorChargeAttack()
+    {
+        if (equippedShards[activeSlotIndex] != ShardType.ValorShard || playerTransform == null)
+        {
+            return false;
+        }
+
+        if (isChargingValorAttack || IsPlayingAttackAnimation())
+        {
+            return false;
+        }
+
+        float timeSinceLastWave = Time.time - lastWaveAttackTime;
+        if (timeSinceLastWave < waveCooldown)
+        {
+            Debug.Log($"Wave attack blocked by cooldown - timeSince: {timeSinceLastWave:F3}, cooldown: {waveCooldown}");
+            return false;
+        }
+
+        if (valorChargeReleaseCoroutine != null)
+        {
+            StopCoroutine(valorChargeReleaseCoroutine);
+            valorChargeReleaseCoroutine = null;
+        }
+
+        StartAttackAnimation();
+        isChargingValorAttack = true;
+        chargeStartTime = Time.time;
+        currentChargeTime = 0f;
+
+        if (playerMovement != null)
+        {
+            playerMovement.SetAnimatorBool("isCharging", true);
+        }
+
+        if (IsOwner)
+        {
+            networkIsChargingValorAttack.Value = true;
+            networkCurrentChargeTime.Value = 0f;
+        }
+
+        return true;
+    }
+
+    private void ReleaseValorChargeAttack()
+    {
+        if (!isChargingValorAttack)
+        {
+            return;
+        }
+
+        float releasedChargeTime = Mathf.Max(0f, Time.time - chargeStartTime);
+        currentChargeTime = releasedChargeTime;
+        isChargingValorAttack = false;
+
+        if (playerMovement != null)
+        {
+            playerMovement.SetAnimatorBool("isCharging", false);
+        }
+
+        if (IsOwner)
+        {
+            networkIsChargingValorAttack.Value = false;
+            networkCurrentChargeTime.Value = releasedChargeTime;
+        }
+
+        if (valorChargeReleaseCoroutine != null)
+        {
+            StopCoroutine(valorChargeReleaseCoroutine);
+        }
+
+        valorChargeReleaseCoroutine = StartCoroutine(ValorChargeReleaseRoutine(releasedChargeTime));
+    }
+
+    private IEnumerator ValorChargeReleaseRoutine(float releasedChargeTime)
+    {
+        Animator playerAnimator = GetComponent<Animator>();
+        if (playerAnimator == null)
+        {
+            playerAnimator = GetComponentInChildren<Animator>();
+        }
+
+        float releaseDuration = 1f;
+        if (playerAnimator != null && playerAnimator.runtimeAnimatorController != null)
+        {
+            foreach (AnimationClip clip in playerAnimator.runtimeAnimatorController.animationClips)
+            {
+                if (clip != null && clip.name == "ValorShardChargeRelease")
+                {
+                    releaseDuration = Mathf.Max(0.05f, clip.length);
+                    break;
+                }
+            }
+        }
+
+        float spawnDelay = Mathf.Clamp(releaseDuration * 0.2f, 0.05f, 0.3f);
+        yield return new WaitForSeconds(spawnDelay);
+
+        currentChargeTime = releasedChargeTime;
+        CreateWaveAttack();
+        lastWaveAttackTime = Time.time;
+        chargeStartTime = 0f;
+
+        if (IsOwner)
+        {
+            networkCurrentChargeTime.Value = 0f;
+        }
+
+        currentChargeTime = 0f;
+
+        float remainingDuration = Mathf.Max(0.05f, releaseDuration - spawnDelay + 0.05f);
+        yield return new WaitForSeconds(remainingDuration);
+
+        valorChargeReleaseCoroutine = null;
+        EndAttackAnimation();
     }
     
     private IEnumerator CreateWaveBlocks(int blockCount, Vector3 direction)
@@ -3148,7 +4181,7 @@ public class WeaponClassController : NetworkBehaviour
         {
             nearbyEnemies.Add(candidates[i]);
         }
-        
+
         return nearbyEnemies;
     }
     
@@ -3186,23 +4219,17 @@ public class WeaponClassController : NetworkBehaviour
         lineRenderer.SetPositions(arcPoints);
         glowRenderer.SetPositions(arcPoints); // Use same path for glow
         
-        // Deal damage to target
-        EnemyBehavior enemyBehavior = target.GetComponent<EnemyBehavior>();
-        if (enemyBehavior != null)
+        // Deal damage to target on the authoritative instance only
+        if (target != null && lightningHitPrefab != null)
         {
-            enemyBehavior.TakeDamage(lightningDamage);
-            
-            // Trigger lightning hit effect at enemy position
-            if (lightningHitPrefab != null)
-            {
-                GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
-                Debug.Log($"Lightning hit effect triggered at enemy: {target.name}");
-                
-                // Auto-destroy the particle effect after a reasonable time
-                Destroy(hitEffect, 3f);
-            }
-            
-            // Trigger chain lightning from this enemy
+            GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
+            Debug.Log($"Lightning hit effect triggered at enemy: {target.name}");
+            Destroy(hitEffect, 3f);
+        }
+
+        if (target != null)
+        {
+            DealMagicDamageToEnemy(target, lightningDamage);
             StartCoroutine(TriggerChainLightning(target, lightningDamage));
         }
         
@@ -3270,22 +4297,16 @@ public class WeaponClassController : NetworkBehaviour
         lineRenderer.SetPositions(arcPoints);
         chainGlowRenderer.SetPositions(arcPoints); // Use same path for glow
         
-        // Deal chain damage to target
-        EnemyBehavior enemyBehavior = target.GetComponent<EnemyBehavior>();
-        if (enemyBehavior != null)
+        if (target != null && lightningHitPrefab != null)
         {
-            enemyBehavior.TakeDamage(chainDamage);
-            
-            // Trigger lightning hit effect at enemy position for chain lightning
-            if (lightningHitPrefab != null)
-            {
-                GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
-                Debug.Log($"Chain lightning hit effect triggered at enemy: {target.name}");
-                
-                // Auto-destroy the particle effect after a reasonable time
-                Destroy(hitEffect, 3f);
-            }
-            
+            GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
+            Debug.Log($"Chain lightning hit effect triggered at enemy: {target.name}");
+            Destroy(hitEffect, 3f);
+        }
+
+        if (target != null)
+        {
+            DealMagicDamageToEnemy(target, chainDamage);
             Debug.Log($"Chain lightning hit {target.name} for {chainDamage} damage");
         }
         
@@ -3371,23 +4392,16 @@ public class WeaponClassController : NetworkBehaviour
         lineRenderer.SetPositions(boltPoints);
         boltGlowRenderer.SetPositions(boltPoints); // Use same path for glow
         
-        // Deal damage to target
-        EnemyBehavior enemyBehavior = target.GetComponent<EnemyBehavior>();
-        if (enemyBehavior != null)
+        if (target != null && lightningHitPrefab != null)
         {
-            enemyBehavior.TakeDamage(boltDamage);
-            
-            // Trigger lightning hit effect at enemy position for lightning bolt
-            if (lightningHitPrefab != null)
-            {
-                GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
-                Debug.Log($"Lightning bolt hit effect triggered at enemy: {target.name}");
-                
-                // Auto-destroy the particle effect after a reasonable time
-                Destroy(hitEffect, 3f);
-            }
-            
-            // Trigger chain lightning from this enemy
+            GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
+            Debug.Log($"Lightning bolt hit effect triggered at enemy: {target.name}");
+            Destroy(hitEffect, 3f);
+        }
+
+        if (target != null)
+        {
+            DealMagicDamageToEnemy(target, boltDamage);
             StartCoroutine(TriggerChainLightning(target, boltDamage));
         }
         
@@ -3395,26 +4409,27 @@ public class WeaponClassController : NetworkBehaviour
         GameObject impact = new GameObject("BoltImpact");
         impact.transform.position = endPos;
         
-        // Add impact damage area
-        BoxCollider2D impactCollider = impact.AddComponent<BoxCollider2D>();
-        impactCollider.size = Vector2.one * 2f; // 2x2 impact area
-        impactCollider.isTrigger = true;
-        
-        DamageObject impactDamage = impact.AddComponent<DamageObject>();
-        impactDamage.damageAmount = playerMovement.GetModifiedMagicDamage(boltDamage / 2); // Half damage for impact area
-        impactDamage.damageRate = 0.1f;
-        
-        // Configure impact damage
-        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (excludeField != null)
+        if (ShouldApplyAuthoritativeMagicGameplay())
         {
-            excludeField.SetValue(impactDamage, true);
-        }
-        
-        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (enemyDamageField != null)
-        {
-            enemyDamageField.SetValue(impactDamage, true);
+            BoxCollider2D impactCollider = impact.AddComponent<BoxCollider2D>();
+            impactCollider.size = Vector2.one * 2f; // 2x2 impact area
+            impactCollider.isTrigger = true;
+
+            DamageObject impactDamage = impact.AddComponent<DamageObject>();
+            impactDamage.damageAmount = playerMovement.GetModifiedMagicDamage(boltDamage / 2); // Half damage for impact area
+            impactDamage.damageRate = 0.1f;
+
+            var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (excludeField != null)
+            {
+                excludeField.SetValue(impactDamage, true);
+            }
+
+            var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (enemyDamageField != null)
+            {
+                enemyDamageField.SetValue(impactDamage, true);
+            }
         }
         
         // Visual impact effect (animated lightning blast or sprite)
@@ -3699,6 +4714,11 @@ public class WeaponClassController : NetworkBehaviour
     
     private void UpdateSlotDisplay(int slotIndex)
     {
+        if (slotIndex < 0 || slotIndex >= slotImages.Length || slotImages[slotIndex] == null)
+        {
+            return;
+        }
+
         ShardType shardType = equippedShards[slotIndex];
         
         if (shardType != ShardType.None && shardSprites.ContainsKey(shardType))
@@ -4444,20 +5464,28 @@ public class WeaponClassController : NetworkBehaviour
     /// </summary>
     private void UpdatePlayerAnimationController()
     {
-        // Only update animation controller for the owner
-        if (!IsOwner) return;
-        
         if (playerMovement == null) 
         {
-            Debug.LogError("WeaponClassController: playerMovement is null in UpdatePlayerAnimationController");
-            return;
+            playerMovement = GetComponent<PlayerMovement>();
+            if (playerMovement == null)
+            {
+                Debug.LogError("WeaponClassController: playerMovement is null in UpdatePlayerAnimationController");
+                return;
+            }
+        }
+
+        if (playerMovement.playerAnimator == null)
+        {
+            playerMovement.playerAnimator = GetComponentInChildren<Animator>();
+            if (playerMovement.playerAnimator == null)
+            {
+                playerMovement.playerAnimator = GetComponent<Animator>();
+            }
         }
         
         ShardType activeShard = equippedShards[activeSlotIndex];
         RuntimeAnimatorController targetController = defaultPlayerAnimController;
-        
-        Debug.Log($"WeaponClassController: Updating animation controller for shard: {activeShard}");
-        
+
         // Select the appropriate animation controller based on active shard
         switch (activeShard)
         {
@@ -4470,27 +5498,32 @@ public class WeaponClassController : NetworkBehaviour
             case ShardType.StormShard:
                 targetController = stormShardPlayerAnimController ?? defaultPlayerAnimController;
                 break;
+            case ShardType.SoulShard:
+                targetController = soulShardPlayerAnimController ?? defaultPlayerAnimController;
+                break;
             case ShardType.None:
             default:
                 targetController = defaultPlayerAnimController;
                 break;
         }
-        
-        Debug.Log($"WeaponClassController: Selected controller: {(targetController != null ? targetController.name : "null")}");
-        
-        // Apply the controller directly to the PlayerMovement's animator
-        if (playerMovement != null && playerMovement.playerAnimator != null)
+
+        if (playerMovement.playerAnimator != null)
         {
             if (playerMovement.playerAnimator.runtimeAnimatorController != targetController)
             {
                 playerMovement.playerAnimator.runtimeAnimatorController = targetController;
-                playerMovement.currentAnimController = targetController;
-                Debug.Log($"Applied animation controller: {targetController.name} to player animator");
             }
+
+            playerMovement.currentAnimController = targetController;
         }
         else
         {
             Debug.LogError("PlayerMovement or playerAnimator is null!");
+        }
+
+        if (IsOwner && IsSpawned)
+        {
+            playerMovement.SetAnimationController(targetController);
         }
     }
     
@@ -4732,6 +5765,16 @@ public class WeaponClassController : NetworkBehaviour
                 break;
             case ShardType.StormShard:
                 Debug.Log("StormShard ultimate not yet implemented");
+                break;
+            case ShardType.SoulShard:
+                if (IsSpawned)
+                {
+                    ActivateSoulUltimateServerRpc();
+                }
+                else
+                {
+                    ActivateSoulUltimate();
+                }
                 break;
             default:
                 Debug.Log("No shard equipped - cannot use ultimate");
@@ -5103,6 +6146,7 @@ public class WeaponClassController : NetworkBehaviour
     /// </summary>
     public void DropEquippedShardsOnDeath()
     {
+        CleanupOwnedEffectsAndState();
         DropEquippedShards();
     }
     
@@ -5148,6 +6192,8 @@ public class WeaponClassController : NetworkBehaviour
                 return whisperShardPrefab;
             case ShardType.StormShard:
                 return stormShardPrefab;
+            case ShardType.SoulShard:
+                return soulShardPrefab;
             default:
                 return null;
         }

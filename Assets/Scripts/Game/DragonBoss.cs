@@ -295,11 +295,7 @@ public class DragonBoss : NetworkBehaviour
     
     private void FindPlayer()
     {
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
-        {
-            playerTransform = player.transform;
-        }
+        playerTransform = FindNearestPlayerTarget();
     }
     
     private void SetupCollisionLayers()
@@ -507,15 +503,15 @@ public class DragonBoss : NetworkBehaviour
     {
         Transform nearestTarget = null;
         float nearestDistance = float.MaxValue;
-        
-        // Check player
-        if (playerTransform != null)
+
+        Transform nearestPlayer = FindNearestPlayerTarget();
+        if (nearestPlayer != null)
         {
-            float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
+            float distanceToPlayer = Vector3.Distance(transform.position, nearestPlayer.position);
             if (distanceToPlayer < nearestDistance)
             {
                 nearestDistance = distanceToPlayer;
-                nearestTarget = playerTransform;
+                nearestTarget = nearestPlayer;
             }
         }
         
@@ -538,7 +534,37 @@ public class DragonBoss : NetworkBehaviour
             }
         }
         
+        playerTransform = nearestTarget;
         return nearestTarget;
+    }
+
+    private Transform FindNearestPlayerTarget()
+    {
+        PlayerMovement[] players = FindObjectsByType<PlayerMovement>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        Transform nearestPlayer = null;
+        float nearestDistance = float.MaxValue;
+
+        foreach (PlayerMovement player in players)
+        {
+            if (!IsValidPlayerTarget(player))
+            {
+                continue;
+            }
+
+            float distanceToPlayer = Vector3.Distance(transform.position, player.transform.position);
+            if (distanceToPlayer < nearestDistance)
+            {
+                nearestDistance = distanceToPlayer;
+                nearestPlayer = player.transform;
+            }
+        }
+
+        return nearestPlayer;
+    }
+
+    private bool IsValidPlayerTarget(PlayerMovement player)
+    {
+        return player != null && player.isActiveAndEnabled && player.gameObject.activeInHierarchy && !player.IsDead;
     }
     
     private void FaceTarget(Transform target)

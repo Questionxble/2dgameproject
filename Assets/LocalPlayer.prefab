@@ -218,6 +218,7 @@ MonoBehaviour:
   valorShardPlayerAnimController: {fileID: 9100000, guid: 4b1bdc952845c4a6190e0d166e5dd889, type: 2}
   whisperShardPlayerAnimController: {fileID: 9100000, guid: fc389145055564bd7b9fa6a7c0cb4227, type: 2}
   stormShardPlayerAnimController: {fileID: 9100000, guid: 7cca3738551d34394b299f5be21e329d, type: 2}
+  soulShardPlayerAnimController: {fileID: 9100000, guid: 05a597d5deb5c2547846930253e1d1b3, type: 2}
   swordRange: 1.5
   swordWidth: 3
   swordHeight: 6

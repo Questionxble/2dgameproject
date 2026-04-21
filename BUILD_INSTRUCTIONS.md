@@ -26,6 +26,23 @@ You need to create three separate builds for your multiplayer deployment:
 6. Click `Build` and save as `2dgameproject_server`
 7. Upload the entire build folder to your EC2 instance
 
+### Command-Line Build Option
+If the interactive Unity build window hangs during `PostprocessPlayer`, use the editor script entry point instead:
+
+```powershell
+"C:\Program Files\Unity\Hub\Editor\6000.2.5f1\Editor\Unity.exe" `
+  -batchmode -quit `
+  -projectPath "C:\Users\chris\source\repos\2dgameproject" `
+  -executeMethod CommandLineBuild.BuildLinuxDedicatedServer `
+  -buildOutput "C:\Users\chris\source\deployments\Linux\LinuxServerBuild_cli\2dgameproject_server" `
+  -logFile "C:\Users\chris\source\deployments\Linux\linux-server-build.log"
+```
+
+Notes:
+- `-buildOutput` should be the full output path to the Linux server executable, not just a folder.
+- This uses `StandaloneLinux64` with `StandaloneBuildSubtarget.Server`.
+- The detailed build log will be written to the `-logFile` path you provide.
+
 ### EC2 Deployment Commands:
 ```bash
 # On your EC2 instance
