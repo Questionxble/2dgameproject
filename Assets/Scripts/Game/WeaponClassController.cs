@@ -230,6 +230,9 @@ public class WeaponClassController : MonoBehaviour
     [SerializeField] private bool soulVortexFacingDebugLogs = true;
     [SerializeField] private float soulVortexFacingDebugLogInterval = 0.12f;
     private const string SoulOverlayTriggerName = "Trigger";
+    private const float SoulAttackFallbackStateEntryTimeout = 0.75f;
+    private const float SoulAttackFallbackAbsoluteTimeout = 1.5f;
+    private const float SoulAttackEventNormalizedGrace = 0.05f;
     
     [Header("Ultimate Charge Settings")]
     [SerializeField] private float valorLeftClickCharge = 5f; // Charge generated per valor left click attack
@@ -257,6 +260,8 @@ public class WeaponClassController : MonoBehaviour
     private bool isChargingValorAttack = false;
     private float chargeStartTime = 0f;
     private float currentChargeTime = 0f;
+    private Coroutine valorChargeReleaseCoroutine = null;
+    private int pendingValorWaveBlocks = 0;
     
     // ValorShard Multi-Click System
     private int clickCount = 0;
@@ -666,16 +671,31 @@ public class WeaponClassController : MonoBehaviour
     /// </summary>
     private IEnumerator AttackAnimationSafetyTimeout()
     {
-        yield return new WaitForSeconds(3.0f); // 3-second safety timeout
-        
-        if (isPlayingAttackAnimation)
+        float elapsed = 0f;
+
+        while (isPlayingAttackAnimation)
         {
-            Debug.LogWarning("Animation safety timeout triggered - resetting attack state (animation events may not be set up correctly)");
-            EndAttackAnimation();
-            if (playerMovement != null)
+            if (isChargingValorAttack)
             {
-                playerMovement.OnAttackAnimationEnd();
+                elapsed = 0f;
+                yield return null;
+                continue;
             }
+
+            if (elapsed >= 3.0f)
+            {
+                Debug.LogWarning("Animation safety timeout triggered - resetting attack state (animation events may not be set up correctly)");
+                EndAttackAnimation();
+                if (playerMovement != null)
+                {
+                    playerMovement.OnAttackAnimationEnd();
+                }
+
+                yield break;
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
         }
     }
     
@@ -721,6 +741,8 @@ public class WeaponClassController : MonoBehaviour
     private Dictionary<Transform, float> soulFloorBuffCooldownUntil = new Dictionary<Transform, float>();
     private Transform activeSoulVortexFacingPivot = null;
     private Transform activeSoulVortexFxRoot = null;
+    private Animator activeSoulVortexFxAnimator = null;
+    private float activeSoulVortexFallbackEndTime = 0f;
     private float nextSoulVortexFacingDebugLogTime = 0f;
     private int pendingSoulAttackType = -1; // 0=left vortex, 1=right support
     private Coroutine soulAttackFallbackCoroutine = null;
@@ -1251,9 +1273,7 @@ public class WeaponClassController : MonoBehaviour
             ShardType activeWeapon = equippedShards[activeSlotIndex];
             if (activeWeapon == ShardType.ValorShard && rightClickPressed)
             {
-                // Start charging
-                isChargingValorAttack = true;
-                chargeStartTime = Time.time;
+                StartValorChargeAttack();
             }
             
             if (isChargingValorAttack)
@@ -1262,15 +1282,15 @@ public class WeaponClassController : MonoBehaviour
                 
                 if (rightClickReleased)
                 {
-                    // Release charge attack
-                    UseActiveWeapon(true); // Right-click attack
-                    isChargingValorAttack = false;
-                    currentChargeTime = 0f;
+                    ReleaseValorChargeAttack();
                 }
             }
             else if (leftClickPressed)
             {
-                HandleLeftClickInput(activeWeapon);
+                if (activeWeapon != ShardType.ValorShard || !IsPlayingAttackAnimation())
+                {
+                    HandleLeftClickInput(activeWeapon);
+                }
             }
             else if (leftClickReleased)
             {
@@ -1493,16 +1513,7 @@ public class WeaponClassController : MonoBehaviour
         
         if (isRightClick)
         {
-            // Right-click: Wave attack with cooldown
-            float timeSinceLastWave = Time.time - lastWaveAttackTime;
-            if (timeSinceLastWave < waveCooldown)
-            {
-                Debug.Log($"Wave attack blocked by cooldown - timeSince: {timeSinceLastWave:F3}, cooldown: {waveCooldown}");
-                return;
-            }
-            
-            CreateWaveAttack();
-            lastWaveAttackTime = Time.time;
+            StartValorChargeAttack();
         }
         else
         {
@@ -1839,10 +1850,25 @@ public class WeaponClassController : MonoBehaviour
         }
         else
         {
+            if (activeSoulVortex != null || IsPlayingAttackAnimation())
+            {
+                if (soulOverlayDebugLogs)
+                {
+                    Debug.Log("Soul left-click ignored: vortex attack already active.");
+                }
+                return;
+            }
+
+            StartAttackAnimation();
+
             if (TriggerSoulAttackAnimation(0))
             {
                 ScheduleSoulAttackFallback(0);
                 GenerateUltimateCharge(soulLeftClickCharge);
+            }
+            else
+            {
+                EndAttackAnimation();
             }
         }
     }
@@ -1942,13 +1968,16 @@ public class WeaponClassController : MonoBehaviour
         activeSoulVortexFacingPivot = facingPivot.transform;
         activeSoulVortexFacingPivot.SetParent(activeSoulVortex.transform, false);
 
-        float vortexFxLifetime = Mathf.Max(0.25f, soulVortexDuration + Mathf.Max(0f, soulVortexEndVisualLinger));
+        float vortexActiveDuration = ResolveSoulVortexActiveDuration();
+        float vortexFxLifetime = Mathf.Max(0.25f, vortexActiveDuration + Mathf.Max(0f, soulVortexEndVisualLinger));
         if (!SpawnTimedOverlayControllerEffect(soulVortexFxAnim, activeSoulVortexFacingPivot, vortexPos, vortexFxLifetime, "SoulVortexFX") && soulOverlayDebugLogs)
         {
             Debug.LogWarning("Soul Vortex FX controller not assigned. Vortex gameplay active with no animated visual.");
         }
 
         activeSoulVortexFxRoot = FindSoulVortexFxRoot(activeSoulVortexFacingPivot);
+        activeSoulVortexFxAnimator = activeSoulVortexFxRoot != null ? activeSoulVortexFxRoot.GetComponent<Animator>() : null;
+        activeSoulVortexFallbackEndTime = Time.time + vortexActiveDuration;
         nextSoulVortexFacingDebugLogTime = 0f;
         UpdateSoulVortexVisualFacing();
 
@@ -1972,9 +2001,19 @@ public class WeaponClassController : MonoBehaviour
             soulVortexTickCoroutine = null;
         }
 
-        if (activeSoulVortex == null) return;
-
         GameObject vortexToDespawn = activeSoulVortex;
+        activeSoulVortex = null;
+        activeSoulVortexFacingPivot = null;
+        activeSoulVortexFxRoot = null;
+        activeSoulVortexFxAnimator = null;
+        activeSoulVortexFallbackEndTime = 0f;
+
+        if (vortexToDespawn == null)
+        {
+            CompleteSoulLeftClickAttack();
+            return;
+        }
+
         Vector3 burstCenter = vortexToDespawn.transform.position;
         Collider2D[] colliders = Physics2D.OverlapCircleAll(burstCenter, soulVortexRadius);
         foreach (Collider2D hit in colliders)
@@ -1999,9 +2038,7 @@ public class WeaponClassController : MonoBehaviour
             DespawnSoulMagicObject(vortexToDespawn);
         }
 
-        activeSoulVortex = null;
-        activeSoulVortexFacingPivot = null;
-        activeSoulVortexFxRoot = null;
+        CompleteSoulLeftClickAttack();
     }
 
     private IEnumerator DespawnSoulVortexAfterDelay(GameObject vortex, float delay)
@@ -2046,10 +2083,9 @@ public class WeaponClassController : MonoBehaviour
 
     private IEnumerator SoulVortexTickRoutine(GameObject vortex)
     {
-        float endTime = Time.time + soulVortexDuration;
         float nextTickTime = Time.time;
 
-        while (vortex != null && Time.time < endTime)
+        while (vortex != null)
         {
             // Keep vortex aligned with current facing so it stays in front of the player.
             if (playerTransform != null)
@@ -2078,6 +2114,11 @@ public class WeaponClassController : MonoBehaviour
                 }
 
                 nextTickTime = Time.time + soulVortexTickInterval;
+            }
+
+            if (HasSoulVortexReachedEnd())
+            {
+                break;
             }
 
             yield return null;
@@ -2115,7 +2156,34 @@ public class WeaponClassController : MonoBehaviour
 
     private IEnumerator SoulAttackEventFallbackRoutine(int expectedAttackType)
     {
-        yield return new WaitForSeconds(0.12f);
+        string expectedStateName = GetSoulAttackStateName(expectedAttackType);
+        float expectedEventNormalizedTime = GetSoulAttackEventNormalizedTime(expectedAttackType);
+        float stateEntryDeadline = Time.time + SoulAttackFallbackStateEntryTimeout;
+        float hardDeadline = Time.time + SoulAttackFallbackAbsoluteTimeout;
+        bool sawExpectedState = false;
+
+        while (Time.time < hardDeadline)
+        {
+            if (pendingSoulAttackType != expectedAttackType)
+            {
+                yield break;
+            }
+
+            if (IsSoulAnimatorInState(expectedStateName, out AnimatorStateInfo stateInfo))
+            {
+                sawExpectedState = true;
+                if (stateInfo.normalizedTime >= expectedEventNormalizedTime + SoulAttackEventNormalizedGrace)
+                {
+                    break;
+                }
+            }
+            else if (sawExpectedState || Time.time >= stateEntryDeadline)
+            {
+                break;
+            }
+
+            yield return null;
+        }
 
         if (pendingSoulAttackType != expectedAttackType)
         {
@@ -2143,10 +2211,153 @@ public class WeaponClassController : MonoBehaviour
         soulAttackFallbackCoroutine = null;
     }
 
+    private string GetSoulAttackStateName(int attackType)
+    {
+        return attackType == 0 ? "SoulShardAttack1" : "SoulShardAttack2";
+    }
+
+    private string GetSoulAttackEventName(int attackType)
+    {
+        return attackType == 0 ? nameof(SoulVortexStart) : nameof(SoulSupportPulseEvent);
+    }
+
+    private float GetSoulAttackEventNormalizedTime(int attackType)
+    {
+        AnimationClip clip = GetSoulAttackClip(attackType);
+        string eventName = GetSoulAttackEventName(attackType);
+
+        if (clip != null)
+        {
+            AnimationEvent[] animationEvents = clip.events;
+            for (int i = 0; i < animationEvents.Length; i++)
+            {
+                if (animationEvents[i].functionName == eventName)
+                {
+                    return Mathf.Clamp01(animationEvents[i].time / Mathf.Max(0.0001f, clip.length));
+                }
+            }
+        }
+
+        return attackType == 0 ? 0.25f : 0.75f;
+    }
+
+    private AnimationClip GetSoulAttackClip(int attackType)
+    {
+        RuntimeAnimatorController controller = null;
+        if (soulShardAnimator != null)
+        {
+            controller = soulShardAnimator.runtimeAnimatorController;
+        }
+
+        if (controller == null)
+        {
+            controller = soulShardPlayerAnimController;
+        }
+
+        if (controller == null)
+        {
+            return null;
+        }
+
+        string clipName = GetSoulAttackStateName(attackType);
+        AnimationClip[] clips = controller.animationClips;
+        for (int i = 0; i < clips.Length; i++)
+        {
+            if (clips[i] != null && clips[i].name == clipName)
+            {
+                return clips[i];
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsSoulAnimatorInState(string stateName, out AnimatorStateInfo stateInfo)
+    {
+        stateInfo = default;
+        if (soulShardAnimator == null)
+        {
+            return false;
+        }
+
+        stateInfo = soulShardAnimator.GetCurrentAnimatorStateInfo(0);
+        if (stateInfo.IsName(stateName))
+        {
+            return true;
+        }
+
+        if (!soulShardAnimator.IsInTransition(0))
+        {
+            return false;
+        }
+
+        AnimatorStateInfo nextStateInfo = soulShardAnimator.GetNextAnimatorStateInfo(0);
+        if (nextStateInfo.IsName(stateName))
+        {
+            stateInfo = nextStateInfo;
+            return true;
+        }
+
+        return false;
+    }
+
+    private float ResolveSoulVortexActiveDuration()
+    {
+        return GetControllerPrimaryClipLength(soulVortexFxAnim, soulVortexDuration);
+    }
+
+    private float GetControllerPrimaryClipLength(RuntimeAnimatorController controller, float fallbackDuration)
+    {
+        if (controller != null)
+        {
+            AnimationClip[] clips = controller.animationClips;
+            if (clips != null && clips.Length > 0 && clips[0] != null)
+            {
+                return Mathf.Max(0.01f, clips[0].length);
+            }
+        }
+
+        return Mathf.Max(0.01f, fallbackDuration);
+    }
+
+    private bool HasSoulVortexReachedEnd()
+    {
+        if (activeSoulVortexFxAnimator != null)
+        {
+            AnimatorStateInfo stateInfo = activeSoulVortexFxAnimator.GetCurrentAnimatorStateInfo(0);
+            if (stateInfo.normalizedTime >= 0.999f)
+            {
+                return true;
+            }
+        }
+
+        return Time.time >= activeSoulVortexFallbackEndTime;
+    }
+
+    private void CompleteSoulLeftClickAttack()
+    {
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+            return;
+        }
+
+        if (soulShardAnimator != null && AnimatorHasBool(soulShardAnimator, "isAttacking"))
+        {
+            soulShardAnimator.SetBool("isAttacking", false);
+        }
+
+        EndAttackAnimation();
+    }
+
     private void ResetCombatStateForShardSwitch()
     {
         // Clear universal attack lock and queued Valor state so other shards are not blocked.
         EndAttackAnimation();
+        isChargingValorAttack = false;
+        chargeStartTime = 0f;
+        currentChargeTime = 0f;
+        pendingValorWaveBlocks = 0;
         isPerformingSpecialAttack = false;
         isPerformingThrust = false;
         clickCount = 0;
@@ -2157,6 +2368,12 @@ public class WeaponClassController : MonoBehaviour
         {
             StopCoroutine(attackQueueProcessor);
             attackQueueProcessor = null;
+        }
+
+        if (valorChargeReleaseCoroutine != null)
+        {
+            StopCoroutine(valorChargeReleaseCoroutine);
+            valorChargeReleaseCoroutine = null;
         }
 
         // Clear Soul input state carry-over.
@@ -2175,6 +2392,7 @@ public class WeaponClassController : MonoBehaviour
 
         if (playerMovement != null)
         {
+            playerMovement.SetAnimatorBool("isCharging", false);
             playerMovement.OnAttackAnimationEnd();
         }
     }
@@ -2512,6 +2730,120 @@ public class WeaponClassController : MonoBehaviour
         return false;
     }
 
+    private bool StartValorChargeAttack()
+    {
+        if (equippedShards[activeSlotIndex] != ShardType.ValorShard || playerTransform == null)
+        {
+            return false;
+        }
+
+        if (isChargingValorAttack || IsPlayingAttackAnimation())
+        {
+            return false;
+        }
+
+        float timeSinceLastWave = Time.time - lastWaveAttackTime;
+        if (timeSinceLastWave < waveCooldown)
+        {
+            Debug.Log($"Wave attack blocked by cooldown - timeSince: {timeSinceLastWave:F3}, cooldown: {waveCooldown}");
+            return false;
+        }
+
+        if (valorChargeReleaseCoroutine != null)
+        {
+            StopCoroutine(valorChargeReleaseCoroutine);
+            valorChargeReleaseCoroutine = null;
+        }
+
+        StartAttackAnimation();
+        isChargingValorAttack = true;
+        chargeStartTime = Time.time;
+        currentChargeTime = 0f;
+        pendingValorWaveBlocks = 0;
+
+        if (playerMovement != null)
+        {
+            playerMovement.SetAnimatorBool("isCharging", true);
+        }
+
+        return true;
+    }
+
+    private void ReleaseValorChargeAttack()
+    {
+        if (!isChargingValorAttack)
+        {
+            return;
+        }
+
+        currentChargeTime = Mathf.Max(0f, Time.time - chargeStartTime);
+        pendingValorWaveBlocks = GetWaveBlockCount(currentChargeTime);
+        isChargingValorAttack = false;
+
+        if (playerMovement != null)
+        {
+            playerMovement.SetAnimatorBool("isCharging", false);
+        }
+
+        if (valorChargeReleaseCoroutine != null)
+        {
+            StopCoroutine(valorChargeReleaseCoroutine);
+        }
+
+        valorChargeReleaseCoroutine = StartCoroutine(ValorChargeReleaseRoutine(pendingValorWaveBlocks));
+    }
+
+    private IEnumerator ValorChargeReleaseRoutine(int waveBlocks)
+    {
+        Animator playerAnimator = GetPlayerAnimator();
+        float releaseDuration = GetAnimatorClipLength(playerAnimator, "ValorShardChargeRelease", 1f);
+        float spawnDelay = Mathf.Clamp(releaseDuration * 0.2f, 0.05f, 0.3f);
+
+        yield return new WaitForSeconds(spawnDelay);
+
+        CreateWaveAttack(waveBlocks);
+        lastWaveAttackTime = Time.time;
+        pendingValorWaveBlocks = 0;
+        currentChargeTime = 0f;
+        chargeStartTime = 0f;
+
+        float remainingDuration = Mathf.Max(0.05f, releaseDuration - spawnDelay + 0.05f);
+        yield return new WaitForSeconds(remainingDuration);
+
+        valorChargeReleaseCoroutine = null;
+        EndAttackAnimation();
+    }
+
+    private Animator GetPlayerAnimator()
+    {
+        Animator animator = GetComponent<Animator>();
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>();
+        }
+
+        return animator;
+    }
+
+    private float GetAnimatorClipLength(Animator animator, string clipName, float fallbackLength)
+    {
+        if (animator == null || animator.runtimeAnimatorController == null || string.IsNullOrWhiteSpace(clipName))
+        {
+            return fallbackLength;
+        }
+
+        AnimationClip[] clips = animator.runtimeAnimatorController.animationClips;
+        for (int i = 0; i < clips.Length; i++)
+        {
+            if (clips[i] != null && clips[i].name == clipName)
+            {
+                return Mathf.Max(0.05f, clips[i].length);
+            }
+        }
+
+        return fallbackLength;
+    }
+
     private void ActivateSoulUltimate()
     {
         if (playerTransform == null) return;
@@ -2544,6 +2876,7 @@ public class WeaponClassController : MonoBehaviour
         Vector3 center = playerTransform.position;
         float effectiveBarrierRadius = GetEffectiveSoulBarrierRadius();
         float visualBarrierRadius = effectiveBarrierRadius * Mathf.Clamp(soulBarrierVisualScale, 0.2f, 1f);
+        float floorVisualRadius = GetSoulUltimateFloorRadius(effectiveBarrierRadius, visualBarrierRadius);
         float feetY = GetPlayerFeetY();
         float floorY = feetY + soulFloorVisualYOffset;
         Vector3 floorCenter = new Vector3(center.x, floorY, center.z);
@@ -2576,13 +2909,13 @@ public class WeaponClassController : MonoBehaviour
         barrierComponent.barrierRadius = effectiveBarrierRadius;
         barrierComponent.repelForce = soulBarrierRepelForce;
 
-        GameObject floor = CreateSoulFloorVisual(floorCenter, visualBarrierRadius * 2f);
+        GameObject floor = CreateSoulFloorVisual(floorCenter, floorVisualRadius * 2f);
         floor.transform.SetParent(activeSoulUltimateRoot.transform, true);
 
-        soulUltimateCoroutine = StartCoroutine(SoulUltimateRoutine(center, visualBarrierRadius, floorY));
+        soulUltimateCoroutine = StartCoroutine(SoulUltimateRoutine(center, visualBarrierRadius, floorVisualRadius, floorY));
     }
 
-    private IEnumerator SoulUltimateRoutine(Vector3 center, float visualBarrierRadius, float floorY)
+    private IEnumerator SoulUltimateRoutine(Vector3 center, float visualBarrierRadius, float floorVisualRadius, float floorY)
     {
         float endTime = Time.time + soulUltimateDuration;
         float nextHealTick = Time.time;
@@ -2598,7 +2931,7 @@ public class WeaponClassController : MonoBehaviour
 
             if (Time.time >= nextButterflyTick)
             {
-                TrySpawnSoulButterfly(center, GetEffectiveSoulBarrierRadius(), visualBarrierRadius, floorY);
+                TrySpawnSoulButterfly(center, GetEffectiveSoulBarrierRadius(), floorVisualRadius, floorY);
                 nextButterflyTick = Time.time + soulButterflySpawnInterval;
             }
 
@@ -2640,26 +2973,33 @@ public class WeaponClassController : MonoBehaviour
     private void TrySpawnSoulButterfly(Vector3 center, float barrierRadius, float visualBarrierRadius, float floorY)
     {
         GameObject target = FindEnemyOutsideBarrier(center, soulButterflySeekRange, barrierRadius);
+        float spawnRadius = Mathf.Max(0.35f, visualBarrierRadius - 0.35f);
         Vector3 spawnPosition = new Vector3(
-            center.x + Random.Range(-visualBarrierRadius, visualBarrierRadius),
-            floorY + 0.35f + Random.Range(0f, 0.2f),
+            center.x + Random.Range(-spawnRadius, spawnRadius),
+            floorY + Random.Range(0.45f, 0.85f),
             center.z);
         GameObject butterfly = CreateSoulButterflyVisual(spawnPosition);
 
-        StartCoroutine(SoulButterflyFlight(butterfly, target, floorY));
+        StartCoroutine(SoulButterflyFlight(butterfly, target, center, barrierRadius, floorY));
     }
 
-    private IEnumerator SoulButterflyFlight(GameObject butterfly, GameObject target, float floorY)
+    private IEnumerator SoulButterflyFlight(GameObject butterfly, GameObject target, Vector3 barrierCenter, float barrierRadius, float floorY)
     {
-        float moveSpeed = 5f;
-        float maxLife = 2.5f;
+        float moveSpeed = 4.1f;
+        float chaseSpeed = 5.8f;
+        float maxLife = 3.25f;
         float life = 0f;
-        float nextWanderRefresh = 0f;
-        Vector2 wanderDirection = Random.insideUnitCircle.normalized;
+        float nextWanderRefresh = Time.time;
+        Vector3 wanderTarget = butterfly != null ? butterfly.transform.position : barrierCenter;
+        Vector2 currentVelocity = Random.insideUnitCircle.normalized * Random.Range(1.2f, 2.2f);
         float randomPhase = Random.Range(0f, 6.28318f);
-        float flutterFrequency = Random.Range(7f, 14f);
-        float minY = floorY + 0.15f;
-        float maxY = floorY + 1.2f;
+        float flutterFrequency = Random.Range(1.6f, 2.8f);
+        float lateralFrequency = Random.Range(1.1f, 2.2f);
+        float flutterAmplitude = Random.Range(0.14f, 0.26f);
+        float lateralAmplitude = Random.Range(0.08f, 0.18f);
+        float minY = floorY + 0.3f;
+        float maxY = floorY + 1.65f;
+        float idleHoverY = Mathf.Clamp(floorY + Random.Range(0.8f, 1.25f), minY, maxY);
 
         while (butterfly != null && life < maxLife)
         {
@@ -2672,23 +3012,54 @@ public class WeaponClassController : MonoBehaviour
 
             if (Time.time >= nextWanderRefresh)
             {
-                wanderDirection = Random.insideUnitCircle.normalized;
                 if (target == null)
                 {
-                    wanderDirection.y = Mathf.Abs(wanderDirection.y) + 0.2f;
-                    wanderDirection = wanderDirection.normalized;
+                    Vector2 randomOffset = Random.insideUnitCircle * Random.Range(0.7f, 1.8f);
+                    randomOffset.y = Mathf.Abs(randomOffset.y) + 0.35f;
+                    Vector3 candidate = butterfly.transform.position + (Vector3)randomOffset;
+                    candidate.x = Mathf.Clamp(candidate.x, barrierCenter.x - barrierRadius, barrierCenter.x + barrierRadius);
+                    candidate.y = Mathf.Clamp(candidate.y, minY, maxY);
+                    wanderTarget = candidate;
                 }
-                nextWanderRefresh = Time.time + Random.Range(0.08f, 0.22f);
+                nextWanderRefresh = Time.time + Random.Range(0.35f, 0.8f);
             }
 
-            Vector2 towardEnemy = target != null ? ((Vector2)target.transform.position - (Vector2)butterfly.transform.position).normalized : wanderDirection;
-            Vector2 erraticSteer = target != null
-                ? (towardEnemy * 0.72f + wanderDirection * 0.28f).normalized
-                : wanderDirection;
+            Vector2 desiredVelocity;
+            float desiredY;
 
-            Vector3 nextPos = butterfly.transform.position + (Vector3)(erraticSteer * moveSpeed * Time.deltaTime);
-            float flutter = Mathf.Sin((life * flutterFrequency) + randomPhase) * 0.08f;
-            nextPos.y = Mathf.Clamp(nextPos.y + flutter, minY, maxY);
+            if (target != null)
+            {
+                Vector3 targetPosition = target.transform.position + new Vector3(0f, 0.45f, 0f);
+                Vector2 towardEnemy = ((Vector2)targetPosition - (Vector2)butterfly.transform.position).normalized;
+                Vector2 curvedSteer = new Vector2(-towardEnemy.y, towardEnemy.x) * (Mathf.Sin((life * lateralFrequency) + randomPhase) * 0.22f);
+                desiredVelocity = (towardEnemy + curvedSteer).normalized * chaseSpeed;
+                desiredY = Mathf.Clamp(targetPosition.y + Mathf.Sin((life * flutterFrequency) + randomPhase) * flutterAmplitude, minY, maxY);
+            }
+            else
+            {
+                Vector2 towardWander = ((Vector2)wanderTarget - (Vector2)butterfly.transform.position);
+                if (towardWander.sqrMagnitude < 0.04f)
+                {
+                    nextWanderRefresh = Time.time;
+                }
+
+                Vector2 drift = new Vector2(
+                    Mathf.Sin((life * lateralFrequency) + randomPhase),
+                    Mathf.Cos((life * flutterFrequency * 0.75f) + randomPhase * 0.7f)) * lateralAmplitude;
+                desiredVelocity = towardWander.sqrMagnitude > 0.0001f
+                    ? (towardWander.normalized * moveSpeed) + drift
+                    : drift;
+                desiredY = Mathf.Clamp(idleHoverY + Mathf.Sin((life * flutterFrequency) + randomPhase) * flutterAmplitude, minY, maxY);
+            }
+
+            float steerRate = target != null ? 6.5f : 3.5f;
+            currentVelocity = Vector2.Lerp(currentVelocity, desiredVelocity, Time.deltaTime * steerRate);
+
+            Vector3 nextPos = butterfly.transform.position + (Vector3)(currentVelocity * Time.deltaTime);
+            nextPos.x += Mathf.Sin((life * lateralFrequency) + randomPhase) * lateralAmplitude * Time.deltaTime;
+            nextPos.y = Mathf.Lerp(butterfly.transform.position.y, desiredY, Time.deltaTime * (target != null ? 5.2f : 2.8f));
+            nextPos.x = Mathf.Clamp(nextPos.x, barrierCenter.x - (barrierRadius + soulButterflySeekRange), barrierCenter.x + (barrierRadius + soulButterflySeekRange));
+            nextPos.y = Mathf.Clamp(nextPos.y, minY, maxY);
             butterfly.transform.position = nextPos;
 
             if (target != null && Vector3.Distance(butterfly.transform.position, target.transform.position) <= 0.25f)
@@ -2857,11 +3228,58 @@ public class WeaponClassController : MonoBehaviour
 
     private GameObject CreateSoulFloorVisual(Vector3 position, float width)
     {
-        GameObject floor = CreateSoulCubeVisual("SoulHealingFloor", new Color(0.6f, 0.25f, 1f, 0.65f), 0.25f, 3);
+        const float floorHeight = 0.58f;
+        const float cornerRadius = 0.26f;
+
+        GameObject floor = CreateSoulRoundedRectVisual("SoulHealingFloor", new Color(0.6f, 0.25f, 1f, 0.65f), width, floorHeight, cornerRadius, 3);
         floor.transform.position = position;
-        floor.transform.localScale = new Vector3(width, 0.8f, 1f);
-        AttachSoulAmbientDustOnSpawn(floor, new Vector3(width, 0.8f, 1f));
+        AttachSoulAmbientDustOnSpawn(floor, new Vector3(width, floorHeight, 1f));
         return floor;
+    }
+
+    private GameObject CreateSoulRoundedRectVisual(string objectName, Color color, float width, float height, float cornerRadius, int sortingOrder)
+    {
+        GameObject floor = new GameObject(objectName);
+        SpriteRenderer renderer = floor.AddComponent<SpriteRenderer>();
+
+        const float pixelsPerUnit = 64f;
+        int textureWidth = Mathf.Max(16, Mathf.RoundToInt(width * pixelsPerUnit));
+        int textureHeight = Mathf.Max(16, Mathf.RoundToInt(height * pixelsPerUnit));
+        int radiusPixels = Mathf.Clamp(Mathf.RoundToInt(Mathf.Min(cornerRadius, width * 0.5f, height * 0.5f) * pixelsPerUnit), 2, Mathf.Min(textureWidth, textureHeight) / 2);
+
+        Texture2D texture = new Texture2D(textureWidth, textureHeight);
+        Color[] pixels = new Color[textureWidth * textureHeight];
+        Color clear = new Color(color.r, color.g, color.b, 0f);
+        Vector2 min = new Vector2(radiusPixels, radiusPixels);
+        Vector2 max = new Vector2(textureWidth - radiusPixels, textureHeight - radiusPixels);
+        float radiusPixelsSquared = radiusPixels * radiusPixels;
+
+        for (int y = 0; y < textureHeight; y++)
+        {
+            for (int x = 0; x < textureWidth; x++)
+            {
+                Vector2 point = new Vector2(x + 0.5f, y + 0.5f);
+                float nearestX = Mathf.Clamp(point.x, min.x, max.x);
+                float nearestY = Mathf.Clamp(point.y, min.y, max.y);
+                Vector2 nearestPoint = new Vector2(nearestX, nearestY);
+
+                pixels[y * textureWidth + x] = (point - nearestPoint).sqrMagnitude <= radiusPixelsSquared ? color : clear;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        renderer.sprite = Sprite.Create(texture, new Rect(0, 0, textureWidth, textureHeight), new Vector2(0.5f, 0.5f), pixelsPerUnit);
+        renderer.sortingLayerName = "Player";
+        renderer.sortingOrder = sortingOrder;
+
+        return floor;
+    }
+
+    private float GetSoulUltimateFloorRadius(float effectiveBarrierRadius, float visualBarrierRadius)
+    {
+        return Mathf.Max(effectiveBarrierRadius, visualBarrierRadius) + 0.15f;
     }
 
     private float GetEffectiveSoulBarrierRadius()
@@ -3196,11 +3614,8 @@ public class WeaponClassController : MonoBehaviour
     
 
     
-    private void CreateWaveAttack()
+    private void CreateWaveAttack(int waveBlocks)
     {
-        // Determine number of blocks based on charge time
-        int waveBlocks = GetWaveBlockCount(currentChargeTime);
-        
         // Apply Valor Shard passive buffs for wave charges 3+
         ApplyWaveChargeBuffs(waveBlocks);
         
@@ -6949,44 +7364,8 @@ public class WaveBlockComponent : MonoBehaviour
             Animator animator = animatedWave.GetComponent<Animator>();
             if (animator != null)
             {
-                Debug.Log($"Animator found on {animatedWave.name}");
-                Debug.Log($"Controller: {(animator.runtimeAnimatorController != null ? animator.runtimeAnimatorController.name : "NULL")}");
-                
-                // Check all available parameters
-                AnimatorControllerParameter[] parameters = animator.parameters;
-                Debug.Log($"Available parameters: {parameters.Length}");
-                foreach (var param in parameters)
-                {
-                    Debug.Log($"Parameter: {param.name} (Type: {param.type})");
-                }
-                
-                // Get current state info
-                AnimatorStateInfo currentState = animator.GetCurrentAnimatorStateInfo(0);
-                Debug.Log($"Current state hash: {currentState.fullPathHash}");
-                Debug.Log($"Is WaveAnim state: {currentState.IsName("WaveAnim")}");
-                Debug.Log($"Is Idle state: {currentState.IsName("Idle")}");
-                
-                // Check if StartWave parameter exists
-                bool hasStartWave = false;
-                foreach (var param in parameters)
-                {
-                    if (param.name == "StartWave" && param.type == AnimatorControllerParameterType.Trigger)
-                    {
-                        hasStartWave = true;
-                        break;
-                    }
-                }
-                
-                if (hasStartWave)
-                {
-                    Debug.Log("StartWave parameter found, triggering animation");
-                    animator.SetTrigger("StartWave");
-                    Debug.Log("Triggered StartWave on prefab: " + animatedWave.name);
-                }
-                else
-                {
-                    Debug.LogError("StartWave trigger parameter not found in animation controller!");
-                }
+                animator.Rebind();
+                animator.Update(0f);
             }
             else
             {

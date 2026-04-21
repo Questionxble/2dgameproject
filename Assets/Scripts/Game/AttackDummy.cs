@@ -79,6 +79,12 @@ public class AttackDummy : MonoBehaviour
     private int shockStacks = 0;
     private const int maxShockStacks = 8;
     private const float shockBaseDuration = 1f;
+    private bool isPetrified = false;
+    private float petrificationEndTime = 0f;
+    private int petrificationStacks = 0;
+    private const int maxPetrificationStacks = 8;
+    private const float petrificationBaseDuration = 1f;
+    private bool wasAnimatorEnabledBeforePetrification = true;
     
     // Track active attacks for cleanup
     private System.Collections.Generic.List<GameObject> activeAttackObjects = new System.Collections.Generic.List<GameObject>();
@@ -212,8 +218,11 @@ public class AttackDummy : MonoBehaviour
         // Handle shock status effect
         HandleShockEffect();
 
-        // Update state machine (skip if shocked)
-        if (!isShocked)
+        // Handle petrification status effect
+        HandlePetrificationEffect();
+
+        // Update state machine (skip while immobilized)
+        if (!isShocked && !isPetrified)
         {
             UpdateStateMachine();
         }
@@ -831,7 +840,7 @@ public class AttackDummy : MonoBehaviour
         {
             isShocked = false;
             shockStacks = 0;
-            if (spriteRenderer != null)
+            if (spriteRenderer != null && !isPetrified)
                 spriteRenderer.color = originalColor;
             Debug.Log("AttackDummy: Shock ended");
         }
@@ -840,6 +849,23 @@ public class AttackDummy : MonoBehaviour
             // Halt horizontal movement while stunned
             if (rb != null)
                 rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+        }
+    }
+
+    private void HandlePetrificationEffect()
+    {
+        if (!isPetrified) return;
+
+        if (Time.time >= petrificationEndTime)
+        {
+            isPetrified = false;
+            petrificationStacks = 0;
+            SetPetrificationVisualState(false);
+            Debug.Log("AttackDummy: Petrification ended");
+        }
+        else if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
         }
     }
 
@@ -867,10 +893,72 @@ public class AttackDummy : MonoBehaviour
             isShocked = true;
             shockStacks = 1;
             shockEndTime = Time.time + shockDuration;
-            if (spriteRenderer != null)
+            if (spriteRenderer != null && !isPetrified)
                 spriteRenderer.color = new Color(0f, 0.9f, 1f, 1f); // Cyan tint
             Debug.Log($"AttackDummy: Shock applied for {shockDuration:F1}s");
         }
+    }
+
+    public void ApplyPetrification(float duration = -1f)
+    {
+        if (isDead) return;
+
+        float appliedDuration = duration > 0f ? duration : petrificationBaseDuration;
+
+        if (isPetrified)
+        {
+            if (petrificationStacks < maxPetrificationStacks)
+            {
+                petrificationStacks++;
+                float timeRemaining = Mathf.Max(petrificationEndTime - Time.time, 0f);
+                petrificationEndTime = Time.time + timeRemaining + appliedDuration;
+                Debug.Log($"AttackDummy: Petrification stacked to {petrificationStacks}. Duration: {petrificationEndTime - Time.time:F1}s");
+            }
+
+            return;
+        }
+
+        isPetrified = true;
+        petrificationStacks = 1;
+        petrificationEndTime = Time.time + appliedDuration;
+        SetPetrificationVisualState(true);
+        Debug.Log($"AttackDummy: Petrified for {appliedDuration:F1}s");
+    }
+
+    private void SetPetrificationVisualState(bool isActive)
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = isActive
+                ? GetDesaturatedColor(originalColor)
+                : (isShocked ? new Color(0f, 0.9f, 1f, 1f) : originalColor);
+        }
+
+        if (animator == null)
+        {
+            return;
+        }
+
+        if (isActive)
+        {
+            wasAnimatorEnabledBeforePetrification = animator.enabled;
+            isAttacking = false;
+            animator.SetBool("isAttacking", false);
+            animator.SetBool("isWalking", false);
+            animator.SetInteger("attackType", 0);
+            animator.enabled = false;
+        }
+        else if (!isDead)
+        {
+            animator.enabled = wasAnimatorEnabledBeforePetrification;
+            animator.Update(0f);
+        }
+    }
+
+    private Color GetDesaturatedColor(Color sourceColor)
+    {
+        float luminance = (sourceColor.r * 0.299f) + (sourceColor.g * 0.587f) + (sourceColor.b * 0.114f);
+        return new Color(luminance, luminance, luminance, sourceColor.a);
     }
 
     // ===== END SHOCK STATUS EFFECT =====
@@ -907,6 +995,8 @@ public class AttackDummy : MonoBehaviour
         // Clear shock when dying
         isShocked = false;
         shockStacks = 0;
+        isPetrified = false;
+        petrificationStacks = 0;
         
         // Stop all movement when dead
         if (rb != null)

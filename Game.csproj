@@ -66,24 +66,19 @@
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Experimental\SimpleTreeView.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\HorizontalGroupAttributeProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\InspectorProperty\NonSerializedProperty.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\StateRemove.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\EditorColors.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\LucidEditorUtility.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Experimental\TextFieldPopup.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\IndentAttributeProcessor.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\ModelEffectAnimation.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\RequiredAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\DisableIfAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\SerializedPropertyUtility.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\PropertyGroupProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\SerializeReferenceDropdown.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Pixel Art Platformer - Village Props\Script\MovingPlatform.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects10.cs" />
     <Compile Include="Assets\Scripts\Game\Ladder.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\InspectorProperty\InspectorButton.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Pool.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\EnableIfAttributeProcessor.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Ease.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\HorizontalLineAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\BoxGroupAttributeProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\AssetsOnlyAttributeProcessor.cs" />
@@ -96,8 +91,6 @@
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\GUIColorAttributeProcessor.cs" />
     <Compile Include="Assets\Scripts\Game\InteractPlayer.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Utils\InspectorPropertyUtil.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects7.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects8.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\HideLabelAttributeProcessor.cs" />
     <Compile Include="Assets\Scripts\Game\GorgonEnemyBehavior.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\HideLabelAttribute.cs" />
@@ -105,7 +98,6 @@
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Utils\TypeUtil.cs" />
     <Compile Include="Assets\Scripts\Game\CameraFollow.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Common\Script\Utils\SecondOrderDynamics.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects4.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\GroupAttribute.cs" />
     <Compile Include="Assets\Scripts\Game\FixedBackground.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\AssetsOnlyAttribute.cs" />
@@ -113,12 +105,10 @@
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\LabelWidthAttributeProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\DisableInPlayModeAttributeProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\ValidateInputAttribute.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects9.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\BlockquoteAttributeProcessor.cs" />
     <Compile Include="Assets\Scripts\Game\SkeletonArcherEnemyBehavior.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\LabelTextAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\LucidEditorGUILayout.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Intro.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\GUIColorAttribute.cs" />
     <Compile Include="Assets\Scripts\Game\EnemyRangedProjectile.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\OnValueChangedAttributeProcessor.cs" />
@@ -130,11 +120,9 @@
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\FoldoutGroupAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Pixel Art Platformer - Village Props\Script\Elevator.cs" />
     <Compile Include="Assets\Scripts\Game\Destructible.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects5.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\InspectorProperty\EditableInspectorProperty.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\TitleHeaderAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Experimental\Toolbar.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects11.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\OnValueChangedAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\ReadOnlyAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\LabelTextAttributeProcessor.cs" />
@@ -154,7 +142,6 @@
     <Compile Include="Assets\Scripts\Game\PlayerMovement.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\DisableIfAttributeProcessor.cs" />
     <Compile Include="Assets\Scripts\Game\DisableObject.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects2.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Pixel Art Platformer - Village Props\Script\BoundingPlatform.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\HelpBoxIfAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\DisableInEditModeAttribute.cs" />
@@ -162,7 +149,6 @@
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Pixel Art Platformer - Village Props\Script\Editor\ElevatorEditor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\HideIfAttributeProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\HelpBoxIfAttributeProcessor.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects6.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Enum.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\LucidGUIEvent.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\ButtonAttribute.cs" />
@@ -188,30 +174,22 @@
     <Compile Include="Assets\Textures\Imported Textures\PistonMedia\Scripts\FantasticSceneManager.cs" />
     <Compile Include="Assets\Scripts\Game\AttackDummy.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\LabelWidthAttribute.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\StateRandom.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\PropertyOrderAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\InspectorProperty\InspectorPropertyGroup.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\StateFlip.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\HorizontalLineAttributeProcessor.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects3.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\HelpBoxAttributeProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Extensions\EnumExtensions.cs" />
     <Compile Include="Assets\Scripts\Game\EnemyBehavior.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\TabGroupAttribute.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Utils\ReflectionUtil.cs" />
-    <Compile Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Script\Effects1.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\EditorIcons.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\FoldoutGroupAttributeProcessor.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\License.txt" />
     <None Include="Assets\Game.asmdef" />
-    <None Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\ReadMe.txt" />
     <None Include="Assets\Textures\Imported Textures\Cainos\Pixel Art Platformer - Village Props\Changelog.txt" />
     <None Include="Assets\Scripts\Shaders\GlowingLightning.shader" />
-    <None Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\Assets\PixelEffects\Visual\Additive.shader" />
-    <None Include="Assets\Textures\SoulShardSprites\SoulShardEffects\PixelEffects\ProjectSettings\ProjectVersion.txt" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">

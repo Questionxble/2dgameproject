@@ -5,82 +5,82 @@ using System.Collections;
 public class EnemyBehavior : MonoBehaviour
 {
     [Header("Enemy Settings")]
-    [SerializeField] private int maxHealth = 50;
-    [SerializeField] private float respawnDelay = 3f;
+    [SerializeField] protected int maxHealth = 50;
+    [SerializeField] protected float respawnDelay = 3f;
     
     [Header("Health Bar")]
-    [SerializeField] private Vector3 healthBarOffset = new Vector3(0, 1.5f, 0); // Offset above enemy
-    [SerializeField] private Vector2 healthBarSize = new Vector2(1.5f, 0.2f); // Width and height of health bar
+    [SerializeField] protected Vector3 healthBarOffset = new Vector3(0, 1.5f, 0); // Offset above enemy
+    [SerializeField] protected Vector2 healthBarSize = new Vector2(1.5f, 0.2f); // Width and height of health bar
     
     [Header("Death Settings")]
-    [SerializeField] private Color deathColor = new Color(0.5f, 0.5f, 0.5f, 0.7f); // Gray and semi-transparent
-    [SerializeField] private bool showRespawnTimer = true;
+    [SerializeField] protected Color deathColor = new Color(0.5f, 0.5f, 0.5f, 0.7f); // Gray and semi-transparent
+    [SerializeField] protected bool showRespawnTimer = true;
     
     [Header("Aggression Settings")]
-    [SerializeField] private bool isAggressive = false; // Enable enemy aggression
-    [SerializeField] private float detectionRadius = 5f; // Radius to detect and follow player
-    [SerializeField] private float followSpeed = 2f; // Speed when following player
-    [SerializeField] private float attackRange = 2f; // Range to attack player
-    [SerializeField] private float attackCooldown = 2f; // Time between attacks
-    [SerializeField] private float attackDamage = 15f; // Damage dealt by enemy attacks
-    [SerializeField] private float attackDuration = 0.8f; // How long attack damage object lasts (increased for longer animations)
-    [SerializeField] private Vector2 attackSize = new Vector2(1f, 1f); // Size of attack damage object
-    [SerializeField] private float jumpForce = 8f; // Force applied when enemy jumps
-    [SerializeField] private float jumpCooldown = 1f; // Time between jumps
-    [SerializeField] private float minHeightDifferenceToJump = 1.5f; // Minimum height difference to trigger jump
+    [SerializeField] protected bool isAggressive = false; // Enable enemy aggression
+    [SerializeField] protected float detectionRadius = 5f; // Radius to detect and follow player
+    [SerializeField] protected float followSpeed = 2f; // Speed when following player
+    [SerializeField] protected float attackRange = 2f; // Range to attack player
+    [SerializeField] protected float attackCooldown = 2f; // Time between attacks
+    [SerializeField] protected float attackDamage = 15f; // Damage dealt by enemy attacks
+    [SerializeField] protected float attackDuration = 0.8f; // How long attack damage object lasts (increased for longer animations)
+    [SerializeField] protected Vector2 attackSize = new Vector2(1f, 1f); // Size of attack damage object
+    [SerializeField] protected float jumpForce = 8f; // Force applied when enemy jumps
+    [SerializeField] protected float jumpCooldown = 1f; // Time between jumps
+    [SerializeField] protected float minHeightDifferenceToJump = 1.5f; // Minimum height difference to trigger jump
     
     [Header("Animation Settings")]
-    [SerializeField] private bool alternateAttacks = true; // Whether to alternate between attack animations
+    [SerializeField] protected bool alternateAttacks = true; // Whether to alternate between attack animations
     
     [Header("Collision")]
-    [SerializeField] private LayerMask playerLayerMask = 1; // What layers count as player
+    [SerializeField] protected LayerMask playerLayerMask = 1; // What layers count as player
     
     // Private variables
-    private SpriteRenderer spriteRenderer;
-    private Animator animator;
-    private Collider2D enemyCollider;
-    private Rigidbody2D rb;
-    private int currentHealth;
-    private bool isDead = false;
-    private Vector3 spawnPosition;
-    private Color originalColor;
+    protected SpriteRenderer spriteRenderer;
+    protected Animator animator;
+    protected Collider2D enemyCollider;
+    protected Rigidbody2D rb;
+    protected int currentHealth;
+    protected bool isDead = false;
+    protected Vector3 spawnPosition;
+    protected Color originalColor;
     
     // Aggression System
-    private Transform playerTransform;
-    private float lastAttackTime = 0f;
-    private bool isFacingRight = true;
-    private float lastJumpTime = 0f;
+    protected Transform playerTransform;
+    protected float lastAttackTime = 0f;
+    protected bool isFacingRight = true;
+    protected float lastJumpTime = 0f;
     
     // Animation System
-    private bool useNextAttackAnimation = false; // For alternating attacks
-    private bool isAttacking = false; // To prevent animation conflicts during attacks
+    protected bool useNextAttackAnimation = false; // For alternating attacks
+    protected bool isAttacking = false; // To prevent animation conflicts during attacks
     
     // Damage Object Integration
-    private bool inDamageZone = false;
-    private float lastDamageTime = 0f;
-    private DamageObject currentDamageObject;
+    protected bool inDamageZone = false;
+    protected float lastDamageTime = 0f;
+    protected DamageObject currentDamageObject;
 
     // Shock Status Effect System
-    private bool isShocked = false;
-    private float shockEndTime = 0f;
-    private int shockStacks = 0;
-    private const int maxShockStacks = 8;
-    private const float shockBaseDuration = 1f;
+    protected bool isShocked = false;
+    protected float shockEndTime = 0f;
+    protected int shockStacks = 0;
+    protected const int maxShockStacks = 8;
+    protected const float shockBaseDuration = 1f;
     
     // Public Properties
     public bool IsDead => isDead;
     
         // Health Bar UI
-    private Canvas healthBarCanvas;
-    private Image healthBarBackground;
-    private Image healthBarFill;
-    private GameObject healthBarObject;
-    private float targetFillAmount = 1f; // Target fill amount for smooth animation
-    private float currentFillAmount = 1f; // Current animated fill amount
-    private float healthBarAnimationSpeed = 3f; // Speed of health bar animation
-    private Text respawnTimerText; // Timer text for respawn countdown
+    protected Canvas healthBarCanvas;
+    protected Image healthBarBackground;
+    protected Image healthBarFill;
+    protected GameObject healthBarObject;
+    protected float targetFillAmount = 1f; // Target fill amount for smooth animation
+    protected float currentFillAmount = 1f; // Current animated fill amount
+    protected float healthBarAnimationSpeed = 3f; // Speed of health bar animation
+    protected Text respawnTimerText; // Timer text for respawn countdown
     
-    void Start()
+    protected virtual void Start()
     {
         // Get components
         spriteRenderer = GetComponent<SpriteRenderer>();
@@ -133,6 +133,14 @@ public class EnemyBehavior : MonoBehaviour
         {
             playerTransform = player.transform;
         }
+        else
+        {
+            PlayerMovement playerMovement = FindFirstObjectByType<PlayerMovement>();
+            if (playerMovement != null)
+            {
+                playerTransform = playerMovement.transform;
+            }
+        }
         
         // Set up collision layer - make sure entity doesn't collide with player or other entities
         SetupCollisionLayers();
@@ -158,7 +166,7 @@ public class EnemyBehavior : MonoBehaviour
         CreateHealthBar();
     }
     
-    void Update()
+    protected virtual void Update()
     {
         // Early exit if dead to prevent any processing
         if (isDead) 
@@ -235,7 +243,7 @@ public class EnemyBehavior : MonoBehaviour
         UpdateAnimations();
     }
     
-    private bool ValidateComponents()
+    protected virtual bool ValidateComponents()
     {
         // Re-get essential components if they're null
         if (spriteRenderer == null)
@@ -267,7 +275,7 @@ public class EnemyBehavior : MonoBehaviour
         return true; // Continue processing even if some components are missing
     }
     
-    private void UpdateAnimations()
+    protected virtual void UpdateAnimations()
     {
         if (animator == null) return;
         
@@ -287,34 +295,67 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    private void PlayAttackAnimation()
+    protected virtual void PlayAttackAnimation(Transform target)
     {
-        if (animator == null) return;
-        
-        // Set attacking flag to prevent animation interruption
         isAttacking = true;
-        
-        if (alternateAttacks)
+
+        OnAttackAnimationStarted(target);
+
+        if (animator != null)
         {
-            // Set attack type parameter for alternating attacks
-            int attackType = useNextAttackAnimation ? 1 : 0;
-            animator.SetInteger("attackType", attackType);
-            useNextAttackAnimation = !useNextAttackAnimation;
+            animator.SetInteger("attackType", GetAttackAnimationType());
+            animator.SetBool("isAttacking", true);
         }
-        else
-        {
-            // Always use attack type 0 (Attack1)
-            animator.SetInteger("attackType", 0);
-        }
-        
-        // The isAttacking parameter will trigger the appropriate attack transition
-        animator.SetBool("isAttacking", true);
-        
-        // Clear attacking flag after attack duration
+
+        StartAttackEventFallback();
         StartCoroutine(ClearAttackingFlag());
     }
     
-    private IEnumerator ClearAttackingFlag()
+    protected virtual int GetAttackAnimationType()
+    {
+        if (!alternateAttacks)
+        {
+            return 0;
+        }
+
+        int attackType = useNextAttackAnimation ? 1 : 0;
+        useNextAttackAnimation = !useNextAttackAnimation;
+        return attackType;
+    }
+
+    protected virtual void OnAttackAnimationStarted(Transform target)
+    {
+    }
+
+    protected virtual void StartAttackEventFallback()
+    {
+    }
+
+    protected virtual void ExecuteAttack(Transform target)
+    {
+        // Check if target is a dummy
+        AttackDummy dummy = target.GetComponent<AttackDummy>();
+        if (dummy != null)
+        {
+            dummy.TakeDamage(attackDamage);
+            Debug.Log($"Enemy attacked dummy for {attackDamage} damage");
+            return;
+        }
+
+        // Check if target is the player
+        PlayerMovement playerMovement = target.GetComponent<PlayerMovement>();
+        if (playerMovement != null)
+        {
+            playerMovement.TakeDamageFromObject((int)attackDamage);
+            Debug.Log($"Enemy attacked player for {attackDamage} damage");
+        }
+    }
+
+    protected virtual void ResetVariantState()
+    {
+    }
+    
+    protected virtual IEnumerator ClearAttackingFlag()
     {
         // Wait for attack duration plus a small buffer
         yield return new WaitForSeconds(attackDuration + 0.1f);
@@ -328,7 +369,7 @@ public class EnemyBehavior : MonoBehaviour
     }
     
     // Damage Object Integration - Trigger Events
-    void OnTriggerEnter2D(Collider2D other)
+    protected virtual void OnTriggerEnter2D(Collider2D other)
     {
         if (isDead) return; // Don't process triggers when dead
         
@@ -352,7 +393,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    void OnTriggerExit2D(Collider2D other)
+    protected virtual void OnTriggerExit2D(Collider2D other)
     {
         if (isDead) return; // Don't process triggers when dead
         
@@ -365,7 +406,7 @@ public class EnemyBehavior : MonoBehaviour
     }
     
     // Damage Object Integration - Collision Events
-    void OnCollisionEnter2D(Collision2D collision)
+    protected virtual void OnCollisionEnter2D(Collision2D collision)
     {
         if (isDead) return; // Don't process collisions when dead
         
@@ -393,7 +434,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    void OnCollisionExit2D(Collision2D collision)
+    protected virtual void OnCollisionExit2D(Collision2D collision)
     {
         if (isDead) return; // Don't process collisions when dead
         
@@ -405,7 +446,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    private void HandleAggression()
+    protected virtual void HandleAggression()
     {
         if (rb == null) return;
         
@@ -453,7 +494,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
 
-    private Transform FindNearestTarget()
+    protected virtual Transform FindNearestTarget()
     {
         Transform nearestTarget = null;
         float nearestDistance = float.MaxValue;
@@ -469,9 +510,9 @@ public class EnemyBehavior : MonoBehaviour
             }
         }
         
-        // Check for nearby attack dummies
-        GameObject[] dummies = GameObject.FindGameObjectsWithTag("PlayerSummon");
-        foreach (GameObject dummy in dummies)
+        // Check for nearby attack dummies without relying on scene tags.
+        AttackDummy[] dummies = FindObjectsByType<AttackDummy>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        foreach (AttackDummy dummy in dummies)
         {
             if (dummy != null)
             {
@@ -487,7 +528,7 @@ public class EnemyBehavior : MonoBehaviour
         return nearestTarget;
     }
 
-    private void FollowTarget(Transform target)
+    protected virtual void FollowTarget(Transform target)
     {
         if (rb == null || target == null) return;
         
@@ -510,7 +551,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
 
-    private void AttackTarget(Transform target)
+    protected virtual void AttackTarget(Transform target)
     {
         if (target == null) return;
         
@@ -518,32 +559,13 @@ public class EnemyBehavior : MonoBehaviour
         FaceTarget(target);
         
         // Play attack animation
-        PlayAttackAnimation();
-        
-        // Check if target is a dummy
-        AttackDummy dummy = target.GetComponent<AttackDummy>();
-        if (dummy != null)
-        {
-            dummy.TakeDamage(attackDamage);
-            lastAttackTime = Time.time;
-            Debug.Log($"Enemy attacked dummy for {attackDamage} damage");
-            return;
-        }
-        
-        // Check if target is the player
-        PlayerMovement playerMovement = target.GetComponent<PlayerMovement>();
-        if (playerMovement != null)
-        {
-            playerMovement.TakeDamageFromObject((int)attackDamage);
-            lastAttackTime = Time.time;
-            Debug.Log($"Enemy attacked player for {attackDamage} damage");
-            return;
-        }
-        
-        lastAttackTime = Time.time; // Prevent spam even if target wasn't valid
+        PlayAttackAnimation(target);
+
+        ExecuteAttack(target);
+        lastAttackTime = Time.time;
     }
     
-    private void FollowPlayer()
+    protected virtual void FollowPlayer()
     {
         if (rb == null || playerTransform == null) return;
         
@@ -567,7 +589,7 @@ public class EnemyBehavior : MonoBehaviour
         rb.linearVelocity = new Vector2(horizontalMovement, rb.linearVelocity.y);
     }
     
-    private void FaceTarget(Transform target)
+    protected virtual void FaceTarget(Transform target)
     {
         if (spriteRenderer == null || target == null) return;
         
@@ -580,7 +602,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    private void AttackPlayer()
+    protected virtual void AttackPlayer()
     {
         if (playerTransform == null) return;
         
@@ -593,7 +615,7 @@ public class EnemyBehavior : MonoBehaviour
         StartCoroutine(CreateAttackDamageObject(attackPosition));
     }
     
-    private IEnumerator CreateAttackDamageObject(Vector3 position)
+    protected virtual IEnumerator CreateAttackDamageObject(Vector3 position)
     {
         // Create temporary attack damage object
         GameObject attack = new GameObject($"{gameObject.name}_Attack");
@@ -646,7 +668,7 @@ public class EnemyBehavior : MonoBehaviour
         Destroy(attack);
     }
     
-    private void SetupCollisionLayers()
+    protected virtual void SetupCollisionLayers()
     {
         // Set this GameObject to Entities layer
         gameObject.layer = LayerMask.NameToLayer("Entities");
@@ -668,7 +690,7 @@ public class EnemyBehavior : MonoBehaviour
 
     // ===== SHOCK STATUS EFFECT =====
 
-    private void HandleShockEffect()
+    protected virtual void HandleShockEffect()
     {
         if (!isShocked) return;
 
@@ -691,7 +713,7 @@ public class EnemyBehavior : MonoBehaviour
     /// <summary>
     /// Apply the Shock stun status effect. Each application adds shockBaseDuration, capped at maxShockStacks seconds total.
     /// </summary>
-    public void ApplyShock(float duration = -1f)
+    public virtual void ApplyShock(float duration = -1f)
     {
         if (isDead) return;
 
@@ -720,7 +742,7 @@ public class EnemyBehavior : MonoBehaviour
 
     // ===== END SHOCK STATUS EFFECT =====
     
-    private void SetupEntityToEntityCollisionIgnoring()
+    protected virtual void SetupEntityToEntityCollisionIgnoring()
     {
         // Find all other entities (enemies/NPCs/dummies) and ignore collisions with them
         EnemyBehavior[] allEntities = FindObjectsByType<EnemyBehavior>(FindObjectsSortMode.None);
@@ -734,7 +756,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    public void TakeDamage(int damage)
+    public virtual void TakeDamage(int damage)
     {
         if (isDead) return;
         
@@ -756,11 +778,13 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    private void Die()
+    protected virtual void Die()
     {
         if (isDead) return;
         
         isDead = true;
+
+        ResetVariantState();
 
         // Clear shock when dying
         isShocked = false;
@@ -807,7 +831,7 @@ public class EnemyBehavior : MonoBehaviour
         StartCoroutine(RespawnCountdown());
     }
     
-    private IEnumerator RespawnCountdown()
+    protected virtual IEnumerator RespawnCountdown()
     {
         float timeRemaining = respawnDelay;
         
@@ -826,7 +850,7 @@ public class EnemyBehavior : MonoBehaviour
         Respawn();
     }
     
-    private void Respawn()
+    protected virtual void Respawn()
     {
         Debug.Log($"Enemy {gameObject.name} respawning");
         
@@ -836,6 +860,7 @@ public class EnemyBehavior : MonoBehaviour
         // Reset health
         currentHealth = maxHealth;
         isDead = false;
+        ResetVariantState();
         
         // Reset animation state
         isAttacking = false;
@@ -901,7 +926,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    private void CreateHealthBar()
+    protected virtual void CreateHealthBar()
     {
         // Create a world space canvas for the health bar
         GameObject canvasGO = new GameObject($"{gameObject.name}_HealthBarCanvas");
@@ -972,7 +997,7 @@ public class EnemyBehavior : MonoBehaviour
         UpdateHealthBar();
     }
     
-    private void UpdateHealthBarPosition()
+    protected virtual void UpdateHealthBarPosition()
     {
         if (healthBarCanvas != null)
         {
@@ -988,7 +1013,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    private void UpdateHealthBar()
+    protected virtual void UpdateHealthBar()
     {
         if (healthBarFill != null)
         {
@@ -1021,7 +1046,7 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    private IEnumerator SetupCollisionIgnoringDelayed()
+    protected virtual IEnumerator SetupCollisionIgnoringDelayed()
     {
         // Wait a short time for other entities to potentially spawn
         yield return new WaitForSeconds(0.1f);
@@ -1040,8 +1065,10 @@ public class EnemyBehavior : MonoBehaviour
         }
     }
     
-    void OnDestroy()
+    protected virtual void OnDestroy()
     {
+        ResetVariantState();
+
         // Clean up health bar when enemy is destroyed
         if (healthBarCanvas != null)
         {
