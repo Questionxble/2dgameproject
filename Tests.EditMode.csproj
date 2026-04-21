@@ -61,9 +61,11 @@
     <Analyzer Include="C:\Program Files\Unity\Hub\Editor\6000.2.5f1\Editor\Data\Tools\Unity.SourceGenerators\Unity.UIToolkit.SourceGenerator.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\Tests\EditMode\EnemyBehaviorInheritanceTests.cs" />
     <Compile Include="Assets\Tests\EditMode\CameraFollowTests.cs" />
     <Compile Include="Assets\Tests\EditMode\DamageObjectTests.cs" />
     <Compile Include="Assets\Tests\EditMode\ObjectBehaviorControllerTests.cs" />
+    <Compile Include="Assets\Tests\EditMode\StatusEffectTests.cs" />
     <Compile Include="Assets\Tests\EditMode\BasicTests.cs" />
     <Compile Include="Assets\Tests\EditMode\GameControllerTests.cs" />
     <Compile Include="Assets\Tests\EditMode\WeaponClassControllerTests.cs" />

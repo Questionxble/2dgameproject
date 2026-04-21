@@ -69,6 +69,11 @@ public class EnemyRangedProjectile : MonoBehaviour
                 dummy.TakeDamage(damage);
             }
 
+            if (petrificationDuration > 0f)
+            {
+                dummy.ApplyPetrification(petrificationDuration);
+            }
+
             Destroy(gameObject);
             return;
         }

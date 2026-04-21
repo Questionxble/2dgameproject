@@ -229,6 +229,8 @@ public class PlayerMovement : MonoBehaviour
     private int petrificationStacks = 0;
     private const int maxPetrificationStacks = 8;
     private const float petrificationBaseDuration = 1f;
+    private Color defaultSpriteColor = Color.white;
+    private bool wasAnimatorEnabledBeforePetrification = true;
 
     void Awake()
     {
@@ -246,6 +248,8 @@ public class PlayerMovement : MonoBehaviour
         spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         if (spriteRenderer == null)
             spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null)
+            defaultSpriteColor = spriteRenderer.color;
             
         // Try to get Animator component
         playerAnimator = GetComponentInChildren<Animator>();
@@ -797,6 +801,7 @@ public class PlayerMovement : MonoBehaviour
         {
             isPetrified = false;
             petrificationStacks = 0;
+            SetPetrificationVisualState(false);
             Debug.Log("Player: Petrification ended");
         }
     }
@@ -823,8 +828,60 @@ public class PlayerMovement : MonoBehaviour
             isPetrified = true;
             petrificationStacks = 1;
             petrificationEndTime = Time.time + appliedDuration;
+            SetPetrificationVisualState(true);
             Debug.Log($"Player: Petrified for {appliedDuration:F1}s");
         }
+    }
+
+    private void SetPetrificationVisualState(bool isActive)
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = isActive ? GetDesaturatedColor(defaultSpriteColor) : defaultSpriteColor;
+        }
+
+        if (playerAnimator == null)
+        {
+            return;
+        }
+
+        if (isActive)
+        {
+            wasAnimatorEnabledBeforePetrification = playerAnimator.enabled;
+
+            if (AnimatorHasParameter(playerAnimator, "isAttacking", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isAttacking", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "isWalking", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isWalking", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "isJumping", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isJumping", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "attackType", AnimatorControllerParameterType.Int))
+            {
+                playerAnimator.SetInteger("attackType", 0);
+            }
+
+            playerAnimator.enabled = false;
+        }
+        else if (!isPlayerDead)
+        {
+            playerAnimator.enabled = wasAnimatorEnabledBeforePetrification;
+            playerAnimator.Update(0f);
+        }
+    }
+
+    private Color GetDesaturatedColor(Color sourceColor)
+    {
+        float luminance = (sourceColor.r * 0.299f) + (sourceColor.g * 0.587f) + (sourceColor.b * 0.114f);
+        return new Color(luminance, luminance, luminance, sourceColor.a);
     }
 
     // ===== END SHOCK STATUS EFFECT =====
@@ -1433,6 +1490,19 @@ public class PlayerMovement : MonoBehaviour
         {
             playerAnimator.runtimeAnimatorController = targetController;
             currentAnimController = targetController;
+        }
+    }
+
+    public void SetAnimatorBool(string parameterName, bool value)
+    {
+        if (playerAnimator == null)
+        {
+            return;
+        }
+
+        if (AnimatorHasParameter(playerAnimator, parameterName, AnimatorControllerParameterType.Bool))
+        {
+            playerAnimator.SetBool(parameterName, value);
         }
     }
     
