@@ -113,59 +113,111 @@ jobs:
           coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Assembly-CSharp,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:${{ github.workspace }}
           customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
 
+      - name: Show Unity test runner outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "EditMode artifactsPath: ${{ steps.unity-editmode-tests.outputs.artifactsPath }}"
+          echo "EditMode coveragePath: ${{ steps.unity-editmode-tests.outputs.coveragePath }}"
+          echo "PlayMode artifactsPath: ${{ steps.unity-playmode-tests.outputs.artifactsPath }}"
+          echo "PlayMode coveragePath: ${{ steps.unity-playmode-tests.outputs.coveragePath }}"
+
+      - name: Upload EditMode coverage outputs
+        if: always() && steps.unity-editmode-tests.outputs.coveragePath != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-editmode-coverage
+          path: ${{ steps.unity-editmode-tests.outputs.coveragePath }}
+          if-no-files-found: warn
+
+      - name: Upload PlayMode coverage outputs
+        if: always() && steps.unity-playmode-tests.outputs.coveragePath != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-playmode-coverage
+          path: ${{ steps.unity-playmode-tests.outputs.coveragePath }}
+          if-no-files-found: warn
+
       - name: Prepare coverage outputs
         shell: bash
         run: |
           set -euo pipefail
 
-          coverage_path='CodeCoverage'
-          if [ -z "$coverage_path" ]; then
-            echo "unity-test-runner did not report a coveragePath output." >&2
+          edit_coverage_path='${{ steps.unity-editmode-tests.outputs.coveragePath }}'
+          play_coverage_path='${{ steps.unity-playmode-tests.outputs.coveragePath }}'
+
+          candidate_paths=()
+          for candidate in "$edit_coverage_path" "$play_coverage_path" CodeCoverage; do
+            if [ -n "$candidate" ] && [ -e "$candidate" ]; then
+              case " ${candidate_paths[*]} " in
+                *" $candidate "*) ;;
+                *) candidate_paths+=("$candidate") ;;
+              esac
+            fi
+          done
+
+          if [ ${#candidate_paths[@]} -eq 0 ]; then
+            echo "No coverage output paths exist after Unity test runs." >&2
+            echo "EditMode coveragePath: $edit_coverage_path" >&2
+            echo "PlayMode coveragePath: $play_coverage_path" >&2
             exit 1
           fi
 
-          if [ ! -e "$coverage_path" ]; then
-            echo "Coverage output path does not exist: $coverage_path" >&2
-            exit 1
-          fi
+          mkdir -p CodeCoverage
 
           if find CodeCoverage -type f -name 'TestCoverageResults_*.xml' -print -quit 2>/dev/null | grep -q .; then
             exit 0
           fi
 
-          case "$coverage_path" in
-            CodeCoverage|CodeCoverage/*)
-              echo "Coverage output path is already inside CodeCoverage: $coverage_path"
-              ;;
-            *)
-              rm -rf CodeCoverage
-              mkdir -p CodeCoverage
-              if [ -d "$coverage_path" ]; then
-                sudo cp -a "$coverage_path"/. CodeCoverage/
-              else
-                sudo cp -a "$coverage_path" CodeCoverage/
-              fi
-              sudo chown -R "$USER:$USER" CodeCoverage
-              ;;
-          esac
+          for candidate in "${candidate_paths[@]}"; do
+            case "$candidate" in
+              CodeCoverage|CodeCoverage/*)
+                echo "Coverage output path is already inside CodeCoverage: $candidate"
+                ;;
+              *)
+                if [ -d "$candidate" ]; then
+                  sudo cp -a "$candidate"/. CodeCoverage/
+                else
+                  sudo cp -a "$candidate" CodeCoverage/
+                fi
+                ;;
+            esac
+          done
+
+          sudo chown -R "$USER:$USER" CodeCoverage || true
 
       - name: Validate coverage outputs
         shell: bash
         run: |
           set -euo pipefail
 
-          coverage_path='CodeCoverage'
-          search_roots=(CodeCoverage)
-          if [ -n "$coverage_path" ]; then
-            search_roots+=("$coverage_path")
-            search_roots+=("$(dirname "$coverage_path")")
+          edit_coverage_path='${{ steps.unity-editmode-tests.outputs.coveragePath }}'
+          play_coverage_path='${{ steps.unity-playmode-tests.outputs.coveragePath }}'
+          search_roots=()
+          for candidate in CodeCoverage "$edit_coverage_path" "$play_coverage_path"; do
+            if [ -n "$candidate" ] && [ -e "$candidate" ]; then
+              case " ${search_roots[*]} " in
+                *" $candidate "*) ;;
+                *) search_roots+=("$candidate") ;;
+              esac
+            fi
+          done
+
+          if [ ${#search_roots[@]} -eq 0 ]; then
+            echo "No coverage roots exist to validate." >&2
+            echo "EditMode coveragePath: $edit_coverage_path" >&2
+            echo "PlayMode coveragePath: $play_coverage_path" >&2
+            exit 1
           fi
 
           reports=$(find "${search_roots[@]}" -type f \( -name 'TestCoverageResults*.xml' -o -name '*OpenCover*.xml' -o -name '*opencover*.xml' \) -printf '%T@ %p\n' 2>/dev/null | sort -n | awk '!seen[$2]++ {print $2}')
           if [ -z "$reports" ]; then
             echo "Unity did not produce any OpenCover coverage XML files under CodeCoverage/." >&2
             echo "Searched roots: ${search_roots[*]}" >&2
-            find "${search_roots[@]}" -maxdepth 3 -type f 2>/dev/null | sort >&2 || true
+            echo "EditMode coveragePath: $edit_coverage_path" >&2
+            echo "PlayMode coveragePath: $play_coverage_path" >&2
+            find "${search_roots[@]}" -maxdepth 5 -type f 2>/dev/null | sort >&2 || true
             exit 1
           fi
 
