@@ -7,6 +7,7 @@ public class Destructor : MonoBehaviour
     void OnCollisionEnter2D(Collision2D collision)
     {
         Destructible destructible = collision.gameObject.GetComponent<Destructible>();
+        Debug.Log("Chandelier hit: " + collision.gameObject.name);
 
         if (destructible != null)
             destructible.TakeDamage(damage);
