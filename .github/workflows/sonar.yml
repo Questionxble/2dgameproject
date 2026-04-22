@@ -79,8 +79,8 @@ jobs:
           set -euo pipefail
           rm -rf CodeCoverage artifacts/test-results
 
-      - name: Run Unity tests with coverage
-        id: unity-tests
+      - name: Run EditMode tests with coverage
+        id: unity-editmode-tests
         uses: game-ci/unity-test-runner@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -89,11 +89,28 @@ jobs:
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
         with:
           projectPath: .
-          testMode: All
+          testMode: EditMode
           githubToken: ${{ secrets.GITHUB_TOKEN }}
-          checkName: Unity Test Results
-          artifactsPath: artifacts/test-results
-          coverageOptions: generateAdditionalMetrics;generateAdditionalReports;generateHtmlReport;generateBadgeReport;assemblyFilters:+Assembly-CSharp,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:${{ github.workspace }}
+          checkName: Unity EditMode Test Results
+          artifactsPath: artifacts/test-results/editmode
+          coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Assembly-CSharp,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:${{ github.workspace }}
+          customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
+
+      - name: Run PlayMode tests with coverage
+        id: unity-playmode-tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: .
+          testMode: PlayMode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity PlayMode Test Results
+          artifactsPath: artifacts/test-results/playmode
+          coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Assembly-CSharp,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:${{ github.workspace }}
           customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
 
       - name: Prepare coverage outputs
@@ -101,7 +118,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          coverage_path='${{ steps.unity-tests.outputs.coveragePath }}'
+          coverage_path='CodeCoverage'
           if [ -z "$coverage_path" ]; then
             echo "unity-test-runner did not report a coveragePath output." >&2
             exit 1
@@ -137,7 +154,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          coverage_path='${{ steps.unity-tests.outputs.coveragePath }}'
+          coverage_path='CodeCoverage'
           search_roots=(CodeCoverage)
           if [ -n "$coverage_path" ]; then
             search_roots+=("$coverage_path")
@@ -157,25 +174,6 @@ jobs:
             echo "Coverage XML paths do not resolve to the GitHub workspace, so Sonar would skip coverage import." >&2
             echo "First report checked: $first_report" >&2
             grep -m 5 'fullPath=' "$first_report" >&2 || true
-            exit 1
-          fi
-
-          summary_file=''
-          for candidate in \
-            CodeCoverage/Report/Summary.xml \
-            "$coverage_path/Report/Summary.xml" \
-            "$coverage_path/Summary.xml" \
-            "$(dirname "$coverage_path")/Report/Summary.xml" \
-            "$(dirname "$coverage_path")/Summary.xml"
-          do
-            if [ -f "$candidate" ]; then
-              summary_file="$candidate"
-              break
-            fi
-          done
-
-          if [ -z "$summary_file" ]; then
-            echo "Unity did not produce CodeCoverage/Report/Summary.xml." >&2
             exit 1
           fi
 
