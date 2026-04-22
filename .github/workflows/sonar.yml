@@ -96,7 +96,7 @@ jobs:
           coverageOptions: generateAdditionalMetrics;generateAdditionalReports;generateHtmlReport;generateBadgeReport;assemblyFilters:+Assembly-CSharp,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:${{ github.workspace }}
           customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
 
-      - name: Normalize coverage output path
+      - name: Prepare coverage outputs
         shell: bash
         run: |
           set -euo pipefail
@@ -107,26 +107,48 @@ jobs:
             exit 1
           fi
 
-          if [ ! -d "$coverage_path" ]; then
-            echo "Coverage output directory does not exist: $coverage_path" >&2
+          if [ ! -e "$coverage_path" ]; then
+            echo "Coverage output path does not exist: $coverage_path" >&2
             exit 1
           fi
 
-          if [ "$coverage_path" != "CodeCoverage" ]; then
-            rm -rf CodeCoverage
-            mkdir -p CodeCoverage
-            sudo cp -a "$coverage_path"/. CodeCoverage/
-            sudo chown -R "$USER:$USER" CodeCoverage
+          if find CodeCoverage -type f -name 'TestCoverageResults_*.xml' -print -quit 2>/dev/null | grep -q .; then
+            exit 0
           fi
+
+          case "$coverage_path" in
+            CodeCoverage|CodeCoverage/*)
+              echo "Coverage output path is already inside CodeCoverage: $coverage_path"
+              ;;
+            *)
+              rm -rf CodeCoverage
+              mkdir -p CodeCoverage
+              if [ -d "$coverage_path" ]; then
+                sudo cp -a "$coverage_path"/. CodeCoverage/
+              else
+                sudo cp -a "$coverage_path" CodeCoverage/
+              fi
+              sudo chown -R "$USER:$USER" CodeCoverage
+              ;;
+          esac
 
       - name: Validate coverage outputs
         shell: bash
         run: |
           set -euo pipefail
 
-          reports=$(find CodeCoverage -type f -name 'TestCoverageResults_*.xml' -printf '%T@ %p\n' | sort -n | awk '{print $2}')
+          coverage_path='${{ steps.unity-tests.outputs.coveragePath }}'
+          search_roots=(CodeCoverage)
+          if [ -n "$coverage_path" ]; then
+            search_roots+=("$coverage_path")
+            search_roots+=("$(dirname "$coverage_path")")
+          fi
+
+          reports=$(find "${search_roots[@]}" -type f \( -name 'TestCoverageResults*.xml' -o -name '*OpenCover*.xml' -o -name '*opencover*.xml' \) -printf '%T@ %p\n' 2>/dev/null | sort -n | awk '!seen[$2]++ {print $2}')
           if [ -z "$reports" ]; then
             echo "Unity did not produce any OpenCover coverage XML files under CodeCoverage/." >&2
+            echo "Searched roots: ${search_roots[*]}" >&2
+            find "${search_roots[@]}" -maxdepth 3 -type f 2>/dev/null | sort >&2 || true
             exit 1
           fi
 
@@ -138,7 +160,21 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f CodeCoverage/Report/Summary.xml ]; then
+          summary_file=''
+          for candidate in \
+            CodeCoverage/Report/Summary.xml \
+            "$coverage_path/Report/Summary.xml" \
+            "$coverage_path/Summary.xml" \
+            "$(dirname "$coverage_path")/Report/Summary.xml" \
+            "$(dirname "$coverage_path")/Summary.xml"
+          do
+            if [ -f "$candidate" ]; then
+              summary_file="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$summary_file" ]; then
             echo "Unity did not produce CodeCoverage/Report/Summary.xml." >&2
             exit 1
           fi
