@@ -73,6 +73,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Clean old coverage artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf CodeCoverage artifacts/test-results
+
       - name: Run Unity tests with coverage
         id: unity-tests
         uses: game-ci/unity-test-runner@v4
@@ -95,13 +101,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          reports=$(find CodeCoverage -type f -name 'TestCoverageResults_*.xml' | sort)
+          reports=$(find CodeCoverage -type f -name 'TestCoverageResults_*.xml' -printf '%T@ %p\n' | sort -n | awk '{print $2}')
           if [ -z "$reports" ]; then
             echo "Unity did not produce any OpenCover coverage XML files under CodeCoverage/." >&2
             exit 1
           fi
 
-          first_report=$(printf '%s\n' "$reports" | head -n 1)
+          first_report=$(printf '%s\n' "$reports" | tail -n 1)
           if ! grep -Fq "fullPath=\"${GITHUB_WORKSPACE}/" "$first_report"; then
             echo "Coverage XML paths do not resolve to the GitHub workspace, so Sonar would skip coverage import." >&2
             echo "First report checked: $first_report" >&2
