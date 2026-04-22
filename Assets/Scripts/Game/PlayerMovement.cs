@@ -14,6 +14,8 @@ public class PlayerMovement : NetworkBehaviour
     [Header("Movement Settings")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float jumpForce = 10f;
+    [SerializeField] private float coyoteTime = 0.12f;
+    [SerializeField] private float jumpBufferTime = 0.12f;
 
     [Header("Ground Detection")]
     public LayerMask groundLayerMask = 1;
@@ -131,6 +133,8 @@ public class PlayerMovement : NetworkBehaviour
     // State
     private bool isGrounded;
     private bool hasCeilingClearance = true; // Check if player has space above to jump
+    private float lastGroundedTime = float.NegativeInfinity;
+    private float lastJumpPressedTime = float.NegativeInfinity;
     private float animationTimer = 0f;
     private bool useFirstWalkSprite = true;
     
@@ -240,6 +244,7 @@ public class PlayerMovement : NetworkBehaviour
     private WeaponClassController weaponController;
 
     public bool IsDead => isPlayerDead;
+    public string DisplayName => GetDisplayNameText();
 
     void Awake()
     {
@@ -579,6 +584,10 @@ public class PlayerMovement : NetworkBehaviour
             return;
         }
 
+        // Refresh contact checks before consuming one-frame inputs so land-and-jump works reliably.
+        CheckGrounded();
+        CheckCeilingClearance();
+
         // Only process input and certain logic for the owning player
         // Handle networked vs non-networked movement
         if (IsOwner || !IsSpawned)
@@ -587,10 +596,7 @@ public class PlayerMovement : NetworkBehaviour
             GetInput();
             HandleMovement();
         }
-        
-        // These run for all clients to keep visuals synchronized
-        CheckGrounded();
-        CheckCeilingClearance();
+
         UpdateSprite();
         UpdateAnimationParameters();
         
@@ -646,6 +652,13 @@ public class PlayerMovement : NetworkBehaviour
         jumpInput = false;
         leftInput = false;
         rightInput = false;
+        downInput = false;
+        wantsToSubmerge = false;
+
+        if (PlayerChat.IsTextEntryActive)
+        {
+            return;
+        }
 
         // Check keyboard directly
         if (Keyboard.current != null)
@@ -662,6 +675,11 @@ public class PlayerMovement : NetworkBehaviour
             jumpInput = Keyboard.current.spaceKey.wasPressedThisFrame ||
                        Keyboard.current.wKey.wasPressedThisFrame ||
                        Keyboard.current.upArrowKey.wasPressedThisFrame;
+
+            if (jumpInput)
+            {
+                lastJumpPressedTime = Time.time;
+            }
             
             // Set horizontal input
             if (leftInput)
@@ -759,10 +777,12 @@ public class PlayerMovement : NetworkBehaviour
         {
             HandleSurfaceSwimming();
         }
-        else if (jumpInput && isGrounded && hasCeilingClearance)
+        else if (CanUseBufferedJump())
         {
-            // Normal jumping - only if we have ceiling clearance
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+            isGrounded = false;
+            lastGroundedTime = float.NegativeInfinity;
+            lastJumpPressedTime = float.NegativeInfinity;
         }
         
         // Drop down through one-way platform
@@ -875,6 +895,23 @@ public class PlayerMovement : NetworkBehaviour
         
         // Player is grounded if ANY of the check points hit ground OR the overlap box detects ground
         isGrounded = leftGrounded || centerGrounded || rightGrounded || overlapGrounded;
+
+        if (isGrounded)
+        {
+            lastGroundedTime = Time.time;
+        }
+    }
+
+    private bool CanUseBufferedJump()
+    {
+        if (!hasCeilingClearance)
+        {
+            return false;
+        }
+
+        bool hasBufferedJump = Time.time - lastJumpPressedTime <= jumpBufferTime;
+        bool hasGroundGrace = Time.time - lastGroundedTime <= coyoteTime;
+        return hasBufferedJump && hasGroundGrace;
     }
     
     private void CheckCeilingClearance()
@@ -3771,6 +3808,8 @@ public class PlayerMovement : NetworkBehaviour
         isPlayerJumping = false;
         isFalling = false;
         wasGroundedLastFrame = false;
+        lastGroundedTime = float.NegativeInfinity;
+        lastJumpPressedTime = float.NegativeInfinity;
 
         if (rb != null)
         {

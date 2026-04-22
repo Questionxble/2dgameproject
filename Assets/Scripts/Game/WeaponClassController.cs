@@ -1139,10 +1139,19 @@ public class WeaponClassController : NetworkBehaviour
         if (IsOwner)
         {
             CheckForNearbyShards();
-            HandleInput();
-            
+
+            bool isChatOpen = PlayerChat.IsTextEntryActive;
+            if (!isChatOpen)
+            {
+                HandleInput();
+            }
+            else
+            {
+                isWeaponMenuOpen = false;
+            }
+
             // Continuously update facing direction when using WhisperShard
-            if (IsWhisperShardActive)
+            if (!isChatOpen && IsWhisperShardActive)
             {
                 UpdatePlayerFacingForMouse();
             }
@@ -1593,6 +1602,12 @@ public class WeaponClassController : NetworkBehaviour
     private void HandleInput()
     {
         if (playerMovement == null) return;
+
+        if (PlayerChat.IsTextEntryActive)
+        {
+            isWeaponMenuOpen = false;
+            return;
+        }
         
         // Check for shard pickup/swap using new Input System
         bool eKeyPressed = Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame;
