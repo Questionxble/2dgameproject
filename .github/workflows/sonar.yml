@@ -93,7 +93,7 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: Unity EditMode Test Results
           artifactsPath: artifacts/test-results/editmode
-          coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Assembly-CSharp,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:${{ github.workspace }}
+          coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Game,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:/github/workspace
           customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
 
       - name: Run PlayMode tests with coverage
@@ -110,7 +110,7 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: Unity PlayMode Test Results
           artifactsPath: artifacts/test-results/playmode
-          coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Assembly-CSharp,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:${{ github.workspace }}
+          coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Game,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:/github/workspace
           customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
 
       - name: Show Unity test runner outputs
