@@ -96,6 +96,29 @@ jobs:
           coverageOptions: generateAdditionalMetrics;generateAdditionalReports;generateHtmlReport;generateBadgeReport;assemblyFilters:+Assembly-CSharp,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:${{ github.workspace }}
           customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
 
+      - name: Normalize coverage output path
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          coverage_path='${{ steps.unity-tests.outputs.coveragePath }}'
+          if [ -z "$coverage_path" ]; then
+            echo "unity-test-runner did not report a coveragePath output." >&2
+            exit 1
+          fi
+
+          if [ ! -d "$coverage_path" ]; then
+            echo "Coverage output directory does not exist: $coverage_path" >&2
+            exit 1
+          fi
+
+          if [ "$coverage_path" != "CodeCoverage" ]; then
+            rm -rf CodeCoverage
+            mkdir -p CodeCoverage
+            sudo cp -a "$coverage_path"/. CodeCoverage/
+            sudo chown -R "$USER:$USER" CodeCoverage
+          fi
+
       - name: Validate coverage outputs
         shell: bash
         run: |
