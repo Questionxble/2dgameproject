@@ -1,4 +1,4 @@
-name: SonarQube PR Analysis
+name: SonarQube PR CC Analysis
 
 on:
   pull_request:
