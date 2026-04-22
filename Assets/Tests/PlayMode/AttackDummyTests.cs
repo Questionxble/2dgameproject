@@ -21,6 +21,7 @@ namespace Tests.PlayMode
             dummyObject.AddComponent<Rigidbody2D>();
             
             playerObject = new GameObject("TestPlayer");
+            playerObject.tag = "Player";
             // Add Rigidbody2D BEFORE PlayerMovement to ensure it's available in Awake()
             playerObject.AddComponent<Rigidbody2D>();
             playerObject.AddComponent<CapsuleCollider2D>();

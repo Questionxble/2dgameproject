@@ -131,8 +131,8 @@ namespace Tests.EditMode
         public void WeaponClassController_TagAndLayerManagement()
         {
             // Test tag assignment
-            weaponObject.tag = "Weapon";
-            Assert.AreEqual("Weapon", weaponObject.tag);
+            weaponObject.tag = "WhisperShard";
+            Assert.AreEqual("WhisperShard", weaponObject.tag);
             
             // Test layer assignment  
             weaponObject.layer = LayerMask.NameToLayer("Default");
