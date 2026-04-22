@@ -82,11 +82,7 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] private int buffMergeMaxLevel = 3;
     [SerializeField] private Vector2 buffHoverHitboxScale = new Vector2(0.38f, 0.62f);
     
-    [Header("Damage Modifiers")]
     // Damage modifiers applied through GetModifiedMeleeDamage/GetModifiedMagicDamage methods
-    
-    // Ladder System
-    private GameObject nearbyLadder = null;
     
     // Buff System
     public enum BuffType { Attack, Aegis, Durability, Strength, Vitality, Flux, Swiftness }
@@ -1923,12 +1919,6 @@ public class PlayerMovement : MonoBehaviour
     public bool IsFacingRight()
     {
         return !spriteRenderer.flipX; // Assuming flipX = true means facing left
-    }
-    
-    // Ladder System Methods
-    public void SetNearbyLadder(GameObject ladder)
-    {
-        nearbyLadder = ladder;
     }
     
     // Buff System Methods

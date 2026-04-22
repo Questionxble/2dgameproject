@@ -52,7 +52,7 @@ namespace Tests.PlayMode
         [UnityTest]
         public IEnumerator AttackDummy_PlayerTargeting()
         {
-            yield return new WaitForEndOfFrame();
+            yield return null;
             
             var foundPlayer = Object.FindFirstObjectByType<PlayerMovement>();
             Assert.IsNotNull(foundPlayer);
@@ -97,7 +97,7 @@ namespace Tests.PlayMode
             playerObject.transform.position = Vector3.zero;
             dummyObject.transform.position = Vector3.right * 2f;
             
-            yield return new WaitForEndOfFrame();
+            yield return null;
             
             float distance = Vector3.Distance(
                 playerObject.transform.position, 
