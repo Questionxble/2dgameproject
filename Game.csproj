@@ -76,7 +76,6 @@
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\PropertyGroupProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\SerializeReferenceDropdown.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Pixel Art Platformer - Village Props\Script\MovingPlatform.cs" />
-    <Compile Include="Assets\Scripts\Game\Ladder.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\InspectorProperty\InspectorButton.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Editor\Attributes\EnableIfAttributeProcessor.cs" />
     <Compile Include="Assets\Textures\Imported Textures\Cainos\Third Party\Lucid Editor\Runtime\Attributes\HorizontalLineAttribute.cs" />

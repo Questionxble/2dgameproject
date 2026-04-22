@@ -64,7 +64,6 @@
     <Compile Include="Assets\Tests\PlayMode\EnemyBehaviorTests.cs" />
     <Compile Include="Assets\Tests\PlayMode\PlayerMovementTests.cs" />
     <Compile Include="Assets\Tests\PlayMode\AttackDummyTests.cs" />
-    <Compile Include="Assets\Tests\PlayMode\LadderTests.cs" />
     <Compile Include="Assets\Tests\PlayMode\DragonBossTests.cs" />
   </ItemGroup>
   <ItemGroup>

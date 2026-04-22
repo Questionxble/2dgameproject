@@ -82,11 +82,7 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] private int buffMergeMaxLevel = 3;
     [SerializeField] private Vector2 buffHoverHitboxScale = new Vector2(0.38f, 0.62f);
     
-    [Header("Damage Modifiers")]
     // Damage modifiers applied through GetModifiedMeleeDamage/GetModifiedMagicDamage methods
-    
-    // Ladder System
-    private GameObject nearbyLadder = null;
     
     // Buff System
     public enum BuffType { Attack, Aegis, Durability, Strength, Vitality, Flux, Swiftness }
@@ -263,8 +259,7 @@ public class PlayerMovement : MonoBehaviour
             currentAnimController = defaultPlayerAnimController;
         }
 
-        // Prevent player from rotating when falling off edges
-        rb.freezeRotation = true;
+        EnsurePhysicsComponents();
         
         // Improve slope handling with physics material
         PhysicsMaterial2D slopeMaterial = new PhysicsMaterial2D("PlayerSlopeMaterial");
@@ -282,7 +277,7 @@ public class PlayerMovement : MonoBehaviour
         // Initialize water physics system
         originalMoveSpeed = moveSpeed;
         originalJumpForce = jumpForce;
-        originalGravityScale = rb.gravityScale;
+        originalGravityScale = rb != null ? rb.gravityScale : 1f;
         
         // Create screen UI system (replaces world-space health bar)
         if (useScreenUI)
@@ -297,6 +292,27 @@ public class PlayerMovement : MonoBehaviour
         
         // Get weapon controller (should be on the same GameObject)
         weaponController = GetComponent<WeaponClassController>();
+    }
+
+    void Start()
+    {
+        EnsurePhysicsComponents();
+    }
+
+    private void EnsurePhysicsComponents()
+    {
+        if (rb == null)
+        {
+            rb = GetComponent<Rigidbody2D>();
+        }
+
+        if (rb == null)
+        {
+            return;
+        }
+
+        // Prevent player from rotating when falling off edges
+        rb.freezeRotation = true;
     }
 
     void Update()
@@ -1903,12 +1919,6 @@ public class PlayerMovement : MonoBehaviour
     public bool IsFacingRight()
     {
         return !spriteRenderer.flipX; // Assuming flipX = true means facing left
-    }
-    
-    // Ladder System Methods
-    public void SetNearbyLadder(GameObject ladder)
-    {
-        nearbyLadder = ladder;
     }
     
     // Buff System Methods

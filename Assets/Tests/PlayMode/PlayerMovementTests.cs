@@ -17,8 +17,9 @@ namespace Tests.PlayMode
         {
             // Create a test player object
             playerObject = new GameObject("TestPlayer");
-            playerMovement = playerObject.AddComponent<PlayerMovement>();
+            playerObject.tag = "Player";
             playerRigidbody = playerObject.AddComponent<Rigidbody2D>();
+            playerMovement = playerObject.AddComponent<PlayerMovement>();
             
             // Add required components
             var capsuleCollider = playerObject.AddComponent<CapsuleCollider2D>();
@@ -52,7 +53,7 @@ namespace Tests.PlayMode
         [UnityTest]
         public IEnumerator PlayerMovement_HealthSystemInitialization()
         {
-            yield return new WaitForEndOfFrame();
+            yield return null;
             
             // Test that player starts with health
             Assert.IsTrue(true); // Placeholder - health system would need public accessors
@@ -108,7 +109,7 @@ namespace Tests.PlayMode
         public IEnumerator PlayerMovement_ObjectCreationInScene()
         {
             // Test that player can exist in scene
-            yield return new WaitForEndOfFrame();
+            yield return null;
             
             Assert.IsTrue(playerObject.activeInHierarchy);
             Assert.IsNotNull(GameObject.Find("TestPlayer"));
