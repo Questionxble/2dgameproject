@@ -1,4 +1,4 @@
-Sprint 2
+Sprint 5:
 
 | Metric                           | Count |
 |----------------------------------|-------|
@@ -29,8 +29,7 @@ Estimation and Accuracy:
 | Completion %                     |  5.2% |
 
 Workflow Discipline:
-Issue: Fix the weapon class system animation delays/damage box durations -> To Do 
-(I opened a new branch with the code from main and reworked the weapon system to operate off off animation events in the attack animation keyframes instead of a hard-coded timer-based duration system)
+Issue: Fix the performance issues with current PC and optimize/fix bugs for soul shard gameplay. Managed to debloat the PC and fix the soul shard left click repeated attack bug, as well as some ultimate butterfly/ground appearance bugs.
 To Do -> In Review
 (Some more bug fixes were made to the animation sequencing logic)
 In Review -> Done
@@ -45,6 +44,6 @@ Blockers and Scope Changes:
 - Almost everything that was added from the previous sprint onto this sprint has been carried to the next one due to me dedicating this sprint to reworking the weapon attack logic and planning out enemy types, storm shard and whisper shard ultimate abilities, and general weapon class responsibilities in battle. A lot of time was spent configuring the individual animation controllers (8 of them so far) to manage the animation processing on the enemies, including configuring enemy behavior parameters in the behavioral scripts on their gameobjects. Next sprint, I plan to complete a lot more issues since I spent this last sprint preparing the scripting/animations for this upcoming one.
 
 Jira Evidence Links:
-Report: https://github.com/Questionxble/2dgameproject/blob/main/Documentation/Sprint2/ChristianHenken/Sprint-2-Jira-Report.md
+Report: https://github.com/Questionxble/2dgameproject/blob/main/Documentation/Sprint5/ChristianHenken/Sprint-5-Jira-Report.md
 Backlog: https://soulful-journey.atlassian.net/jira/software/projects/SJOURNEY/boards/1/backlog
 Board: https://soulful-journey.atlassian.net/jira/software/projects/SJOURNEY/boards/1?jql=Sprint%20%3D%20134&sprints=134

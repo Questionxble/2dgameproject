@@ -20,7 +20,7 @@ The main branch for sure, since my new-weapon-classes updates PR passed above 80
 I'm going to build more comprehensive unit testing for the main branch to catch us up by the next sprint demo presentation, as well use code coverage analysis on the multiplayer branch.
 
 --  Evidence --
-SonarQube and Trivy report: 
+SonarQube and Trivy report: https://github.com/Questionxble/2dgameproject/blob/new-weapon-classes/Documentation/Sprint5/ChristianHenken/SonarQubeTrivyScans.pdf
 
 --  Statement of Integrity --
 This coverage was generated from automated tests executed during this sprint.
