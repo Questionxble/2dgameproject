@@ -144,6 +144,7 @@ public class ClientDebugger : MonoBehaviour
     private GUIStyle playerNameFieldStyle;
     private Texture2D playerNameFieldBackground;
     private Texture2D playerNameFieldFocusedBackground;
+    private Vector2 debugInfoScrollPosition;
     
     void Start()
     {
@@ -1351,12 +1352,7 @@ public class ClientDebugger : MonoBehaviour
 
     private void DrawCenterConnectionInfo(float topY)
     {
-        Rect infoRect = new Rect(
-            centerButtonRect.x - 100,
-            topY,
-            centerButtonRect.width + 200,
-            80
-        );
+        float infoWidth = centerButtonRect.width + 200f;
 
         string connectionInfo = "";
         if (transport != null)
@@ -1385,6 +1381,15 @@ public class ClientDebugger : MonoBehaviour
         infoStyle.alignment = TextAnchor.MiddleCenter;
         infoStyle.fontSize = 14;
         infoStyle.normal.textColor = Color.gray;
+        infoStyle.wordWrap = true;
+
+        float infoHeight = Mathf.Max(80f, infoStyle.CalcHeight(new GUIContent(connectionInfo), infoWidth));
+        Rect infoRect = new Rect(
+            centerButtonRect.x - 100f,
+            topY,
+            infoWidth,
+            infoHeight
+        );
 
         GUI.Label(infoRect, connectionInfo, infoStyle);
     }
@@ -1441,8 +1446,16 @@ public class ClientDebugger : MonoBehaviour
             GUILayout.Space(8);
         }
         
-        // Debug information
-        GUILayout.Label(debugInfo, debugTextStyle, GUILayout.ExpandHeight(true));
+        GUILayout.BeginVertical(GUI.skin.box, GUILayout.ExpandHeight(true));
+        debugInfoScrollPosition = GUILayout.BeginScrollView(debugInfoScrollPosition, false, true, GUILayout.ExpandHeight(true));
+
+        float debugInfoContentWidth = Mathf.Max(100f, debugWindowRect.width - 72f);
+        float debugInfoContentHeight = Mathf.Max(0f, debugTextStyle.CalcHeight(new GUIContent(debugInfo), debugInfoContentWidth));
+        Rect debugInfoRect = GUILayoutUtility.GetRect(debugInfoContentWidth, debugInfoContentHeight, GUILayout.ExpandWidth(true));
+        GUI.Label(debugInfoRect, debugInfo, debugTextStyle);
+
+        GUILayout.EndScrollView();
+        GUILayout.EndVertical();
         
         GUILayout.Space(10);
         

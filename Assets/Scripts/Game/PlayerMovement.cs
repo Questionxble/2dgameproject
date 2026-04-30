@@ -1164,6 +1164,7 @@ public class PlayerMovement : NetworkBehaviour
     private void HandlePlayerRespawned()
     {
         ResetMotionAndAnimationState(resetNetworkState: false);
+        UpdateAnimationController(networkEquippedShardType.Value);
         UpdateHealthUI();
     }
     
@@ -2207,6 +2208,12 @@ public class PlayerMovement : NetworkBehaviour
     {
         // This method is called when networkEquippedShardType changes
         if (playerAnimator == null) return;
+
+        // Preserve the active shard controller while the death animation is playing.
+        if (isPlayerDead && currentAnimController != null)
+        {
+            return;
+        }
         
         RuntimeAnimatorController targetController = GetControllerFromShardType(shardType);
         

@@ -1,0 +1,74 @@
+{
+  "defaultProfileId": "default",
+  "walkByResponses": [
+    "Oh, passing through?",
+    "Quiet steps, traveler.",
+    "Keep your eyes open out there."
+  ],
+  "jumpResponses": [
+    "Careful with that landing.",
+    "Trying to impress someone?",
+    "That looked intentional."
+  ],
+  "attackResponses": [
+    "Easy there.",
+    "Save that for the monsters.",
+    "You look ready for trouble."
+  ],
+  "profiles": [
+    {
+      "profileId": "greeter",
+      "walkByResponses": [
+        "Back on the road already?",
+        "Welcome through the crossroads.",
+        "You look like you know where you are going."
+      ],
+      "jumpResponses": [
+        "Still light on your feet, I see.",
+        "That was one way to make an entrance.",
+        "You land better than most adventurers."
+      ],
+      "attackResponses": [
+        "Keep that blade pointed away from the town.",
+        "If trouble is coming, I would rather hear it first.",
+        "Easy. We are not under attack yet."
+      ]
+    },
+    {
+      "profileId": "lookout",
+      "walkByResponses": [
+        "Movement on the road.",
+        "Passing traveler, no alarm.",
+        "Keep moving and keep breathing."
+      ],
+      "jumpResponses": [
+        "Careful. High ground matters.",
+        "You make too much noise when you jump.",
+        "That is one way to check the skyline."
+      ],
+      "attackResponses": [
+        "Save your stamina for a real fight.",
+        "Steel out. Eyes up.",
+        "If you are swinging, then you saw something."
+      ]
+    },
+    {
+      "profileId": "drifter",
+      "walkByResponses": [
+        "Another pair of boots on the dust.",
+        "Long road ahead of you.",
+        "I have seen stranger travelers than you."
+      ],
+      "jumpResponses": [
+        "The ground was not good enough for you?",
+        "You spend energy like it grows on trees.",
+        "That hop said more than words would."
+      ],
+      "attackResponses": [
+        "That kind of temper shortens lives.",
+        "Steel first, questions later?",
+        "I have met enough fighters to know that stance."
+      ]
+    }
+  ]
+}

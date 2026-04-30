@@ -250,24 +250,26 @@ public class WeaponClassController : NetworkBehaviour
     {
         // Only the owning player should trigger attacks
         if (!IsOwner) return;
-        
-        // Use server RPC to ensure all clients see the attack
-        ValorAttack1StartServerRpc();
+
+        GenerateUltimateCharge(valorLeftClickCharge);
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            ProcessValorAttack1GameplayStart();
+        }
+        else
+        {
+            ValorAttack1StartServerRpc();
+        }
     }
     
     [ServerRpc]
     private void ValorAttack1StartServerRpc()
     {
-        ValorAttack1StartClientRpc();
+        ProcessValorAttack1GameplayStart();
     }
     
-    [ClientRpc]
-    private void ValorAttack1StartClientRpc()
-    {
-        ProcessValorAttack1Start();
-    }
-    
-    private void ProcessValorAttack1Start()
+    private void ProcessValorAttack1GameplayStart()
     {
         if (playerTransform == null) return;
         
@@ -291,9 +293,6 @@ public class WeaponClassController : NetworkBehaviour
         
         // Create and store the melee attack damage object
         activeValorMeleeAttack = CreateMeleeDamageObject(attackPosition, swordWidth, swordHeight, swordDamage, "ValorAttack1");
-        
-        // Generate ultimate charge for valor left click attack
-        GenerateUltimateCharge(valorLeftClickCharge);
     }
     
     /// <summary>
@@ -303,24 +302,29 @@ public class WeaponClassController : NetworkBehaviour
     {
         // Only the owning player should trigger attacks
         if (!IsOwner) return;
-        
-        // Use server RPC to ensure all clients see the attack end
-        ValorAttack1EndServerRpc();
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            ProcessValorAttack1GameplayEnd();
+        }
+        else
+        {
+            ValorAttack1EndServerRpc();
+        }
+
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
     }
     
     [ServerRpc]
     private void ValorAttack1EndServerRpc()
     {
-        ValorAttack1EndClientRpc();
+        ProcessValorAttack1GameplayEnd();
     }
     
-    [ClientRpc]
-    private void ValorAttack1EndClientRpc()
-    {
-        ProcessValorAttack1End();
-    }
-    
-    private void ProcessValorAttack1End()
+    private void ProcessValorAttack1GameplayEnd()
     {
         // Debug.Log("Animation Event: ValorAttack1End triggered"); // Reduced logging
         
@@ -329,12 +333,6 @@ public class WeaponClassController : NetworkBehaviour
         {
             Destroy(activeValorMeleeAttack);
             activeValorMeleeAttack = null;
-        }
-        
-        // Reset attack animation state
-        if (playerMovement != null)
-        {
-            playerMovement.OnAttackAnimationEnd();
         }
     }
     
@@ -345,24 +343,26 @@ public class WeaponClassController : NetworkBehaviour
     {
         // Only the owning player should trigger attacks
         if (!IsOwner) return;
-        
-        // Use server RPC to ensure all clients see the attack
-        ValorAttack2StartServerRpc();
+
+        GenerateUltimateCharge(valorLeftClickCharge);
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            ProcessValorAttack2GameplayStart();
+        }
+        else
+        {
+            ValorAttack2StartServerRpc();
+        }
     }
     
     [ServerRpc]
     private void ValorAttack2StartServerRpc()
     {
-        ValorAttack2StartClientRpc();
+        ProcessValorAttack2GameplayStart();
     }
     
-    [ClientRpc]
-    private void ValorAttack2StartClientRpc()
-    {
-        ProcessValorAttack2Start();
-    }
-    
-    private void ProcessValorAttack2Start()
+    private void ProcessValorAttack2GameplayStart()
     {
         if (playerTransform == null) return;
         
@@ -386,9 +386,6 @@ public class WeaponClassController : NetworkBehaviour
         
         // Create and store the melee attack damage object
         activeValorMeleeAttack = CreateMeleeDamageObject(attackPosition, swordWidth, swordHeight, swordDamage, "ValorAttack2");
-        
-        // Generate ultimate charge for valor left click attack
-        GenerateUltimateCharge(valorLeftClickCharge);
     }
     
     /// <summary>
@@ -396,19 +393,37 @@ public class WeaponClassController : NetworkBehaviour
     /// </summary>
     public void ValorAttack2End()
     {
+        if (!IsOwner) return;
+
         Debug.Log("Animation Event: ValorAttack2End triggered");
-        
-        // Destroy the active melee attack damage object
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            ProcessValorAttack2GameplayEnd();
+        }
+        else
+        {
+            ValorAttack2EndServerRpc();
+        }
+
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
+    }
+
+    [ServerRpc]
+    private void ValorAttack2EndServerRpc()
+    {
+        ProcessValorAttack2GameplayEnd();
+    }
+
+    private void ProcessValorAttack2GameplayEnd()
+    {
         if (activeValorMeleeAttack != null)
         {
             Destroy(activeValorMeleeAttack);
             activeValorMeleeAttack = null;
-        }
-        
-        // Reset attack animation state
-        if (playerMovement != null)
-        {
-            playerMovement.OnAttackAnimationEnd();
         }
     }
     
@@ -421,23 +436,26 @@ public class WeaponClassController : NetworkBehaviour
         
         // Only process on the owner's client, then sync to network
         if (!IsOwner) return;
-        
-        ValorThrustStartServerRpc();
+
+        GenerateUltimateCharge(valorLeftClickCharge);
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            ProcessValorThrustGameplayStart();
+        }
+        else
+        {
+            ValorThrustStartServerRpc();
+        }
     }
     
     [ServerRpc]
     private void ValorThrustStartServerRpc()
     {
-        ValorThrustStartClientRpc();
+        ProcessValorThrustGameplayStart();
     }
     
-    [ClientRpc]
-    private void ValorThrustStartClientRpc()
-    {
-        ProcessValorThrustStart();
-    }
-    
-    private void ProcessValorThrustStart()
+    private void ProcessValorThrustGameplayStart()
     {
         if (playerTransform == null) return;
         
@@ -461,12 +479,6 @@ public class WeaponClassController : NetworkBehaviour
         
         // Create and store the thrust attack damage object (potentially larger/different stats)
         activeValorMeleeAttack = CreateMeleeDamageObject(attackPosition, swordWidth, swordHeight, swordDamage, "ValorThrust");
-        
-        // Generate ultimate charge for valor left click attack (only on owner)
-        if (IsOwner)
-        {
-            GenerateUltimateCharge(valorLeftClickCharge);
-        }
     }
     
     /// <summary>
@@ -476,23 +488,29 @@ public class WeaponClassController : NetworkBehaviour
     {
         // Only process on the owner's client, then sync to network
         if (!IsOwner) return;
-        
-        ValorThrustEndServerRpc();
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            ProcessValorThrustGameplayEnd();
+        }
+        else
+        {
+            ValorThrustEndServerRpc();
+        }
+
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
     }
     
     [ServerRpc]
     private void ValorThrustEndServerRpc()
     {
-        ValorThrustEndClientRpc();
+        ProcessValorThrustGameplayEnd();
     }
     
-    [ClientRpc]
-    private void ValorThrustEndClientRpc()
-    {
-        ProcessValorThrustEnd();
-    }
-    
-    private void ProcessValorThrustEnd()
+    private void ProcessValorThrustGameplayEnd()
     {
         // Debug.Log("Animation Event: ValorThrustEnd triggered"); // Reduced logging
         
@@ -501,12 +519,6 @@ public class WeaponClassController : NetworkBehaviour
         {
             Destroy(activeValorMeleeAttack);
             activeValorMeleeAttack = null;
-        }
-        
-        // Reset attack animation state (only on owner)
-        if (IsOwner && playerMovement != null)
-        {
-            playerMovement.OnAttackAnimationEnd();
         }
     }
     
@@ -519,23 +531,26 @@ public class WeaponClassController : NetworkBehaviour
         
         // Only process on the owner's client, then sync to network
         if (!IsOwner) return;
-        
-        WhisperMeleeAttackStartServerRpc();
+
+        GenerateUltimateCharge(whisperLeftClickCharge);
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            ProcessWhisperMeleeAttackGameplayStart();
+        }
+        else
+        {
+            WhisperMeleeAttackStartServerRpc();
+        }
     }
     
     [ServerRpc]
     private void WhisperMeleeAttackStartServerRpc()
     {
-        WhisperMeleeAttackStartClientRpc();
+        ProcessWhisperMeleeAttackGameplayStart();
     }
     
-    [ClientRpc]
-    private void WhisperMeleeAttackStartClientRpc()
-    {
-        ProcessWhisperMeleeAttackStart();
-    }
-    
-    private void ProcessWhisperMeleeAttackStart()
+    private void ProcessWhisperMeleeAttackGameplayStart()
     {
         if (playerTransform == null) return;
         
@@ -559,12 +574,6 @@ public class WeaponClassController : NetworkBehaviour
         
         // Create and store the melee attack damage object
         activeWhisperMeleeAttack = CreateMeleeDamageObject(attackPosition, daggerWidth, daggerHeight, daggerDamage, "WhisperMeleeAttack");
-        
-        // Generate ultimate charge for whisper left click attack (only on owner)
-        if (IsOwner)
-        {
-            GenerateUltimateCharge(whisperLeftClickCharge);
-        }
     }
     
     /// <summary>
@@ -574,23 +583,29 @@ public class WeaponClassController : NetworkBehaviour
     {
         // Only process on the owner's client, then sync to network
         if (!IsOwner) return;
-        
-        WhisperMeleeAttackEndServerRpc();
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            ProcessWhisperMeleeAttackGameplayEnd();
+        }
+        else
+        {
+            WhisperMeleeAttackEndServerRpc();
+        }
+
+        if (playerMovement != null)
+        {
+            playerMovement.OnAttackAnimationEnd();
+        }
     }
     
     [ServerRpc]
     private void WhisperMeleeAttackEndServerRpc()
     {
-        WhisperMeleeAttackEndClientRpc();
+        ProcessWhisperMeleeAttackGameplayEnd();
     }
     
-    [ClientRpc]
-    private void WhisperMeleeAttackEndClientRpc()
-    {
-        ProcessWhisperMeleeAttackEnd();
-    }
-    
-    private void ProcessWhisperMeleeAttackEnd()
+    private void ProcessWhisperMeleeAttackGameplayEnd()
     {
         // Debug.Log("Animation Event: WhisperMeleeAttackEnd triggered"); // Reduced logging
         
@@ -599,12 +614,6 @@ public class WeaponClassController : NetworkBehaviour
         {
             Destroy(activeWhisperMeleeAttack);
             activeWhisperMeleeAttack = null;
-        }
-        
-        // Reset attack animation state (only on owner)
-        if (IsOwner && playerMovement != null)
-        {
-            playerMovement.OnAttackAnimationEnd();
         }
     }
     
@@ -2438,6 +2447,12 @@ public class WeaponClassController : NetworkBehaviour
         Vector3 startPosition = playerTransform.position + baseDirection * 0.5f;
         
         // Create three daggers with spread angles
+        bool applyGameplay = ShouldApplyAuthoritativePhysicalGameplay();
+        if (!applyGameplay)
+        {
+            CreateTripleDaggerServerRpc(startPosition, baseDirection);
+        }
+
         for (int i = 0; i < 3; i++)
         {
             // Calculate angle offset: center dagger (0°), left (-spread), right (+spread)
@@ -2447,7 +2462,7 @@ public class WeaponClassController : NetworkBehaviour
             Vector3 daggerDirection = RotateVector2D(baseDirection, angleOffset);
             
             // Create the dagger projectile
-            GameObject dagger = CreateTripleDagger(startPosition, daggerDirection, i);
+            GameObject dagger = CreateTripleDagger(startPosition, daggerDirection, i, applyGameplay, true);
             
             if (dagger != null)
             {
@@ -2467,7 +2482,22 @@ public class WeaponClassController : NetworkBehaviour
         }
     }
 
-    private GameObject CreateTripleDagger(Vector3 startPosition, Vector3 direction, int index)
+    [ServerRpc]
+    private void CreateTripleDaggerServerRpc(Vector3 startPosition, Vector3 baseDirection)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            float angleOffset = (i - 1) * tripleDaggerSpread;
+            Vector3 daggerDirection = RotateVector2D(baseDirection, angleOffset);
+            GameObject dagger = CreateTripleDagger(startPosition, daggerDirection, i, true, false);
+            if (dagger != null)
+            {
+                activeDaggers.Add(dagger);
+            }
+        }
+    }
+
+    private GameObject CreateTripleDagger(Vector3 startPosition, Vector3 direction, int index, bool applyGameplay, bool spawnVisuals)
     {
         // Create projectile dagger similar to regular dagger but with special properties
         GameObject projectile = new GameObject($"TripleDagger_{index}");
@@ -2482,68 +2512,59 @@ public class WeaponClassController : NetworkBehaviour
         BoxCollider2D projectileCollider = projectile.AddComponent<BoxCollider2D>();
         projectileCollider.size = new Vector2(projectileWidth, projectileHeight);
         projectileCollider.isTrigger = true;
-        
-        // Add damage component
-        DamageObject damageComponent = projectile.AddComponent<DamageObject>();
-        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
-        damageComponent.damageRate = 0.3f; // Slower damage rate for thrown daggers
-        
-        // Add Whisper Shard passive callback
-        damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
-        
-        // Configure damage object
-        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (excludeField != null)
+
+        if (applyGameplay)
         {
-            excludeField.SetValue(damageComponent, true);
-        }
-        
-        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (enemyDamageField != null)
-        {
-            enemyDamageField.SetValue(damageComponent, true);
-        }
-        
-        // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
-        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
-        
-        // Visual indicator - white color for triple daggers
-        SpriteRenderer daggerRenderer = projectile.AddComponent<SpriteRenderer>();
-        Color tripleDaggerColor = new Color(1f, 1f, 1f, 1f); // White color
-        
-        if (daggerSprite != null)
-        {
-            daggerRenderer.sprite = daggerSprite;
-            daggerRenderer.color = tripleDaggerColor;
-            
-            // Add rotation controller for natural flight
-            projectile.AddComponent<DaggerRotationController>();
-            
-            // Add ground collision component to make dagger stick in ground
-            DaggerGroundCollision groundCollision = projectile.AddComponent<DaggerGroundCollision>();
-            groundCollision.weaponController = this;
-        }
-        else
-        {
-            // Fallback visual (purple rectangle)
-            int textureWidth = Mathf.RoundToInt(projectileWidth * 64);
-            int textureHeight = Mathf.RoundToInt(projectileHeight * 64);
-            
-            Texture2D daggerTexture = new Texture2D(textureWidth, textureHeight);
-            
-            for (int x = 0; x < textureWidth; x++)
+            DamageObject damageComponent = projectile.AddComponent<DamageObject>();
+            damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
+            damageComponent.damageRate = 0.3f;
+            damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
+
+            var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (excludeField != null)
             {
-                for (int y = 0; y < textureHeight; y++)
-                {
-                    daggerTexture.SetPixel(x, y, tripleDaggerColor);
-                }
+                excludeField.SetValue(damageComponent, true);
             }
-            
-            daggerTexture.Apply();
-            Sprite daggerSprite = Sprite.Create(daggerTexture, new Rect(0, 0, textureWidth, textureHeight), new Vector2(0.5f, 0.5f));
-            daggerRenderer.sprite = daggerSprite;
-            
-            // Add rotation controller and ground collision for fallback daggers too
+
+            var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (enemyDamageField != null)
+            {
+                enemyDamageField.SetValue(damageComponent, true);
+            }
+
+            damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
+        }
+
+        if (spawnVisuals)
+        {
+            SpriteRenderer daggerRenderer = projectile.AddComponent<SpriteRenderer>();
+            Color tripleDaggerColor = new Color(1f, 1f, 1f, 1f);
+
+            if (daggerSprite != null)
+            {
+                daggerRenderer.sprite = daggerSprite;
+                daggerRenderer.color = tripleDaggerColor;
+            }
+            else
+            {
+                int textureWidth = Mathf.RoundToInt(projectileWidth * 64);
+                int textureHeight = Mathf.RoundToInt(projectileHeight * 64);
+
+                Texture2D daggerTexture = new Texture2D(textureWidth, textureHeight);
+
+                for (int x = 0; x < textureWidth; x++)
+                {
+                    for (int y = 0; y < textureHeight; y++)
+                    {
+                        daggerTexture.SetPixel(x, y, tripleDaggerColor);
+                    }
+                }
+
+                daggerTexture.Apply();
+                Sprite fallbackDaggerSprite = Sprite.Create(daggerTexture, new Rect(0, 0, textureWidth, textureHeight), new Vector2(0.5f, 0.5f));
+                daggerRenderer.sprite = fallbackDaggerSprite;
+            }
+
             projectile.AddComponent<DaggerRotationController>();
             DaggerGroundCollision groundCollision = projectile.AddComponent<DaggerGroundCollision>();
             groundCollision.weaponController = this;
@@ -3014,6 +3035,11 @@ public class WeaponClassController : NetworkBehaviour
         return !IsSpawned || IsServer;
     }
 
+    private bool ShouldApplyAuthoritativePhysicalGameplay()
+    {
+        return !IsSpawned || IsServer;
+    }
+
     private Vector3 GetSoulVortexAnchorPosition()
     {
         float horizontalOffset = IsPlayerFacingLeft() ? -soulVortexForwardOffset : soulVortexForwardOffset;
@@ -3307,8 +3333,22 @@ public class WeaponClassController : NetworkBehaviour
         
         // Generate ultimate charge for valor right click wave attack
         GenerateUltimateCharge(valorRightClickCharge);
-        
-        StartCoroutine(CreateWaveBlocks(waveBlocks, waveDirection));
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            StartCoroutine(CreateWaveBlocks(waveBlocks, waveDirection, true, true));
+        }
+        else
+        {
+            StartCoroutine(CreateWaveBlocks(waveBlocks, waveDirection, false, true));
+            CreateWaveAttackServerRpc(waveBlocks, waveDirection);
+        }
+    }
+
+    [ServerRpc]
+    private void CreateWaveAttackServerRpc(int blockCount, Vector3 direction)
+    {
+        StartCoroutine(CreateWaveBlocks(blockCount, direction, true, false));
     }
     
     private int GetWaveBlockCount(float chargeTime)
@@ -3436,7 +3476,7 @@ public class WeaponClassController : NetworkBehaviour
         EndAttackAnimation();
     }
     
-    private IEnumerator CreateWaveBlocks(int blockCount, Vector3 direction)
+    private IEnumerator CreateWaveBlocks(int blockCount, Vector3 direction, bool applyGameplay, bool spawnVisuals)
     {
         List<GameObject> waveBlocks = new List<GameObject>();
         
@@ -3450,7 +3490,7 @@ public class WeaponClassController : NetworkBehaviour
             // Start blocks underground
             blockPosition.y -= 1f;
             
-            GameObject waveBlock = CreateWaveBlock(blockPosition, i);
+            GameObject waveBlock = CreateWaveBlock(blockPosition, i, applyGameplay, spawnVisuals);
             waveBlocks.Add(waveBlock);
         }
         
@@ -3466,75 +3506,71 @@ public class WeaponClassController : NetworkBehaviour
         yield return null;
     }
     
-    private GameObject CreateWaveBlock(Vector3 position, int blockIndex)
+    private GameObject CreateWaveBlock(Vector3 position, int blockIndex, bool applyGameplay, bool spawnVisuals)
     {
         GameObject waveBlock = new GameObject($"WaveBlock_{blockIndex}");
         waveBlock.transform.position = position;
-        
-        // Add collider for damage detection
-        BoxCollider2D blockCollider = waveBlock.AddComponent<BoxCollider2D>();
-        blockCollider.size = new Vector2(waveBlockSize, waveBlockSize);
-        blockCollider.isTrigger = true;
-        
-        // Add damage object component
-        DamageObject damageComponent = waveBlock.AddComponent<DamageObject>();
-        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(waveDamage);
-        damageComponent.damageRate = 0.1f;
-        
-        // Configure damage object
-        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (excludeField != null)
+
+        if (applyGameplay)
         {
-            excludeField.SetValue(damageComponent, true);
-        }
-        
-        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (enemyDamageField != null)
-        {
-            enemyDamageField.SetValue(damageComponent, true);
-        }
-        
-        // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
-        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
-        
-        // Visual indicator (valor wave prefab or fallback sprite)
-        if (valorWavePrefab != null)
-        {
-            Debug.Log("Using valor wave prefab: " + valorWavePrefab.name);
-            // Use animated prefab - instantiate it as child of the wave block
-            GameObject animatedWave = Instantiate(valorWavePrefab, waveBlock.transform);
-            animatedWave.transform.localPosition = Vector3.zero;
-            animatedWave.transform.localScale = Vector3.one;
-            
-            // Store the animated wave reference in the wave block for later triggering
-            WaveBlockComponent waveComponent = waveBlock.GetComponent<WaveBlockComponent>();
-            if (waveComponent == null)
+            BoxCollider2D blockCollider = waveBlock.AddComponent<BoxCollider2D>();
+            blockCollider.size = new Vector2(waveBlockSize, waveBlockSize);
+            blockCollider.isTrigger = true;
+
+            DamageObject damageComponent = waveBlock.AddComponent<DamageObject>();
+            damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(waveDamage);
+            damageComponent.damageRate = 0.1f;
+
+            var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (excludeField != null)
             {
-                waveComponent = waveBlock.AddComponent<WaveBlockComponent>();
+                excludeField.SetValue(damageComponent, true);
             }
-            waveComponent.animatedWave = animatedWave;
-        }
-        else
-        {
-            Debug.Log("Valor wave prefab is null, using fallback sprite");
-            // Fallback: Use sprite renderer for static sprite
-            SpriteRenderer blockRenderer = waveBlock.AddComponent<SpriteRenderer>();
-            
-            // Fallback: Create texture scaled to match collider size - COMMENTED OUT FOR INVISIBILITY
-            int textureSize = Mathf.RoundToInt(waveBlockSize * 80);
-            Texture2D blockTexture = new Texture2D(textureSize, textureSize);
-            Color[] pixels = new Color[textureSize * textureSize];
-            for (int i = 0; i < pixels.Length; i++)
+
+            var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (enemyDamageField != null)
             {
-                // pixels[i] = new Color(1f, 0.8f, 0f, 0.9f); // Golden yellow - VISIBLE
-                pixels[i] = new Color(1f, 0.8f, 0f, 0f); // Fully transparent (invisible)
+                enemyDamageField.SetValue(damageComponent, true);
             }
-            blockTexture.SetPixels(pixels);
-            blockTexture.Apply();
-            blockRenderer.sprite = Sprite.Create(blockTexture, new Rect(0, 0, textureSize, textureSize), Vector2.one * 0.5f);
-            
-            blockRenderer.sortingLayerName = "Player";
-            blockRenderer.sortingOrder = 0;
+
+            damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
+        }
+
+        if (spawnVisuals)
+        {
+            if (valorWavePrefab != null)
+            {
+                Debug.Log("Using valor wave prefab: " + valorWavePrefab.name);
+                GameObject animatedWave = Instantiate(valorWavePrefab, waveBlock.transform);
+                animatedWave.transform.localPosition = Vector3.zero;
+                animatedWave.transform.localScale = Vector3.one;
+
+                WaveBlockComponent waveComponent = waveBlock.GetComponent<WaveBlockComponent>();
+                if (waveComponent == null)
+                {
+                    waveComponent = waveBlock.AddComponent<WaveBlockComponent>();
+                }
+
+                waveComponent.animatedWave = animatedWave;
+            }
+            else
+            {
+                Debug.Log("Valor wave prefab is null, using fallback sprite");
+                SpriteRenderer blockRenderer = waveBlock.AddComponent<SpriteRenderer>();
+
+                int textureSize = Mathf.RoundToInt(waveBlockSize * 80);
+                Texture2D blockTexture = new Texture2D(textureSize, textureSize);
+                Color[] pixels = new Color[textureSize * textureSize];
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    pixels[i] = new Color(1f, 0.8f, 0f, 0f);
+                }
+                blockTexture.SetPixels(pixels);
+                blockTexture.Apply();
+                blockRenderer.sprite = Sprite.Create(blockTexture, new Rect(0, 0, textureSize, textureSize), Vector2.one * 0.5f);
+                blockRenderer.sortingLayerName = "Player";
+                blockRenderer.sortingOrder = 0;
+            }
         }
         
         return waveBlock;
@@ -3787,9 +3823,22 @@ public class WeaponClassController : NetworkBehaviour
     {
         // Wait for throw animation to progress before spawning projectile
         yield return new WaitForSeconds(projectileThrowAnimationDelay);
-        
-        // Now create the projectile
-        StartCoroutine(CreateProjectileDagger(startPosition, throwDirection));
+
+        if (ShouldApplyAuthoritativePhysicalGameplay())
+        {
+            StartCoroutine(CreateProjectileDagger(startPosition, throwDirection, true, true));
+        }
+        else
+        {
+            ThrowProjectileDaggerServerRpc(startPosition, throwDirection);
+            StartCoroutine(CreateProjectileDagger(startPosition, throwDirection, false, true));
+        }
+    }
+
+    [ServerRpc]
+    private void ThrowProjectileDaggerServerRpc(Vector3 startPosition, Vector3 throwDirection)
+    {
+        StartCoroutine(CreateProjectileDagger(startPosition, throwDirection, true, false));
     }
     
     private void RedirectDagger()
@@ -3797,33 +3846,56 @@ public class WeaponClassController : NetworkBehaviour
         // Check if we have active triple daggers
         if (activeDaggers.Count > 0)
         {
+            if (IsSpawned && !IsServer)
+            {
+                RedirectAllActiveDaggersServerRpc();
+            }
+
             RedirectAllActiveDaggers();
             return;
         }
-        
-        // Handle single dagger redirect (original behavior)
+
+        if (IsSpawned && !IsServer)
+        {
+            RedirectDaggerServerRpc();
+        }
+
+        RedirectSingleDagger();
+    }
+
+    [ServerRpc]
+    private void RedirectDaggerServerRpc()
+    {
+        RedirectSingleDagger();
+    }
+
+    [ServerRpc]
+    private void RedirectAllActiveDaggersServerRpc()
+    {
+        RedirectAllActiveDaggers();
+    }
+
+    private void RedirectSingleDagger()
+    {
         if (currentThrownDagger == null || daggerExpired) return;
-        
-        // Find nearest enemy within detection range
+
         GameObject nearestEnemy = FindNearestEnemy();
-        
+
         if (nearestEnemy != null)
         {
             currentRedirectCount++;
             Debug.Log($"WhisperShard: Dagger redirect #{currentRedirectCount} - targeting enemy! ({maxDaggerRedirects - currentRedirectCount} redirects remaining)");
-            
-            // Extend cooldown with each redirect to increase dagger duration
+
             lastProjectileAttackTime += redirectCooldownExtension;
             Debug.Log($"WhisperShard: Cooldown extended by {redirectCooldownExtension}s - new remaining cooldown: {(lastProjectileAttackTime + projectileCooldown - Time.time):F1}s");
-            
+
             StartCoroutine(CreateRedirectAttack(currentThrownDagger, nearestEnemy));
         }
         else
         {
             Debug.Log("WhisperShard: No enemies in range for redirect!");
         }
-        
-        // Check if dagger should expire after this redirect
+
         if (currentRedirectCount >= maxDaggerRedirects)
         {
             daggerExpired = true;
@@ -4152,7 +4224,7 @@ public class WeaponClassController : NetworkBehaviour
         }
     }
 
-    private IEnumerator CreateProjectileDagger(Vector3 startPosition, Vector3 direction)
+    private IEnumerator CreateProjectileDagger(Vector3 startPosition, Vector3 direction, bool applyGameplay, bool spawnVisuals)
     {
         // Create projectile dagger (1/3 player size)
         GameObject projectile = new GameObject("DaggerProjectile");
@@ -4167,65 +4239,60 @@ public class WeaponClassController : NetworkBehaviour
         BoxCollider2D projectileCollider = projectile.AddComponent<BoxCollider2D>();
         projectileCollider.size = new Vector2(projectileWidth, projectileHeight);
         projectileCollider.isTrigger = true;
-        
-        // Add damage object component
-        DamageObject damageComponent = projectile.AddComponent<DamageObject>();
-        damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
-        damageComponent.damageRate = 0.3f; // Slower damage rate for thrown daggers
-        
-        // Add Whisper Shard passive callback
-        damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
-        
-        // Configure damage object
-        var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (excludeField != null)
+
+        if (applyGameplay)
         {
-            excludeField.SetValue(damageComponent, true);
-        }
-        
-        var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (enemyDamageField != null)
-        {
-            enemyDamageField.SetValue(damageComponent, true);
-        }
-        
-        // Exclude NPC and PlayerSummon layers to prevent damaging player summons/allies
-        damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
-        
-        // Visual indicator (dagger sprite)
-        SpriteRenderer projectileRenderer = projectile.AddComponent<SpriteRenderer>();
-        
-        // Use custom dagger sprite if assigned, otherwise create fallback blue texture
-        if (daggerSprite != null)
-        {
-            projectileRenderer.sprite = daggerSprite;
-        }
-        else
-        {
-            // Fallback: Create texture scaled to match collider size - COMMENTED OUT FOR INVISIBILITY
-            int textureWidth = Mathf.RoundToInt(projectileWidth * 80);
-            int textureHeight = Mathf.RoundToInt(projectileHeight * 80);
-            Texture2D projectileTexture = new Texture2D(textureWidth, textureHeight);
-            Color[] pixels = new Color[textureWidth * textureHeight];
-            for (int i = 0; i < pixels.Length; i++)
+            DamageObject damageComponent = projectile.AddComponent<DamageObject>();
+            damageComponent.damageAmount = playerMovement.GetModifiedMeleeDamage(projectileDamage);
+            damageComponent.damageRate = 0.3f;
+            damageComponent.onEnemyHit = () => ApplyWhisperAttackPassive();
+
+            var excludeField = typeof(DamageObject).GetField("excludePlayerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (excludeField != null)
             {
-                // pixels[i] = new Color(0f, 0.7f, 1f, 0.9f); // Bright blue for projectile - VISIBLE
-                pixels[i] = new Color(0f, 0.7f, 1f, 0f); // Fully transparent (invisible)
+                excludeField.SetValue(damageComponent, true);
             }
-            projectileTexture.SetPixels(pixels);
-            projectileTexture.Apply();
-            projectileRenderer.sprite = Sprite.Create(projectileTexture, new Rect(0, 0, textureWidth, textureHeight), Vector2.one * 0.5f);
+
+            var enemyDamageField = typeof(DamageObject).GetField("canDamageEnemies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (enemyDamageField != null)
+            {
+                enemyDamageField.SetValue(damageComponent, true);
+            }
+
+            damageComponent.excludeLayers = LayerMask.GetMask("NPC", "PlayerSummon");
         }
-        
-        projectileRenderer.sortingLayerName = "Player";
-        projectileRenderer.sortingOrder = 0;
-        
-        // Add rotation component to make dagger face travel direction
-        projectile.AddComponent<DaggerRotationController>();
-        
-        // Add ground collision component to make dagger stick in ground
-        DaggerGroundCollision groundCollision = projectile.AddComponent<DaggerGroundCollision>();
-        groundCollision.weaponController = this;
+
+        if (spawnVisuals)
+        {
+            SpriteRenderer projectileRenderer = projectile.AddComponent<SpriteRenderer>();
+
+            if (daggerSprite != null)
+            {
+                projectileRenderer.sprite = daggerSprite;
+            }
+            else
+            {
+                int textureWidth = Mathf.RoundToInt(projectileWidth * 80);
+                int textureHeight = Mathf.RoundToInt(projectileHeight * 80);
+                Texture2D projectileTexture = new Texture2D(textureWidth, textureHeight);
+                Color[] pixels = new Color[textureWidth * textureHeight];
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    pixels[i] = new Color(0f, 0.7f, 1f, 0f);
+                }
+                projectileTexture.SetPixels(pixels);
+                projectileTexture.Apply();
+                projectileRenderer.sprite = Sprite.Create(projectileTexture, new Rect(0, 0, textureWidth, textureHeight), Vector2.one * 0.5f);
+            }
+
+            projectileRenderer.sortingLayerName = "Player";
+            projectileRenderer.sortingOrder = 0;
+
+            projectile.AddComponent<DaggerRotationController>();
+
+            DaggerGroundCollision groundCollision = projectile.AddComponent<DaggerGroundCollision>();
+            groundCollision.weaponController = this;
+        }
         
         // Add cleanup component to handle reference clearing
         DaggerCleanup cleanup = projectile.AddComponent<DaggerCleanup>();
@@ -5790,6 +5857,11 @@ public class WeaponClassController : NetworkBehaviour
                 Debug.LogError("WeaponClassController: playerMovement is null in UpdatePlayerAnimationController");
                 return;
             }
+        }
+
+        if (playerMovement.IsDead)
+        {
+            return;
         }
 
         if (playerMovement.playerAnimator == null)
