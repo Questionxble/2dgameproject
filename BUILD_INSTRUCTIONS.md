@@ -1,12 +1,15 @@
-# Unity Build Instructions for AWS EC2 Deployment
+# Unity Build Instructions for Linux Dedicated Server Deployment
+
+For the current GCP deployment path and the 4-player configuration, use `GCP_COMPUTE_ENGINE_AUTOSTART_AND_4_PLAYER_GUIDE.md` alongside this build document.
+For cloud-neutral secrets and auth setup, use `SERVER_SECRET_AND_CONFIG_QUICK_GUIDE.md` and `OIDC_AND_JOIN_TOKEN_GUIDE.md`.
 
 ## Overview
 You need to create three separate builds for your multiplayer deployment:
-1. **Linux Server Build** (for AWS EC2)
+1. **Linux Server Build** (for GCP Compute Engine or another Linux VM)
 2. **Windows Client Build** (for Windows Intel 64-bit machines)
 3. **macOS Client Build** (for Mac M2/ARM64 machines)
 
-## 1. Linux Server Build (for AWS EC2)
+## 1. Linux Server Build (for GCP Compute Engine or another Linux VM)
 
 ### Build Settings:
 - **Target Platform**: Dedicated Server
@@ -24,7 +27,7 @@ You need to create three separate builds for your multiplayer deployment:
    - **Default Icon**: Set your game icon
    - **Server Build**: Checked ✅
 6. Click `Build` and save as `2dgameproject_server`
-7. Upload the entire build folder to your EC2 instance
+7. Upload the entire build folder to your Linux VM
 
 ### Command-Line Build Option
 If the interactive Unity build window hangs during `PostprocessPlayer`, use the editor script entry point instead:
@@ -43,11 +46,12 @@ Notes:
 - This uses `StandaloneLinux64` with `StandaloneBuildSubtarget.Server`.
 - The detailed build log will be written to the `-logFile` path you provide.
 
-### EC2 Deployment Commands:
+### Linux VM Deployment Commands:
 ```bash
-# On your EC2 instance
+# On your Linux VM
 chmod +x 2dgameproject_server
 chmod +x server_start.sh
+chmod +x install_server_service.sh
 
 # Start the server
 ./server_start.sh
@@ -66,7 +70,7 @@ chmod +x server_start.sh
 
 ### Configuration:
 - Ensure NetworkManager has:
-  - **Address**: `18.188.108.134` (your EC2 public IP)
+  - **Address**: your VM public IP or DNS name
   - **Port**: `7777`
   - **Server Listen Address**: `127.0.0.1` (doesn't matter for client)
 
@@ -93,30 +97,31 @@ chmod +x server_start.sh
 
 ### Network Configuration
 - **Server**: Listens on `0.0.0.0:7777` (all interfaces)
-- **Clients**: Connect to `18.188.108.134:7777` (EC2 public IP)
+- **Clients**: Connect to your VM public IP or DNS name on port `7777`
 
-### AWS Security Group
-Ensure your EC2 security group allows:
+### Firewall Rules
+Ensure your cloud firewall allows:
 - **Inbound**: UDP port 7777 from `0.0.0.0/0`
-- **Outbound**: All traffic (default)
+- **Inbound**: TCP port 22 from your admin IP
+- **Outbound**: Default egress or equivalent
 
 ### Testing Connection
 1. Start server on EC2: `./server_start.sh`
 2. Check server logs: `tail -f server.log`
 3. Launch client builds and click "Join" button
-4. Both clients should connect to the same game session
+4. Up to four clients should connect to the same game session
 
 ### Troubleshooting
 
 #### Server Issues:
 - Check `server.log` for Unity errors
 - Verify port 7777 is not blocked: `sudo netstat -tulpn | grep 7777`
-- Test network connectivity: `telnet your-ec2-ip 7777`
+- Test network connectivity: `telnet your-server-ip 7777`
 
 #### Client Issues:
 - Ensure firewall allows outbound UDP 7777
 - Check Unity logs for connection errors
-- Verify EC2 public IP is current (may change on restart)
+- Verify the VM public IP is current or use a reserved static IP
 
 ### Build Size Optimization
 
@@ -133,10 +138,11 @@ Ensure your EC2 security group allows:
 ## File Structure After Build
 
 ```
-├── EC2 Instance (Linux):
+├── Linux VM:
 │   ├── 2dgameproject_server        # Main executable
 │   ├── 2dgameproject_server_Data/  # Game data
 │   ├── server_start.sh             # Start script
+│   ├── install_server_service.sh   # systemd installer
 │   └── server.log                  # Runtime logs
 │
 ├── Windows Distribution:
@@ -152,9 +158,9 @@ Ensure your EC2 security group allows:
 
 ## Performance Considerations
 
-- **EC2 Instance**: t3.small or larger recommended
-- **RAM**: Minimum 1GB, 2GB recommended for 2 players
+- **GCP Compute Engine**: `e2-standard-2` is a comfortable baseline, `e2-medium` can work for lightweight tests, and smaller tiers may need a longer warmup delay
+- **RAM**: Minimum 2GB, 4GB recommended for 4 players
 - **Network**: Monitor bandwidth usage during gameplay
-- **CPU**: Monitor CPU usage, upgrade instance if needed
+- **CPU**: Monitor CPU usage and cold-start time, then adjust the VM tier if needed
 
-The single-session architecture you described will work well for 2 players on a small EC2 instance.
+The single-session architecture in this repo is now configured for up to 4 players on a single dedicated Linux session.

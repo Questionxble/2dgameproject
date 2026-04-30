@@ -212,6 +212,7 @@ public class PlayerMovement : NetworkBehaviour
     private Image healthBarBackground;
     private Image healthBarFill;
     private Text healthBarNameText;
+    private RectTransform healthBarNameRect;
     
     // Screen-Space UI System
     private Canvas screenUICanvas;
@@ -245,6 +246,7 @@ public class PlayerMovement : NetworkBehaviour
 
     public bool IsDead => isPlayerDead;
     public string DisplayName => GetDisplayNameText();
+    public Vector3 ChatBubbleAnchorWorldPosition => GetChatBubbleAnchorWorldPosition();
 
     void Awake()
     {
@@ -280,11 +282,13 @@ public class PlayerMovement : NetworkBehaviour
         // Prevent player from rotating when falling off edges
         rb.freezeRotation = true;
         
-        // Improve slope handling with physics material
+        // Use a low-friction material so the player does not stick to vertical ground colliders.
         PhysicsMaterial2D slopeMaterial = new PhysicsMaterial2D("PlayerSlopeMaterial");
-        slopeMaterial.friction = 0.4f; // Moderate friction for slopes
+        slopeMaterial.friction = 0f;
         slopeMaterial.bounciness = 0f; // No bouncing
-        playerCollider.sharedMaterial = slopeMaterial;        // Initialize health system
+        playerCollider.sharedMaterial = slopeMaterial;
+
+        // Initialize health system
         currentHealth = maxHealth;
         spawnPosition = transform.position;
         
@@ -362,6 +366,7 @@ public class PlayerMovement : NetworkBehaviour
         isPlayerDead = networkIsPlayerDead.Value;
         SetPetrificationVisualState(isPetrified);
         UpdateDisplayNameLabel();
+        UpdateWorldHealthBarPresentation();
 
         if (IsOwner)
         {
@@ -605,9 +610,13 @@ public class PlayerMovement : NetworkBehaviour
         {
             HandleFallDamage();
             HandleWaterPhysics();
+            UpdateBuffs();
+        }
+
+        if (!IsSpawned || IsServer)
+        {
             HandleHealthRegeneration();
             HandleBurningEffect();
-            UpdateBuffs();
         }
         
         // UI updates for all players (local UI shows based on network variables)
@@ -865,22 +874,13 @@ public class PlayerMovement : NetworkBehaviour
 
     private void CheckGrounded()
     {
-        Vector2 colliderCenter = (Vector2)transform.position + (Vector2)(playerCollider.offset * transform.localScale.y);
+        Bounds colliderBounds = playerCollider.bounds;
         float checkDistance = groundCheckDistance;
-        
-        // Account for scaling when calculating the effective collider dimensions
-        float scaledPlayerWidth = playerCollider.size.x * transform.localScale.x;
-        float scaledPlayerHeight = playerCollider.size.y * transform.localScale.y;
-        
-        // For capsule collider, calculate the actual bottom position
-        // The capsule extends from center by half its height, then we need to account for the rounded ends
-        float halfHeight = scaledPlayerHeight * 0.5f;
-        float bottomY = colliderCenter.y - halfHeight;
-        
+
         // Create multiple ground check positions across the player's width
-        Vector2 leftCheckPos = new Vector2(colliderCenter.x - scaledPlayerWidth * 0.3f, bottomY - 0.05f);
-        Vector2 centerCheckPos = new Vector2(colliderCenter.x, bottomY - 0.05f);
-        Vector2 rightCheckPos = new Vector2(colliderCenter.x + scaledPlayerWidth * 0.3f, bottomY - 0.05f);
+        Vector2 leftCheckPos = new Vector2(colliderBounds.min.x + colliderBounds.size.x * 0.2f, colliderBounds.min.y - 0.02f);
+        Vector2 centerCheckPos = new Vector2(colliderBounds.center.x, colliderBounds.min.y - 0.02f);
+        Vector2 rightCheckPos = new Vector2(colliderBounds.max.x - colliderBounds.size.x * 0.2f, colliderBounds.min.y - 0.02f);
         
         // Check ground at multiple points
         bool leftGrounded = CheckGroundAtPosition(leftCheckPos, checkDistance);
@@ -888,8 +888,8 @@ public class PlayerMovement : NetworkBehaviour
         bool rightGrounded = CheckGroundAtPosition(rightCheckPos, checkDistance);
         
         // Additional check using OverlapBox for better tilemap detection
-        Vector2 overlapBoxCenter = new Vector2(colliderCenter.x, bottomY - checkDistance * 0.5f);
-        Vector2 overlapBoxSize = new Vector2(scaledPlayerWidth * 0.8f, checkDistance);
+        Vector2 overlapBoxCenter = new Vector2(colliderBounds.center.x, colliderBounds.min.y - checkDistance * 0.5f);
+        Vector2 overlapBoxSize = new Vector2(Mathf.Max(colliderBounds.size.x * 0.6f, 0.05f), checkDistance);
         Collider2D groundCollider = Physics2D.OverlapBox(overlapBoxCenter, overlapBoxSize, 0f, groundLayerMask);
         bool overlapGrounded = groundCollider != null && groundCollider != playerCollider && groundCollider.gameObject != gameObject;
         
@@ -916,21 +916,10 @@ public class PlayerMovement : NetworkBehaviour
     
     private void CheckCeilingClearance()
     {
-        Vector2 colliderCenter = (Vector2)transform.position + (Vector2)(playerCollider.offset * transform.localScale.y);
-        
-        // Account for scaling when calculating the effective collider dimensions
-        float scaledPlayerWidth = playerCollider.size.x * transform.localScale.x;
-        float scaledPlayerHeight = playerCollider.size.y * transform.localScale.y;
-        
-        // Check if player is inside a solid object by detecting overlaps
-        Bounds playerBounds = new Bounds(colliderCenter, new Vector3(scaledPlayerWidth * 0.9f, scaledPlayerHeight * 0.9f, 0));
-        
+        Bounds playerBounds = playerCollider.bounds;
+
         // Get all colliders that overlap with the player
-        Collider2D[] overlappingColliders = Physics2D.OverlapAreaAll(
-            (Vector2)playerBounds.min, 
-            (Vector2)playerBounds.max, 
-            solidObjectLayerMask
-        );
+        Collider2D[] overlappingColliders = Physics2D.OverlapBoxAll(playerBounds.center, playerBounds.size * 0.9f, 0f, solidObjectLayerMask);
         
         bool insideSolidObject = false;
         
@@ -1024,15 +1013,25 @@ public class PlayerMovement : NetworkBehaviour
     
     private void TakeDamage(int damage)
     {
-        // For networked gameplay, damage must be processed on the server
-        if (IsOwner && IsClient)
+        if (damage <= 0)
+        {
+            return;
+        }
+
+        if (!IsSpawned)
+        {
+            ProcessLocalDamage(damage, false);
+            return;
+        }
+
+        // For networked gameplay, damage must be processed on the server.
+        if (IsServer)
+        {
+            ProcessDamage(damage);
+        }
+        else if (IsOwner && IsClient)
         {
             TakeDamageServerRpc(damage);
-        }
-        else if (IsServer && !IsClient)
-        {
-            // Direct server processing
-            ProcessDamage(damage);
         }
     }
     
@@ -1042,10 +1041,10 @@ public class PlayerMovement : NetworkBehaviour
         ProcessDamage(damage);
     }
     
-    private void ProcessDamage(int damage)
+    private void ProcessDamage(int damage, bool bypassShield = false)
     {
         // CRITICAL: Don't process damage if player is already dead
-        if (networkIsPlayerDead.Value)
+        if (damage <= 0 || networkIsPlayerDead.Value)
         {
             return;
         }
@@ -1054,7 +1053,7 @@ public class PlayerMovement : NetworkBehaviour
         int remainingDamage = damage;
         
         // Check aegis shield first
-        if (networkCurrentShield.Value > 0f)
+        if (!bypassShield && networkCurrentShield.Value > 0f)
         {
             float shieldDamage = Mathf.Min(networkCurrentShield.Value, remainingDamage);
             networkCurrentShield.Value -= shieldDamage;
@@ -1067,13 +1066,9 @@ public class PlayerMovement : NetworkBehaviour
         if (remainingDamage > 0)
         {
             networkHealth.Value = Mathf.Max(0, networkHealth.Value - remainingDamage);
-            
-            // Record damage time for regeneration system (local only)
-            if (IsOwner)
-            {
-                lastDamageTime = Time.time;
-                isRegenerating = false;
-            }
+
+            lastDamageTime = Time.time;
+            isRegenerating = false;
             
             Debug.Log($"Health damage: -{remainingDamage}, Health remaining: {networkHealth.Value}/{GetModifiedMaxHealth()}");
         }
@@ -1081,6 +1076,37 @@ public class PlayerMovement : NetworkBehaviour
         if (networkHealth.Value <= 0)
         {
             ProcessPlayerDeath();
+        }
+    }
+
+    private void ProcessLocalDamage(int damage, bool bypassShield)
+    {
+        if (damage <= 0 || isPlayerDead)
+        {
+            return;
+        }
+
+        int remainingDamage = damage;
+
+        if (!bypassShield && currentAegisShield > 0f)
+        {
+            float shieldDamage = Mathf.Min(currentAegisShield, remainingDamage);
+            currentAegisShield -= shieldDamage;
+            remainingDamage -= Mathf.RoundToInt(shieldDamage);
+            UpdateAegisOutline();
+        }
+
+        if (remainingDamage > 0)
+        {
+            currentHealth = Mathf.Max(0, currentHealth - remainingDamage);
+            lastDamageTime = Time.time;
+            isRegenerating = false;
+            UpdateHealthUI();
+        }
+
+        if (currentHealth <= 0)
+        {
+            Die();
         }
     }
     
@@ -1112,6 +1138,7 @@ public class PlayerMovement : NetworkBehaviour
             if (playerAnimator != null)
             {
                 playerAnimator.SetBool("IsDead", true);
+                playerAnimator.SetBool("isDead", true);
             }
 
             if (weaponController == null)
@@ -1149,7 +1176,7 @@ public class PlayerMovement : NetworkBehaviour
         MultiplayerGameManager gameManager = FindFirstObjectByType<MultiplayerGameManager>();
         if (gameManager != null)
         {
-            gameManager.RespawnPlayerServerRpc(OwnerClientId);
+            gameManager.RespawnPlayerForClient(OwnerClientId);
         }
         else
         {
@@ -1191,14 +1218,15 @@ public class PlayerMovement : NetworkBehaviour
     
     private void UpdateBurningVisuals()
     {
-        if (networkIsBurning.Value && !isBurning)
+        if (isBurning)
         {
-            // Start burning visual effect
-            CreateBurnVisualEffect();
+            if (burnEffectObject == null)
+            {
+                CreateBurnVisualEffect();
+            }
         }
-        else if (!networkIsBurning.Value && isBurning)
+        else if (burnEffectObject != null)
         {
-            // Stop burning visual effect
             StopBurningVisualEffect();
         }
     }
@@ -1219,8 +1247,22 @@ public class PlayerMovement : NetworkBehaviour
     
     private void HandleBurningEffect()
     {
-        // Don't process burning if player is dead
-        if (!isBurning || networkIsPlayerDead.Value) return;
+        if (!isBurning)
+        {
+            return;
+        }
+
+        if (IsSpawned)
+        {
+            if (!IsServer || networkIsPlayerDead.Value)
+            {
+                return;
+            }
+        }
+        else if (currentHealth <= 0)
+        {
+            return;
+        }
         
         // Check if burning effect should end
         if (Time.time >= burnEndTime)
@@ -1232,30 +1274,29 @@ public class PlayerMovement : NetworkBehaviour
         // Apply burn damage at intervals
         if (Time.time >= nextBurnDamageTime)
         {
-            // Use TakeDamage method but bypass aegis shield for DoT effects
             int burnDamage = Mathf.RoundToInt(burnDamageRate);
-            currentHealth -= burnDamage;
-            currentHealth = Mathf.Max(0, currentHealth);
-            
-            // Reset damage timer for health regeneration
-            lastDamageTime = Time.time;
-            
-            UpdateHealthBar();
-            Debug.Log($"Burn damage applied: -{burnDamage}, Health remaining: {currentHealth}/{GetModifiedMaxHealth()}");
+
+            if (IsSpawned)
+            {
+                ProcessDamage(burnDamage, true);
+                Debug.Log($"Burn damage applied: -{burnDamage}, Health remaining: {networkHealth.Value}/{GetModifiedMaxHealth()}");
+            }
+            else
+            {
+                ProcessLocalDamage(burnDamage, true);
+                Debug.Log($"Burn damage applied: -{burnDamage}, Health remaining: {currentHealth}/{GetModifiedMaxHealth()}");
+            }
             
             nextBurnDamageTime = Time.time + burnDamageInterval;
-            
-            // Check if player died from burn damage
-            if (currentHealth <= 0)
-            {
-                Die();
-            }
         }
     }
     
     private void StopBurningEffect()
     {
-        if (!isBurning) return;
+        if (IsSpawned && IsServer && networkIsBurning.Value)
+        {
+            networkIsBurning.Value = false;
+        }
         
         isBurning = false;
         burnEndTime = 0f;
@@ -1545,10 +1586,16 @@ public class PlayerMovement : NetworkBehaviour
     
     private void HandleHealthRegeneration()
     {
+        if (IsSpawned && !IsServer)
+        {
+            return;
+        }
+
         int modifiedMaxHealth = GetModifiedMaxHealth();
+        int activeHealth = IsSpawned ? networkHealth.Value : currentHealth;
         
         // Don't regenerate if system is disabled, health is full, or player is dead
-        if (!enableHealthRegeneration || currentHealth >= modifiedMaxHealth || currentHealth <= 0 || networkIsPlayerDead.Value)
+        if (!enableHealthRegeneration || activeHealth >= modifiedMaxHealth || activeHealth <= 0 || (IsSpawned && networkIsPlayerDead.Value))
         {
             return;
         }
@@ -1576,17 +1623,23 @@ public class PlayerMovement : NetworkBehaviour
                 }
                 
                 int healthToRegenerate = Mathf.RoundToInt(modifiedRegenRate * healthRegenInterval);
-                currentHealth += healthToRegenerate;
-                currentHealth = Mathf.Min(currentHealth, modifiedMaxHealth);
-                
-                // Update health bar
-                UpdateHealthBar();
+
+                if (IsSpawned)
+                {
+                    networkHealth.Value = Mathf.Min(networkHealth.Value + healthToRegenerate, modifiedMaxHealth);
+                }
+                else
+                {
+                    currentHealth += healthToRegenerate;
+                    currentHealth = Mathf.Min(currentHealth, modifiedMaxHealth);
+                    UpdateHealthBar();
+                }
                 
                 // Update last regeneration time
                 lastRegenTime = Time.time;
                 
                 // Stop regenerating if health is full
-                if (currentHealth >= modifiedMaxHealth)
+                if ((IsSpawned ? networkHealth.Value : currentHealth) >= modifiedMaxHealth)
                 {
                     isRegenerating = false;
                 }
@@ -1806,12 +1859,12 @@ public class PlayerMovement : NetworkBehaviour
         healthBarNameText.horizontalOverflow = HorizontalWrapMode.Overflow;
         healthBarNameText.verticalOverflow = VerticalWrapMode.Overflow;
 
-        RectTransform nameRect = healthBarNameText.GetComponent<RectTransform>();
-        nameRect.anchorMin = new Vector2(0f, 1f);
-        nameRect.anchorMax = new Vector2(1f, 1f);
-        nameRect.pivot = new Vector2(0.5f, 1f);
-        nameRect.sizeDelta = new Vector2(0f, nameHeight);
-        nameRect.anchoredPosition = Vector2.zero;
+        healthBarNameRect = healthBarNameText.GetComponent<RectTransform>();
+        healthBarNameRect.anchorMin = new Vector2(0f, 1f);
+        healthBarNameRect.anchorMax = new Vector2(1f, 1f);
+        healthBarNameRect.pivot = new Vector2(0.5f, 1f);
+        healthBarNameRect.sizeDelta = new Vector2(0f, nameHeight);
+        healthBarNameRect.anchoredPosition = Vector2.zero;
         
         // Create background (grey bar that shows full health bar area)
         GameObject backgroundGO = new GameObject("HealthBarBackground");
@@ -1859,6 +1912,7 @@ public class PlayerMovement : NetworkBehaviour
         // Update initial health display
         UpdateHealthBar();
         UpdateDisplayNameLabel();
+        UpdateWorldHealthBarPresentation();
     }
     
     private void UpdateHealthBarPosition()
@@ -1882,7 +1936,7 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (healthBarFill != null)
         {
-            float healthPercent = Mathf.Clamp01(currentHealth / GetModifiedMaxHealth());
+            float healthPercent = GetDisplayedHealthPercent();
             healthBarFill.fillAmount = healthPercent;
             
             // Change color based on health percentage
@@ -1903,6 +1957,62 @@ public class PlayerMovement : NetworkBehaviour
         }
     }
 
+    private void UpdateWorldHealthBarPresentation()
+    {
+        bool showWorldHealthBar = IsSpawned && !IsOwner;
+
+        if (healthBarBackground != null)
+        {
+            healthBarBackground.gameObject.SetActive(showWorldHealthBar);
+        }
+
+        if (healthBarFill != null)
+        {
+            healthBarFill.gameObject.SetActive(showWorldHealthBar);
+        }
+
+        if (healthBarNameRect == null)
+        {
+            return;
+        }
+
+        float barHeight = healthBarSize.y * 100f;
+        float nameHeight = 22f;
+
+        if (showWorldHealthBar)
+        {
+            healthBarNameRect.anchorMin = new Vector2(0f, 1f);
+            healthBarNameRect.anchorMax = new Vector2(1f, 1f);
+            healthBarNameRect.pivot = new Vector2(0.5f, 1f);
+            healthBarNameRect.sizeDelta = new Vector2(0f, nameHeight);
+            healthBarNameRect.anchoredPosition = Vector2.zero;
+        }
+        else
+        {
+            healthBarNameRect.anchorMin = new Vector2(0f, 0f);
+            healthBarNameRect.anchorMax = new Vector2(1f, 0f);
+            healthBarNameRect.pivot = new Vector2(0.5f, 0.5f);
+            healthBarNameRect.sizeDelta = new Vector2(0f, nameHeight);
+            healthBarNameRect.anchoredPosition = new Vector2(0f, barHeight * 0.5f);
+        }
+    }
+
+    private int GetDisplayedHealthValue()
+    {
+        return IsSpawned ? networkHealth.Value : currentHealth;
+    }
+
+    private float GetDisplayedHealthPercent()
+    {
+        int modifiedMaxHealth = GetModifiedMaxHealth();
+        if (modifiedMaxHealth <= 0)
+        {
+            return 0f;
+        }
+
+        return Mathf.Clamp01((float)GetDisplayedHealthValue() / modifiedMaxHealth);
+    }
+
     private string GetDisplayNameText()
     {
         if (!IsSpawned)
@@ -1911,6 +2021,18 @@ public class PlayerMovement : NetworkBehaviour
         }
 
         return PlayerSessionSettings.SanitizePlayerName(networkDisplayName.Value.ToString());
+    }
+
+    private Vector3 GetChatBubbleAnchorWorldPosition()
+    {
+        float barHeightWorld = healthBarSize.y;
+        float nameHeightWorld = 0.22f;
+        float spacingWorld = 0.04f;
+        float nameCenterOffset = IsSpawned && !IsOwner
+            ? barHeightWorld + spacingWorld + (nameHeightWorld * 0.5f)
+            : barHeightWorld * 0.5f;
+
+        return transform.position + healthBarOffset + new Vector3(0f, nameCenterOffset + 0.32f, 0f);
     }
 
     [ServerRpc]
@@ -2974,7 +3096,7 @@ public class PlayerMovement : NetworkBehaviour
         healthTextGO.transform.SetParent(healthBarGO.transform, false);
         
         screenHealthText = healthTextGO.AddComponent<Text>();
-        screenHealthText.text = $"{currentHealth}/{GetModifiedMaxHealth()}";
+        screenHealthText.text = $"{GetDisplayedHealthValue()}/{GetModifiedMaxHealth()}";
         screenHealthText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         screenHealthText.fontSize = 14;
         screenHealthText.color = Color.white;
@@ -3106,7 +3228,7 @@ public class PlayerMovement : NetworkBehaviour
         if (screenHealthBarFill != null)
         {
             int modifiedMaxHealth = GetModifiedMaxHealth();
-            float healthPercent = (float)currentHealth / modifiedMaxHealth;
+            float healthPercent = GetDisplayedHealthPercent();
             screenHealthBarFill.fillAmount = healthPercent;
             
             // Update color based on health - smooth color transition from green to yellow to red
@@ -3133,7 +3255,7 @@ public class PlayerMovement : NetworkBehaviour
         if (screenHealthText != null)
         {
             int modifiedMaxHealth = GetModifiedMaxHealth();
-            screenHealthText.text = $"{currentHealth}/{modifiedMaxHealth}";
+            screenHealthText.text = $"{GetDisplayedHealthValue()}/{modifiedMaxHealth}";
         }
         
         // Update ultimate bar
@@ -3754,6 +3876,7 @@ public class PlayerMovement : NetworkBehaviour
         networkHealth.Value = maxHealth;
         networkCurrentShield.Value = 0f;
         networkIsBurning.Value = false;
+        networkIsPetrified.Value = false;
         ClearAllBuffs();
 
         ApplyRespawnState(respawnPosition, resetNetworkState: false);
@@ -3777,9 +3900,18 @@ public class PlayerMovement : NetworkBehaviour
         currentHealth = maxHealth;
         isPlayerDead = false;
         isBurning = false;
+        isPetrified = false;
         currentAegisShield = 0f;
+        burnEndTime = 0f;
+        nextBurnDamageTime = 0f;
+        petrificationEndTime = 0f;
+        petrificationStacks = 0;
+        lastDamageTime = Time.time;
+        lastRegenTime = 0f;
+        isRegenerating = false;
 
         ResetMotionAndAnimationState(resetNetworkState);
+        SetPetrificationVisualState(false);
 
         if (burnEffectObject != null)
         {

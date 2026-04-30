@@ -8,7 +8,7 @@ public class DedicatedServerConfig : MonoBehaviour
     [SerializeField] private bool isDedicatedServer = false;
     [SerializeField] private string serverListenAddress = "0.0.0.0";
     [SerializeField] private ushort serverPort = 7777;
-    [SerializeField] private int maxPlayers = 2;
+    [SerializeField] private int maxPlayers = 4;
     
     private void Start()
     {
@@ -35,6 +35,7 @@ public class DedicatedServerConfig : MonoBehaviour
         // Configure network settings if this is a server
         if (isDedicatedServer)
         {
+            maxPlayers = Mathf.Max(1, maxPlayers);
             Debug.Log("🚀 Configuring as dedicated server...");
             ConfigureAsServer();
         }
@@ -62,7 +63,7 @@ public class DedicatedServerConfig : MonoBehaviour
                 case "-maxplayers":
                     if (i + 1 < args.Length && int.TryParse(args[i + 1], out int maxP))
                     {
-                        maxPlayers = maxP;
+                        maxPlayers = Mathf.Max(1, maxP);
                         Debug.Log($"Max players set to: {maxPlayers}");
                     }
                     break;

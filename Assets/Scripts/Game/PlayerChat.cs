@@ -16,32 +16,40 @@ public class PlayerChat : NetworkBehaviour
     [SerializeField] private int maxVisibleMessages = 7;
     [SerializeField] private int maxStoredMessages = 32;
     [SerializeField] private int maxMessageLength = 120;
-    [SerializeField] private Vector2 chatWindowSize = new Vector2(620f, 228f);
-    [SerializeField] private Vector2 chatWindowOffset = new Vector2(0f, 210f);
-    [SerializeField] private float compactBubbleWidth = 420f;
+    [SerializeField] private Vector2 chatHistoryPanelSize = new Vector2(460f, 260f);
+    [SerializeField] private Vector2 chatHistoryMargin = new Vector2(32f, 32f);
+    [SerializeField] private Vector2 inputBubbleMinSize = new Vector2(240f, 58f);
+    [SerializeField] private float worldBubbleMinWidth = 110f;
+    [SerializeField] private float worldBubbleMaxWidth = 320f;
+    [SerializeField] private float worldBubbleMinHeight = 44f;
+    [SerializeField] private Vector2 bubblePadding = new Vector2(16f, 10f);
     [SerializeField] private float compactBubbleSpacing = 10f;
-    [SerializeField] private Vector2 compactHistoryOffset = new Vector2(0f, 470f);
+    [SerializeField] private int maxVisiblePlayerBubbles = 3;
     [SerializeField] private float compactBubbleLifetime = 6f;
     [SerializeField] private float compactBubbleFadeDuration = 1.15f;
     [SerializeField] private float compactBubbleSlideDistance = 28f;
+    [SerializeField] private float inputFollowSmoothing = 18f;
 
     private const string BuiltInFontName = "LegacyRuntime.ttf";
 
     private static readonly List<ChatLine> SharedChatHistory = new List<ChatLine>();
     private static event Action SharedChatHistoryChanged;
-    private static event Action<ChatLine> SharedChatLineAdded;
     private static int openChatWindowCount;
     private static Sprite roundedBubbleSprite;
 
     private Canvas chatCanvas;
     private GameObject chatWindow;
-    private RectTransform compactHistoryRoot;
+    private RectTransform chatWindowRect;
     private Text historyText;
     private InputField inputField;
+    private Text inputText;
+    private Text placeholderText;
     private Font chatFont;
     private Coroutine focusInputCoroutine;
     private bool isChatOpen;
     private PlayerMovement playerMovement;
+    private Canvas bubbleCanvas;
+    private RectTransform bubbleCanvasRect;
     private readonly List<CompactBubble> compactBubbles = new List<CompactBubble>();
 
     public static bool IsTextEntryActive => openChatWindowCount > 0;
@@ -76,6 +84,14 @@ public class PlayerChat : NetworkBehaviour
     {
         base.OnNetworkSpawn();
 
+        if (playerMovement == null)
+        {
+            playerMovement = GetComponent<PlayerMovement>();
+        }
+
+        chatFont = GetPreferredFont();
+        CreateBubbleUI();
+
         if (!IsOwner)
         {
             return;
@@ -83,7 +99,6 @@ public class PlayerChat : NetworkBehaviour
 
         CreateChatUI();
         SharedChatHistoryChanged += RefreshHistoryText;
-        SharedChatLineAdded += HandleSharedChatLineAdded;
         RefreshHistoryText();
     }
 
@@ -92,22 +107,28 @@ public class PlayerChat : NetworkBehaviour
         if (IsOwner)
         {
             SharedChatHistoryChanged -= RefreshHistoryText;
-            SharedChatLineAdded -= HandleSharedChatLineAdded;
             CloseChatWindow(clearDraft: true);
             CleanupChatUI();
         }
+
+        CleanupBubbleUI();
 
         base.OnNetworkDespawn();
     }
 
     private void Update()
     {
-        if (IsOwner)
+        UpdateBubbleCanvasTransform();
+        UpdateCompactBubbles();
+
+        if (!IsOwner)
         {
-            UpdateCompactBubbles();
+            return;
         }
 
-        if (!IsOwner || Keyboard.current == null)
+        UpdateChatWindowPosition();
+
+        if (Keyboard.current == null)
         {
             return;
         }
@@ -148,7 +169,6 @@ public class PlayerChat : NetworkBehaviour
         }
 
         EnsureEventSystemExists();
-        chatFont = GetPreferredFont();
 
         GameObject canvasGO = new GameObject("PlayerChatCanvas");
         chatCanvas = canvasGO.AddComponent<Canvas>();
@@ -163,25 +183,77 @@ public class PlayerChat : NetworkBehaviour
 
         canvasGO.AddComponent<GraphicRaycaster>();
 
-        CreateCompactHistoryRoot();
+        CreateHistoryPanel();
         CreateChatWindow();
         chatWindow.SetActive(false);
     }
 
-    private void CreateCompactHistoryRoot()
+    private void CreateBubbleUI()
     {
-        GameObject historyRootGO = new GameObject("CompactChatHistory");
-        historyRootGO.transform.SetParent(chatCanvas.transform, false);
-        compactHistoryRoot = historyRootGO.AddComponent<RectTransform>();
-        compactHistoryRoot.anchorMin = new Vector2(0.5f, 0f);
-        compactHistoryRoot.anchorMax = new Vector2(0.5f, 0f);
-        compactHistoryRoot.pivot = new Vector2(0.5f, 0f);
-        compactHistoryRoot.sizeDelta = new Vector2(compactBubbleWidth + 24f, Mathf.Max(280f, maxVisibleMessages * 72f));
-        compactHistoryRoot.anchoredPosition = compactHistoryOffset;
+        if (bubbleCanvas != null)
+        {
+            return;
+        }
 
-        CanvasGroup historyGroup = historyRootGO.AddComponent<CanvasGroup>();
-        historyGroup.blocksRaycasts = false;
-        historyGroup.interactable = false;
+        GameObject canvasGO = new GameObject($"{gameObject.name}_ChatBubbleCanvas");
+        bubbleCanvas = canvasGO.AddComponent<Canvas>();
+        bubbleCanvas.renderMode = RenderMode.WorldSpace;
+        bubbleCanvas.sortingOrder = 14;
+
+        bubbleCanvasRect = bubbleCanvas.GetComponent<RectTransform>();
+        bubbleCanvasRect.anchorMin = new Vector2(0.5f, 0f);
+        bubbleCanvasRect.anchorMax = new Vector2(0.5f, 0f);
+        bubbleCanvasRect.pivot = new Vector2(0.5f, 0f);
+        bubbleCanvasRect.sizeDelta = new Vector2(worldBubbleMaxWidth + 32f, 240f);
+        bubbleCanvasRect.localScale = Vector3.one * 0.01f;
+
+        CanvasGroup bubbleCanvasGroup = canvasGO.AddComponent<CanvasGroup>();
+        bubbleCanvasGroup.blocksRaycasts = false;
+        bubbleCanvasGroup.interactable = false;
+
+        UpdateBubbleCanvasTransform();
+    }
+
+    private void CreateHistoryPanel()
+    {
+        GameObject historyPanelGO = new GameObject("CompactChatHistory");
+        historyPanelGO.transform.SetParent(chatCanvas.transform, false);
+
+        RectTransform historyPanelRect = historyPanelGO.AddComponent<RectTransform>();
+        historyPanelRect.anchorMin = new Vector2(1f, 1f);
+        historyPanelRect.anchorMax = new Vector2(1f, 1f);
+        historyPanelRect.pivot = new Vector2(1f, 1f);
+        historyPanelRect.sizeDelta = chatHistoryPanelSize;
+        historyPanelRect.anchoredPosition = new Vector2(-chatHistoryMargin.x, -chatHistoryMargin.y);
+
+        Image historyBackground = historyPanelGO.AddComponent<Image>();
+        historyBackground.sprite = GetRoundedBubbleSprite();
+        historyBackground.type = Image.Type.Sliced;
+        historyBackground.color = new Color(1f, 1f, 1f, 0.34f);
+        historyBackground.raycastTarget = false;
+
+        Shadow historyShadow = historyPanelGO.AddComponent<Shadow>();
+        historyShadow.effectColor = new Color(0f, 0f, 0f, 0.12f);
+        historyShadow.effectDistance = new Vector2(0f, -2f);
+        historyShadow.useGraphicAlpha = true;
+
+        GameObject historyGO = new GameObject("HistoryText");
+        historyGO.transform.SetParent(historyPanelGO.transform, false);
+        historyText = historyGO.AddComponent<Text>();
+        historyText.font = chatFont;
+        historyText.fontSize = 18;
+        historyText.color = new Color(0f, 0f, 0f, 0.72f);
+        historyText.alignment = TextAnchor.UpperLeft;
+        historyText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        historyText.verticalOverflow = VerticalWrapMode.Truncate;
+        historyText.supportRichText = true;
+        historyText.raycastTarget = false;
+
+        RectTransform historyRect = historyText.GetComponent<RectTransform>();
+        historyRect.anchorMin = Vector2.zero;
+        historyRect.anchorMax = Vector2.one;
+        historyRect.offsetMin = new Vector2(16f, 16f);
+        historyRect.offsetMax = new Vector2(-16f, -16f);
     }
 
     private void CreateChatWindow()
@@ -190,94 +262,39 @@ public class PlayerChat : NetworkBehaviour
         windowGO.transform.SetParent(chatCanvas.transform, false);
         chatWindow = windowGO;
 
-        RectTransform windowRect = windowGO.AddComponent<RectTransform>();
-        windowRect.anchorMin = new Vector2(0.5f, 0f);
-        windowRect.anchorMax = new Vector2(0.5f, 0f);
-        windowRect.pivot = new Vector2(0.5f, 0f);
-        windowRect.sizeDelta = chatWindowSize;
-        windowRect.anchoredPosition = chatWindowOffset;
+        chatWindowRect = windowGO.AddComponent<RectTransform>();
+        chatWindowRect.anchorMin = Vector2.zero;
+        chatWindowRect.anchorMax = Vector2.zero;
+        chatWindowRect.pivot = new Vector2(0.5f, 0f);
+        chatWindowRect.sizeDelta = inputBubbleMinSize;
+        chatWindowRect.anchoredPosition = Vector2.zero;
 
         Image panelImage = windowGO.AddComponent<Image>();
         panelImage.sprite = GetRoundedBubbleSprite();
         panelImage.type = Image.Type.Sliced;
-        panelImage.color = new Color(1f, 1f, 1f, 0.76f);
+        panelImage.color = new Color(1f, 1f, 1f, 0.94f);
 
         Outline panelOutline = windowGO.AddComponent<Outline>();
         panelOutline.effectColor = new Color(0f, 0f, 0f, 0.95f);
-        panelOutline.effectDistance = new Vector2(3f, -3f);
+        panelOutline.effectDistance = new Vector2(2.8f, -2.8f);
         panelOutline.useGraphicAlpha = true;
 
         Shadow panelShadow = windowGO.AddComponent<Shadow>();
-        panelShadow.effectColor = new Color(0f, 0f, 0f, 0.24f);
-        panelShadow.effectDistance = new Vector2(0f, -4f);
+        panelShadow.effectColor = new Color(0f, 0f, 0f, 0.18f);
+        panelShadow.effectDistance = new Vector2(0f, -3f);
         panelShadow.useGraphicAlpha = true;
-
-        GameObject titleGO = new GameObject("TitleText");
-        titleGO.transform.SetParent(windowGO.transform, false);
-        Text titleText = titleGO.AddComponent<Text>();
-        titleText.font = chatFont;
-        titleText.fontSize = 20;
-        titleText.fontStyle = FontStyle.Bold;
-        titleText.text = "Chat";
-        titleText.color = new Color(0f, 0f, 0f, 0.9f);
-        titleText.alignment = TextAnchor.MiddleLeft;
-
-        RectTransform titleRect = titleText.GetComponent<RectTransform>();
-        titleRect.anchorMin = new Vector2(0.06f, 0.80f);
-        titleRect.anchorMax = new Vector2(0.45f, 0.94f);
-        titleRect.sizeDelta = Vector2.zero;
-        titleRect.anchoredPosition = Vector2.zero;
-
-        GameObject hintGO = new GameObject("HintText");
-        hintGO.transform.SetParent(windowGO.transform, false);
-        Text hintText = hintGO.AddComponent<Text>();
-        hintText.font = chatFont;
-        hintText.fontSize = 14;
-        hintText.text = "Enter sends    Esc closes";
-        hintText.color = new Color(0f, 0f, 0f, 0.6f);
-        hintText.alignment = TextAnchor.MiddleRight;
-
-        RectTransform hintRect = hintText.GetComponent<RectTransform>();
-        hintRect.anchorMin = new Vector2(0.50f, 0.80f);
-        hintRect.anchorMax = new Vector2(0.94f, 0.94f);
-        hintRect.sizeDelta = Vector2.zero;
-        hintRect.anchoredPosition = Vector2.zero;
-
-        GameObject historyGO = new GameObject("HistoryText");
-        historyGO.transform.SetParent(windowGO.transform, false);
-        historyText = historyGO.AddComponent<Text>();
-        historyText.font = chatFont;
-        historyText.fontSize = 18;
-        historyText.color = Color.black;
-        historyText.alignment = TextAnchor.LowerLeft;
-        historyText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        historyText.verticalOverflow = VerticalWrapMode.Truncate;
-        historyText.supportRichText = true;
-
-        RectTransform historyRect = historyText.GetComponent<RectTransform>();
-        historyRect.anchorMin = new Vector2(0.06f, 0.31f);
-        historyRect.anchorMax = new Vector2(0.94f, 0.74f);
-        historyRect.sizeDelta = Vector2.zero;
-        historyRect.anchoredPosition = Vector2.zero;
 
         GameObject inputGO = new GameObject("InputField");
         inputGO.transform.SetParent(windowGO.transform, false);
 
         RectTransform inputRect = inputGO.AddComponent<RectTransform>();
-        inputRect.anchorMin = new Vector2(0.06f, 0.08f);
-        inputRect.anchorMax = new Vector2(0.94f, 0.22f);
+        inputRect.anchorMin = Vector2.zero;
+        inputRect.anchorMax = Vector2.one;
         inputRect.sizeDelta = Vector2.zero;
         inputRect.anchoredPosition = Vector2.zero;
 
         Image inputBackground = inputGO.AddComponent<Image>();
-        inputBackground.sprite = GetRoundedBubbleSprite();
-        inputBackground.type = Image.Type.Sliced;
-        inputBackground.color = new Color(1f, 1f, 1f, 0.96f);
-
-        Outline inputOutline = inputGO.AddComponent<Outline>();
-        inputOutline.effectColor = new Color(0f, 0f, 0f, 1f);
-        inputOutline.effectDistance = new Vector2(2.4f, -2.4f);
-        inputOutline.useGraphicAlpha = true;
+        inputBackground.color = new Color(1f, 1f, 1f, 0.01f);
 
         inputField = inputGO.AddComponent<InputField>();
         inputField.targetGraphic = inputBackground;
@@ -286,40 +303,46 @@ public class PlayerChat : NetworkBehaviour
         inputField.customCaretColor = true;
         inputField.caretColor = Color.black;
         inputField.selectionColor = new Color(0.74f, 0.84f, 1f, 0.75f);
+        inputField.onValueChanged.AddListener(HandleInputValueChanged);
 
         GameObject textGO = new GameObject("Text");
         textGO.transform.SetParent(inputGO.transform, false);
-        Text inputText = textGO.AddComponent<Text>();
+        inputText = textGO.AddComponent<Text>();
         inputText.font = chatFont;
         inputText.fontSize = 20;
-        inputText.color = Color.black;
+        inputText.color = new Color(0f, 0f, 0f, 0.98f);
         inputText.alignment = TextAnchor.MiddleLeft;
+        inputText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        inputText.verticalOverflow = VerticalWrapMode.Overflow;
         inputText.supportRichText = false;
 
         RectTransform inputTextRect = inputText.GetComponent<RectTransform>();
-        inputTextRect.anchorMin = new Vector2(0f, 0f);
-        inputTextRect.anchorMax = new Vector2(1f, 1f);
-        inputTextRect.offsetMin = new Vector2(16f, 10f);
-        inputTextRect.offsetMax = new Vector2(-16f, -10f);
+        inputTextRect.anchorMin = Vector2.zero;
+        inputTextRect.anchorMax = Vector2.one;
+        inputTextRect.offsetMin = new Vector2(bubblePadding.x, bubblePadding.y);
+        inputTextRect.offsetMax = new Vector2(-bubblePadding.x, -bubblePadding.y);
 
         GameObject placeholderGO = new GameObject("Placeholder");
         placeholderGO.transform.SetParent(inputGO.transform, false);
-        Text placeholderText = placeholderGO.AddComponent<Text>();
+        placeholderText = placeholderGO.AddComponent<Text>();
         placeholderText.font = chatFont;
         placeholderText.fontSize = 20;
         placeholderText.fontStyle = FontStyle.Italic;
         placeholderText.color = new Color(0f, 0f, 0f, 0.35f);
         placeholderText.text = "Type a message...";
         placeholderText.alignment = TextAnchor.MiddleLeft;
+        placeholderText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        placeholderText.verticalOverflow = VerticalWrapMode.Overflow;
 
         RectTransform placeholderRect = placeholderText.GetComponent<RectTransform>();
-        placeholderRect.anchorMin = new Vector2(0f, 0f);
-        placeholderRect.anchorMax = new Vector2(1f, 1f);
-        placeholderRect.offsetMin = new Vector2(16f, 10f);
-        placeholderRect.offsetMax = new Vector2(-16f, -10f);
+        placeholderRect.anchorMin = Vector2.zero;
+        placeholderRect.anchorMax = Vector2.one;
+        placeholderRect.offsetMin = new Vector2(bubblePadding.x, bubblePadding.y);
+        placeholderRect.offsetMax = new Vector2(-bubblePadding.x, -bubblePadding.y);
 
         inputField.textComponent = inputText;
         inputField.placeholder = placeholderText;
+        UpdateInputBubbleSize();
     }
 
     private void OpenChatWindow()
@@ -333,7 +356,8 @@ public class PlayerChat : NetworkBehaviour
         openChatWindowCount++;
         chatWindow.SetActive(true);
         inputField.text = string.Empty;
-        RefreshHistoryText();
+        UpdateInputBubbleSize();
+        UpdateChatWindowPosition(forceSnap: true);
         FocusChatInput();
     }
 
@@ -356,6 +380,11 @@ public class PlayerChat : NetworkBehaviour
         if (clearDraft && inputField != null)
         {
             inputField.text = string.Empty;
+        }
+
+        if (inputField != null)
+        {
+            inputField.DeactivateInputField();
         }
 
         if (EventSystem.current != null)
@@ -401,6 +430,11 @@ public class PlayerChat : NetworkBehaviour
         focusInputCoroutine = null;
     }
 
+    private void HandleInputValueChanged(string _)
+    {
+        UpdateInputBubbleSize();
+    }
+
     private void SubmitCurrentMessage()
     {
         if (inputField == null)
@@ -437,16 +471,8 @@ public class PlayerChat : NetworkBehaviour
     [ClientRpc]
     private void ReceiveChatMessageClientRpc(FixedString64Bytes speakerName, FixedString128Bytes message)
     {
-        RegisterSharedChatLine(new ChatLine(speakerName.ToString(), message.ToString()), maxStoredMessages);
-    }
-
-    private void HandleSharedChatLineAdded(ChatLine line)
-    {
-        if (!IsOwner || compactHistoryRoot == null)
-        {
-            return;
-        }
-
+        ChatLine line = new ChatLine(speakerName.ToString(), message.ToString());
+        RegisterSharedChatLine(line, maxStoredMessages);
         CreateCompactBubble(line);
         UpdateCompactBubbleLayout(Time.unscaledTime, Time.unscaledDeltaTime);
     }
@@ -494,19 +520,23 @@ public class PlayerChat : NetworkBehaviour
         }
 
         SharedChatHistoryChanged?.Invoke();
-        SharedChatLineAdded?.Invoke(line);
     }
 
     private void CreateCompactBubble(ChatLine line)
     {
+        if (bubbleCanvasRect == null)
+        {
+            return;
+        }
+
         GameObject bubbleGO = new GameObject("CompactBubble");
-        bubbleGO.transform.SetParent(compactHistoryRoot, false);
+        bubbleGO.transform.SetParent(bubbleCanvasRect, false);
 
         RectTransform bubbleRect = bubbleGO.AddComponent<RectTransform>();
         bubbleRect.anchorMin = new Vector2(0.5f, 0f);
         bubbleRect.anchorMax = new Vector2(0.5f, 0f);
         bubbleRect.pivot = new Vector2(0.5f, 0f);
-        bubbleRect.sizeDelta = new Vector2(compactBubbleWidth, 84f);
+        bubbleRect.sizeDelta = new Vector2(worldBubbleMaxWidth, worldBubbleMinHeight);
 
         CanvasGroup bubbleGroup = bubbleGO.AddComponent<CanvasGroup>();
         bubbleGroup.alpha = 1f;
@@ -536,23 +566,24 @@ public class PlayerChat : NetworkBehaviour
         bubbleText.font = chatFont;
         bubbleText.fontSize = 16;
         bubbleText.color = Color.black;
-        bubbleText.alignment = TextAnchor.MiddleLeft;
+        bubbleText.alignment = TextAnchor.MiddleCenter;
         bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
         bubbleText.verticalOverflow = VerticalWrapMode.Overflow;
-        bubbleText.supportRichText = true;
+        bubbleText.supportRichText = false;
         bubbleText.raycastTarget = false;
-        bubbleText.text = $"<b>{EscapeRichText(line.Speaker)}</b>: {EscapeRichText(line.Message)}";
+        bubbleText.text = EscapeRichText(line.Message);
 
         RectTransform textRect = bubbleText.GetComponent<RectTransform>();
-        textRect.anchorMin = new Vector2(0f, 0f);
-        textRect.anchorMax = new Vector2(1f, 1f);
-        textRect.offsetMin = new Vector2(16f, 10f);
-        textRect.offsetMax = new Vector2(-16f, -10f);
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(bubblePadding.x, bubblePadding.y);
+        textRect.offsetMax = new Vector2(-bubblePadding.x, -bubblePadding.y);
 
+        float bubbleWidth = CalculateBubbleWidth(bubbleText.preferredWidth);
+        bubbleRect.sizeDelta = new Vector2(bubbleWidth, worldBubbleMinHeight);
         LayoutRebuilder.ForceRebuildLayoutImmediate(textRect);
-        float bubbleHeight = Mathf.Max(46f, bubbleText.preferredHeight + 22f);
-        bubbleRect.sizeDelta = new Vector2(compactBubbleWidth, bubbleHeight);
-        bubbleRect.anchoredPosition = new Vector2(0f, -10f);
+        float bubbleHeight = Mathf.Max(worldBubbleMinHeight, bubbleText.preferredHeight + (bubblePadding.y * 2f));
+        bubbleRect.sizeDelta = new Vector2(bubbleWidth, bubbleHeight);
 
         compactBubbles.Add(new CompactBubble
         {
@@ -562,6 +593,12 @@ public class PlayerChat : NetworkBehaviour
             Height = bubbleHeight,
             CreatedAt = Time.unscaledTime
         });
+
+        while (compactBubbles.Count > maxVisiblePlayerBubbles)
+        {
+            Destroy(compactBubbles[0].Root);
+            compactBubbles.RemoveAt(0);
+        }
     }
 
     private void UpdateCompactBubbles()
@@ -613,6 +650,95 @@ public class PlayerChat : NetworkBehaviour
         }
     }
 
+    private float CalculateBubbleWidth(float preferredTextWidth)
+    {
+        float paddedWidth = preferredTextWidth + (bubblePadding.x * 2f);
+        return Mathf.Clamp(paddedWidth, worldBubbleMinWidth, worldBubbleMaxWidth);
+    }
+
+    private void UpdateBubbleCanvasTransform()
+    {
+        if (bubbleCanvas == null)
+        {
+            return;
+        }
+
+        Vector3 anchorPosition = playerMovement != null
+            ? playerMovement.ChatBubbleAnchorWorldPosition
+            : transform.position + new Vector3(0f, 2f, 0f);
+
+        bubbleCanvas.transform.position = anchorPosition;
+
+        if (Camera.main != null)
+        {
+            bubbleCanvas.transform.LookAt(Camera.main.transform);
+            bubbleCanvas.transform.Rotate(0f, 180f, 0f);
+        }
+    }
+
+    private void UpdateChatWindowPosition(bool forceSnap = false)
+    {
+        if (!IsOwner || !isChatOpen || chatWindowRect == null)
+        {
+            return;
+        }
+
+        if (!TryGetChatAnchorScreenPosition(out Vector2 screenPoint))
+        {
+            return;
+        }
+
+        if (forceSnap)
+        {
+            chatWindowRect.anchoredPosition = screenPoint;
+            return;
+        }
+
+        float deltaTime = Time.unscaledDeltaTime;
+        float smoothing = deltaTime > 0f ? 1f - Mathf.Exp(-inputFollowSmoothing * deltaTime) : 1f;
+        chatWindowRect.anchoredPosition = Vector2.Lerp(chatWindowRect.anchoredPosition, screenPoint, smoothing);
+    }
+
+    private void UpdateInputBubbleSize()
+    {
+        if (chatWindowRect == null || inputField == null || inputText == null || placeholderText == null)
+        {
+            return;
+        }
+
+        float preferredTextWidth = string.IsNullOrEmpty(inputField.text)
+            ? placeholderText.preferredWidth
+            : inputText.preferredWidth;
+        float preferredTextHeight = string.IsNullOrEmpty(inputField.text)
+            ? placeholderText.preferredHeight
+            : inputText.preferredHeight;
+
+        float bubbleWidth = Mathf.Max(inputBubbleMinSize.x, CalculateBubbleWidth(preferredTextWidth));
+        float bubbleHeight = Mathf.Max(inputBubbleMinSize.y, preferredTextHeight + (bubblePadding.y * 2f));
+        chatWindowRect.sizeDelta = new Vector2(bubbleWidth, bubbleHeight);
+    }
+
+    private bool TryGetChatAnchorScreenPosition(out Vector2 screenPoint)
+    {
+        screenPoint = Vector2.zero;
+        if (Camera.main == null)
+        {
+            return false;
+        }
+
+        Vector3 anchorPosition = playerMovement != null
+            ? playerMovement.ChatBubbleAnchorWorldPosition
+            : transform.position + new Vector3(0f, 2f, 0f);
+        Vector3 rawScreenPoint = Camera.main.WorldToScreenPoint(anchorPosition);
+        if (rawScreenPoint.z < 0f)
+        {
+            return false;
+        }
+
+        screenPoint = new Vector2(rawScreenPoint.x, rawScreenPoint.y);
+        return true;
+    }
+
     private static string SanitizeMessage(string rawMessage)
     {
         if (string.IsNullOrWhiteSpace(rawMessage))
@@ -639,6 +765,11 @@ public class PlayerChat : NetworkBehaviour
 
     private static string EscapeRichText(string value)
     {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
         return value.Replace("<", "‹").Replace(">", "›");
     }
 
@@ -748,8 +879,6 @@ public class PlayerChat : NetworkBehaviour
 
     private void CleanupChatUI()
     {
-        compactBubbles.Clear();
-
         if (chatCanvas != null)
         {
             Destroy(chatCanvas.gameObject);
@@ -757,8 +886,23 @@ public class PlayerChat : NetworkBehaviour
         }
 
         chatWindow = null;
-        compactHistoryRoot = null;
+        chatWindowRect = null;
         historyText = null;
         inputField = null;
+        inputText = null;
+        placeholderText = null;
+    }
+
+    private void CleanupBubbleUI()
+    {
+        compactBubbles.Clear();
+
+        if (bubbleCanvas != null)
+        {
+            Destroy(bubbleCanvas.gameObject);
+            bubbleCanvas = null;
+        }
+
+        bubbleCanvasRect = null;
     }
 }

@@ -15,6 +15,7 @@ public class MultiplayerUI : MonoBehaviour
     [Header("Game UI")]
     [SerializeField] private Text playerCountText;
     [SerializeField] private Text networkStatusText;
+    [SerializeField] private int maxPlayersDisplay = 4;
     
     private NetworkManager networkManager;
     
@@ -119,7 +120,7 @@ public class MultiplayerUI : MonoBehaviour
         if (playerCountText != null)
         {
             int connectedPlayers = networkManager.IsListening ? networkManager.ConnectedClientsIds.Count : 0;
-            playerCountText.text = $"Players: {connectedPlayers}/2";
+            playerCountText.text = $"Players: {connectedPlayers}/{maxPlayersDisplay}";
         }
         
         // Show/hide disconnect button

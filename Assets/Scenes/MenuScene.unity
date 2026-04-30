@@ -203,9 +203,31 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: abcdef1234567890abcdef1234567890, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Game::ClientDebugger
   enableDebugUI: 1
   verboseLogging: 1
   toggleDebugKey: 290
   isDebugVisible: 0
   isConnected: 0
+  enableRemoteServerOrchestration: 1
+  startServerWhenConnectRequested: 1
+  autoConnectOnLaunch: 0
+  orchestrationApiBaseUrl: https://game-server-orchestrator-191982358302.us-central1.run.app
+  startServerEndpoint: /server/start
+  serverStatusEndpoint: /server/status
+  apiKeyHeaderName: x-api-key
+  apiKeyValue: 
+  authorizationBearerToken: 
+  requestTimeoutSeconds: 10
+  serverStartupTimeoutSeconds: 180
+  serverStatusPollIntervalSeconds: 3
+  postReadyConnectDelaySeconds: 8
+  enableJoinTicketAuth: 1
+  joinTicketEndpoint: /server/join-token
+  joinTicketTimeoutSeconds: 10
+  enableFirebaseAnonymousAuth: 1
+  firebaseWebApiKey: AIzaSyAppmdhSxNdb0iv-Pv-nXasKTAoG7c7wSM
+  firebaseWebApiKeyEnvironmentVariable: FIREBASE_WEB_API_KEY
+  firebaseWebApiKeyCommandLineArgument: -firebaseWebApiKey
+  firebaseAuthTimeoutSeconds: 10
+  firebaseTokenRefreshBufferSeconds: 60

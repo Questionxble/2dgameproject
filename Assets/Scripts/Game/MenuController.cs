@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Unity.Netcode;
+using UnityEngine.InputSystem;
 
 public class MenuController : MonoBehaviour
 {
@@ -23,7 +24,7 @@ public class MenuController : MonoBehaviour
             NetworkManager.Singleton.Shutdown();
         }
         
-        Debug.Log("Menu Scene loaded. Use ClientDebugger to connect to server.");
+        Debug.Log("Menu Scene loaded. ClientDebugger can now connect directly or start the EC2 server first if orchestration is configured.");
     }
     
     void Update()
@@ -40,7 +41,7 @@ public class MenuController : MonoBehaviour
         }
         
         // Allow manual scene transition for testing
-        if (Input.GetKeyDown(KeyCode.G))
+        if (Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame)
         {
             Debug.Log("Manual game scene transition (for testing)");
             LoadGameScene();
@@ -107,9 +108,10 @@ public class MenuController : MonoBehaviour
         GUILayout.BeginVertical("box");
         
         GUILayout.Label("=== INSTRUCTIONS ===");
-        GUILayout.Label("1. Click 'CONNECT TO SERVER' button");
-        GUILayout.Label("2. Game will auto-load when connected");
-        GUILayout.Label("3. Or press 'G' to load manually");
+        GUILayout.Label("1. Click the Connect button");
+        GUILayout.Label("2. If configured, EC2 will start automatically first");
+        GUILayout.Label("3. Game will auto-load when connected");
+        GUILayout.Label("4. Or press 'G' to load manually");
         GUILayout.Label("");
         GUILayout.Label("F11: Toggle debug window");
         

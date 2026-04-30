@@ -622,6 +622,7 @@ public class WeaponClassController : NetworkBehaviour
     [ServerRpc]
     private void StormShardAttackEvent1ServerRpc()
     {
+        ExecuteStormAttack(0, stormParticlePoint1, true, false);
         StormShardAttackEvent1ClientRpc();
     }
     
@@ -636,7 +637,7 @@ public class WeaponClassController : NetworkBehaviour
         // Debug.Log("Animation Event: StormShardAttackEvent1 triggered"); // Reduced logging
         
         // Execute storm attack using the first particle point (attack type 0)
-        ExecuteStormAttack(0, stormParticlePoint1);
+        ExecuteStormAttack(0, stormParticlePoint1, false, true);
         
         // Reset attack animation state (this completes the attack) - only on owner
         if (IsOwner && playerMovement != null)
@@ -659,6 +660,7 @@ public class WeaponClassController : NetworkBehaviour
     [ServerRpc]
     private void StormShardAttackEvent2ServerRpc()
     {
+        ExecuteStormAttack(1, stormParticlePoint2, true, false);
         StormShardAttackEvent2ClientRpc();
     }
     
@@ -673,7 +675,7 @@ public class WeaponClassController : NetworkBehaviour
         // Debug.Log("Animation Event: StormShardAttackEvent2 triggered"); // Reduced logging
         
         // Execute storm attack using the second particle point (attack type 1)
-        ExecuteStormAttack(1, stormParticlePoint2);
+        ExecuteStormAttack(1, stormParticlePoint2, false, true);
         
         // Reset attack animation state (this is the final event for Storm attacks) - only on owner
         if (IsOwner && playerMovement != null)
@@ -687,6 +689,7 @@ public class WeaponClassController : NetworkBehaviour
     {
         GameObject meleeAttack = new GameObject(objectName);
         meleeAttack.transform.position = position;
+        Destroy(meleeAttack, 1f);
         
         // Add collider for damage detection
         BoxCollider2D meleeCollider = meleeAttack.AddComponent<BoxCollider2D>();
@@ -732,15 +735,12 @@ public class WeaponClassController : NetworkBehaviour
     }
     
     // Helper method to execute storm attacks via animation events
-    private void ExecuteStormAttack(int attackType, GameObject particlePoint)
+    private void ExecuteStormAttack(int attackType, GameObject particlePoint, bool applyGameplay, bool spawnVisuals)
     {
         if (playerTransform == null || particlePoint == null) return;
-        
-        // Generate ultimate charge for storm left click attack
-        GenerateUltimateCharge(stormLeftClickCharge);
-        
+
         // Execute the lightning attack immediately (no delay since animation event handles timing)
-        StartCoroutine(ExecuteStormLightningAttack(attackType, particlePoint));
+        StartCoroutine(ExecuteStormLightningAttack(attackType, particlePoint, applyGameplay, spawnVisuals));
     }
     
     // Coroutine to update melee attack position to follow player
@@ -763,10 +763,10 @@ public class WeaponClassController : NetworkBehaviour
     }
     
     // Updated storm lightning execution method for animation events
-    private IEnumerator ExecuteStormLightningAttack(int attackAnimationType, GameObject currentParticlePoint)
+    private IEnumerator ExecuteStormLightningAttack(int attackAnimationType, GameObject currentParticlePoint, bool applyGameplay, bool spawnVisuals)
     {
         // Trigger lightning spark effect at the particle point
-        if (lightningSparkPrefab != null && currentParticlePoint != null)
+        if (spawnVisuals && lightningSparkPrefab != null && currentParticlePoint != null)
         {
             GameObject sparkEffect = Instantiate(lightningSparkPrefab, currentParticlePoint.transform.position, Quaternion.identity);
             Debug.Log($"Lightning spark effect triggered at {currentParticlePoint.name}");
@@ -791,7 +791,7 @@ public class WeaponClassController : NetworkBehaviour
             yield break;
         }
         
-        StartCoroutine(CreateLightningArc(startPos, endPos, nearestEnemy));
+        StartCoroutine(CreateLightningArc(startPos, endPos, nearestEnemy, applyGameplay, spawnVisuals));
     }
     
     /// <summary>
@@ -925,6 +925,11 @@ public class WeaponClassController : NetworkBehaviour
     // Interaction System
     private GameObject nearbyShardObject;
     private ShardType nearbyShardType;
+    private readonly Vector3[] equippedShardPickupPositions = new Vector3[2];
+    private readonly Vector3[] equippedShardPickupScales = new Vector3[2];
+    private readonly Quaternion[] equippedShardPickupRotations = new Quaternion[2];
+    private readonly bool[] equippedShardHasPickupOrigin = new bool[2];
+    private const float shardSyncPositionTolerance = 0.25f;
     private Canvas promptCanvas;
     private Text promptText;
     
@@ -1817,89 +1822,100 @@ public class WeaponClassController : NetworkBehaviour
     {
         // Only the owning player can equip shards
         if (!IsOwner) return;
-        
-        // Use server RPC to synchronize shard equipment
-        EquipShardServerRpc((int)shardType);
-    }
-    
-    [ServerRpc]
-    private void EquipShardServerRpc(int shardTypeInt)
-    {
-        EquipShardClientRpc(shardTypeInt);
-    }
-    
-    [ClientRpc]
-    private void EquipShardClientRpc(int shardTypeInt)
-    {
-        ProcessEquipShard((ShardType)shardTypeInt);
-    }
-    
-    [ServerRpc]
-    private void DestroyShardServerRpc(int shardInstanceID)
-    {
-        DestroyShardClientRpc(shardInstanceID);
-    }
-    
-    [ClientRpc] 
-    private void DestroyShardClientRpc(int shardInstanceID)
-    {
-        // Find and destroy the shard by instance ID for all clients
-        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
-        foreach (GameObject obj in allObjects)
-        {
-            if (obj.GetInstanceID() == shardInstanceID)
-            {
-                // Check if it's a shard by tag
-                if (obj.CompareTag("ValorShard") || obj.CompareTag("WhisperShard") || obj.CompareTag("StormShard") || obj.CompareTag("SoulShard"))
-                {
-                    Destroy(obj);
-                    Debug.Log($"Shard destroyed for all clients: {obj.name}");
-                    break;
-                }
-            }
-        }
-    }
-    
-    private void ProcessEquipShard(ShardType shardType)
-    {
+
         int emptySlot = GetEmptySlotIndex();
-        if (emptySlot == -1) return;
-        
-        equippedShards[emptySlot] = shardType;
-        
-        // Update network variables for synchronization
-        if (IsServer)
+        if (emptySlot == -1)
         {
-            if (emptySlot == 0)
-                networkEquippedShard1.Value = (int)shardType;
-            else if (emptySlot == 1)
-                networkEquippedShard2.Value = (int)shardType;
+            return;
         }
-        
+
+        CaptureShardPickupOrigin(emptySlot, nearbyShardObject);
+        equippedShards[emptySlot] = shardType;
         UpdateSlotDisplay(emptySlot);
-        
-        // Update animation controller if this is the active slot
+
         if (emptySlot == activeSlotIndex)
         {
             UpdatePlayerAnimationController();
         }
         
-        // Remove shard from world (server authority)
-        if (IsOwner && nearbyShardObject != null)
+        // Use server RPC to synchronize shard equipment and restore position metadata.
+        EquipShardServerRpc(
+            (int)shardType,
+            emptySlot,
+            equippedShardPickupPositions[emptySlot],
+            equippedShardPickupRotations[emptySlot].eulerAngles,
+            equippedShardPickupScales[emptySlot],
+            equippedShardHasPickupOrigin[emptySlot]);
+
+        if (nearbyShardObject != null)
         {
-            // Request server to destroy the shard for all clients
-            DestroyShardServerRpc(nearbyShardObject.GetInstanceID());
+            RemoveWorldShardServerRpc((int)nearbyShardType, equippedShardPickupPositions[emptySlot]);
             nearbyShardObject = null;
         }
-        
+
         HideInteractionPrompt();
+    }
+    
+    [ServerRpc]
+    private void EquipShardServerRpc(int shardTypeInt, int slotIndex, Vector3 pickupPosition, Vector3 pickupRotationEuler, Vector3 pickupScale, bool hasPickupOrigin)
+    {
+        if (slotIndex < 0 || slotIndex >= equippedShards.Length)
+        {
+            return;
+        }
+
+        if (equippedShards[slotIndex] != ShardType.None)
+        {
+            return;
+        }
+
+        ShardType shardType = (ShardType)shardTypeInt;
+        equippedShards[slotIndex] = shardType;
+        StoreShardPickupOrigin(slotIndex, pickupPosition, Quaternion.Euler(pickupRotationEuler), pickupScale, hasPickupOrigin);
+        
+        // Update network variables for synchronization
+        if (slotIndex == 0)
+        {
+            networkEquippedShard1.Value = (int)shardType;
+        }
+        else if (slotIndex == 1)
+        {
+            networkEquippedShard2.Value = (int)shardType;
+        }
+
+        if (slotIndex == activeSlotIndex)
+        {
+            UpdatePlayerAnimationController();
+        }
+
+        Debug.Log($"Equipped {shardType} into slot {slotIndex} with pickup origin {pickupPosition}");
+    }
+
+    [ServerRpc]
+    private void RemoveWorldShardServerRpc(int shardTypeInt, Vector3 shardPosition)
+    {
+        RemoveWorldShard((ShardType)shardTypeInt, shardPosition);
+        RemoveWorldShardClientRpc(shardTypeInt, shardPosition);
+    }
+
+    [ClientRpc]
+    private void RemoveWorldShardClientRpc(int shardTypeInt, Vector3 shardPosition)
+    {
+        if (IsServer)
+        {
+            return;
+        }
+
+        RemoveWorldShard((ShardType)shardTypeInt, shardPosition);
     }
     
     private void SwapShard(ShardType newShardType, int slotToReplace)
     {
         if (slotToReplace < 0 || slotToReplace >= equippedShards.Length) return;
+        if (nearbyShardObject == null) return;
         
         ShardType oldShardType = equippedShards[slotToReplace];
+        CaptureShardPickupOrigin(slotToReplace, nearbyShardObject);
         
         // Replace the shard in the specified slot
         equippedShards[slotToReplace] = newShardType;
@@ -1910,18 +1926,58 @@ public class WeaponClassController : NetworkBehaviour
         {
             UpdatePlayerAnimationController();
         }
+
+        SwapShardServerRpc(
+            (int)newShardType,
+            slotToReplace,
+            (int)oldShardType,
+            equippedShardPickupPositions[slotToReplace],
+            equippedShardPickupRotations[slotToReplace].eulerAngles,
+            equippedShardPickupScales[slotToReplace],
+            (int)nearbyShardType);
         
         // Transform the current shard object to become the old shard type
-        if (nearbyShardObject != null)
-        {
-            // Change the shard's tag and sprite to represent the old shard
-            ConvertShardObject(nearbyShardObject, oldShardType);
-            
-            // Clear nearby reference since we're no longer interacting with it
-            nearbyShardObject = null;
-        }
+        ConvertShardObject(nearbyShardObject, oldShardType);
+        nearbyShardObject = null;
         
         HideInteractionPrompt();
+    }
+
+    [ServerRpc]
+    private void SwapShardServerRpc(int newShardTypeInt, int slotToReplace, int oldShardTypeInt, Vector3 pickupPosition, Vector3 pickupRotationEuler, Vector3 pickupScale, int sourceShardTypeInt)
+    {
+        if (slotToReplace < 0 || slotToReplace >= equippedShards.Length)
+        {
+            return;
+        }
+
+        ShardType newShardType = (ShardType)newShardTypeInt;
+        ShardType oldShardType = (ShardType)oldShardTypeInt;
+        equippedShards[slotToReplace] = newShardType;
+        StoreShardPickupOrigin(slotToReplace, pickupPosition, Quaternion.Euler(pickupRotationEuler), pickupScale, true);
+
+        if (slotToReplace == 0)
+        {
+            networkEquippedShard1.Value = newShardTypeInt;
+        }
+        else
+        {
+            networkEquippedShard2.Value = newShardTypeInt;
+        }
+
+        ConvertWorldShard((ShardType)sourceShardTypeInt, oldShardType, pickupPosition);
+        ConvertWorldShardClientRpc(sourceShardTypeInt, oldShardTypeInt, pickupPosition);
+    }
+
+    [ClientRpc]
+    private void ConvertWorldShardClientRpc(int sourceShardTypeInt, int replacementShardTypeInt, Vector3 shardPosition)
+    {
+        if (IsServer)
+        {
+            return;
+        }
+
+        ConvertWorldShard((ShardType)sourceShardTypeInt, (ShardType)replacementShardTypeInt, shardPosition);
     }
     
     private void ConvertShardObject(GameObject shardObject, ShardType newShardType)
@@ -1946,6 +2002,7 @@ public class WeaponClassController : NetworkBehaviour
             {
                 // Change the tag
                 shardObject.tag = shardTags[i];
+                shardObject.name = GetShardObjectName(newShardType);
                 
                 // Change the sprite if we have it cached
                 if (spriteRenderer != null && shardSprites.ContainsKey(newShardType))
@@ -1963,6 +2020,172 @@ public class WeaponClassController : NetworkBehaviour
         }
         
         Debug.LogWarning($"Could not convert shard to {newShardType} - unknown type");
+    }
+
+    private void CaptureShardPickupOrigin(int slotIndex, GameObject shardObject)
+    {
+        if (shardObject == null)
+        {
+            ClearShardPickupOrigin(slotIndex);
+            return;
+        }
+
+        StoreShardPickupOrigin(slotIndex, shardObject.transform.position, shardObject.transform.rotation, shardObject.transform.localScale, true);
+    }
+
+    private void StoreShardPickupOrigin(int slotIndex, Vector3 position, Quaternion rotation, Vector3 scale, bool hasPickupOrigin)
+    {
+        if (slotIndex < 0 || slotIndex >= equippedShards.Length)
+        {
+            return;
+        }
+
+        equippedShardPickupPositions[slotIndex] = position;
+        equippedShardPickupRotations[slotIndex] = rotation;
+        equippedShardPickupScales[slotIndex] = scale;
+        equippedShardHasPickupOrigin[slotIndex] = hasPickupOrigin;
+    }
+
+    private void ClearShardPickupOrigin(int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= equippedShards.Length)
+        {
+            return;
+        }
+
+        equippedShardPickupPositions[slotIndex] = Vector3.zero;
+        equippedShardPickupRotations[slotIndex] = Quaternion.identity;
+        equippedShardPickupScales[slotIndex] = Vector3.one;
+        equippedShardHasPickupOrigin[slotIndex] = false;
+    }
+
+    private void RemoveWorldShard(ShardType shardType, Vector3 shardPosition)
+    {
+        GameObject shardObject = FindShardObjectAtPosition(shardType, shardPosition);
+        if (shardObject == null)
+        {
+            return;
+        }
+
+        Destroy(shardObject);
+        Debug.Log($"Removed {shardType} shard from world at {shardPosition}");
+    }
+
+    private void ConvertWorldShard(ShardType sourceShardType, ShardType replacementShardType, Vector3 shardPosition)
+    {
+        GameObject shardObject = FindShardObjectAtPosition(sourceShardType, shardPosition);
+        if (shardObject == null)
+        {
+            return;
+        }
+
+        ConvertShardObject(shardObject, replacementShardType);
+    }
+
+    private GameObject FindShardObjectAtPosition(ShardType expectedShardType, Vector3 shardPosition)
+    {
+        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+        float maxDistanceSquared = shardSyncPositionTolerance * shardSyncPositionTolerance;
+
+        foreach (GameObject obj in allObjects)
+        {
+            if (!IsShardObject(obj) || !MatchesShardType(obj, expectedShardType))
+            {
+                continue;
+            }
+
+            if ((obj.transform.position - shardPosition).sqrMagnitude <= maxDistanceSquared)
+            {
+                return obj;
+            }
+        }
+
+        return null;
+    }
+
+    private GameObject FindAnyShardObjectAtPosition(Vector3 shardPosition)
+    {
+        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+        float maxDistanceSquared = shardSyncPositionTolerance * shardSyncPositionTolerance;
+
+        foreach (GameObject obj in allObjects)
+        {
+            if (!IsShardObject(obj))
+            {
+                continue;
+            }
+
+            if ((obj.transform.position - shardPosition).sqrMagnitude <= maxDistanceSquared)
+            {
+                return obj;
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsShardObject(GameObject obj)
+    {
+        if (obj == null)
+        {
+            return false;
+        }
+
+        return MatchesShardType(obj, ShardType.ValorShard)
+            || MatchesShardType(obj, ShardType.WhisperShard)
+            || MatchesShardType(obj, ShardType.StormShard)
+            || MatchesShardType(obj, ShardType.SoulShard);
+    }
+
+    private bool MatchesShardType(GameObject shardObject, ShardType shardType)
+    {
+        if (shardObject == null)
+        {
+            return false;
+        }
+
+        string expectedTag = GetShardTag(shardType);
+        if (!string.IsNullOrEmpty(expectedTag) && shardObject.CompareTag(expectedTag))
+        {
+            return true;
+        }
+
+        string objectName = shardObject.name.Replace("(Clone)", string.Empty).Trim();
+        return objectName == GetShardObjectName(shardType);
+    }
+
+    private string GetShardTag(ShardType shardType)
+    {
+        switch (shardType)
+        {
+            case ShardType.ValorShard:
+                return "ValorShard";
+            case ShardType.WhisperShard:
+                return "WhisperShard";
+            case ShardType.StormShard:
+                return "StormShard";
+            case ShardType.SoulShard:
+                return "SoulShard";
+            default:
+                return string.Empty;
+        }
+    }
+
+    private string GetShardObjectName(ShardType shardType)
+    {
+        switch (shardType)
+        {
+            case ShardType.ValorShard:
+                return "ValorShard";
+            case ShardType.WhisperShard:
+                return "WhisperShard";
+            case ShardType.StormShard:
+                return "StormShard";
+            case ShardType.SoulShard:
+                return "SoulShard";
+            default:
+                return "Shard";
+        }
     }
     
     private void SwitchToSlot(int slotIndex)
@@ -2353,12 +2576,20 @@ public class WeaponClassController : NetworkBehaviour
         {
             // Right-click: Lightning bolt from sky with cooldown
             if (Time.time - lastLightningBoltTime < boltCooldown) return;
-            
-            CreateLightningBolt();
             lastLightningBoltTime = Time.time;
-            
+
             // Generate ultimate charge for storm right click attack
             GenerateUltimateCharge(stormRightClickCharge);
+
+            if (IsSpawned)
+            {
+                TriggerAttackAnimation(2);
+                TriggerStormLightningBoltServerRpc();
+            }
+            else
+            {
+                CreateLightningBolt();
+            }
         }
         else
         {
@@ -2377,6 +2608,19 @@ public class WeaponClassController : NetworkBehaviour
             // Generate ultimate charge for storm left click attack (manual click)
             GenerateUltimateCharge(stormLeftClickCharge);
         }
+    }
+
+    [ServerRpc]
+    private void TriggerStormLightningBoltServerRpc()
+    {
+        StartCoroutine(DelayedLightningBolt(true, false));
+        TriggerStormLightningBoltClientRpc();
+    }
+
+    [ClientRpc]
+    private void TriggerStormLightningBoltClientRpc()
+    {
+        StartCoroutine(DelayedLightningBolt(false, true));
     }
 
     private void UseSoulShard(bool isRightClick)
@@ -4054,7 +4298,7 @@ public class WeaponClassController : NetworkBehaviour
             yield break;
         }
         
-        StartCoroutine(CreateLightningArc(startPos, endPos, nearestEnemy));
+        StartCoroutine(CreateLightningArc(startPos, endPos, nearestEnemy, ShouldApplyAuthoritativeMagicGameplay(), true));
     }
     
     private void CreateLightningBolt()
@@ -4065,10 +4309,10 @@ public class WeaponClassController : NetworkBehaviour
         TriggerAttackAnimation(2);
         
         // Add small delay to sync with animation start
-        StartCoroutine(DelayedLightningBolt());
+        StartCoroutine(DelayedLightningBolt(true, true));
     }
     
-    private System.Collections.IEnumerator DelayedLightningBolt()
+    private System.Collections.IEnumerator DelayedLightningBolt(bool applyGameplay, bool spawnVisuals)
     {
         // Wait for animation to start
         yield return new WaitForSeconds(boltAnimationDelay);
@@ -4089,7 +4333,7 @@ public class WeaponClassController : NetworkBehaviour
             yield break;
         }
         
-        StartCoroutine(CreateSkyBolt(skyPosition, groundPosition, nearestEnemy));
+        StartCoroutine(CreateSkyBolt(skyPosition, groundPosition, nearestEnemy, applyGameplay, spawnVisuals));
     }
     
     private GameObject FindNearestEnemy(float maxRange)
@@ -4200,42 +4444,47 @@ public class WeaponClassController : NetworkBehaviour
         return nearbyEnemies;
     }
     
-    private IEnumerator CreateLightningArc(Vector3 startPos, Vector3 endPos, GameObject target)
+    private IEnumerator CreateLightningArc(Vector3 startPos, Vector3 endPos, GameObject target, bool applyGameplay, bool spawnVisuals)
     {
-        // Create lightning arc visual with outer glow
-        GameObject lightning = new GameObject("ElectricArc");
-        lightning.transform.position = startPos;
-        
-        // Create glow (background) LineRenderer first
-        LineRenderer glowRenderer = lightning.AddComponent<LineRenderer>();
-        Material glowMaterial = CreateLightningGlowMaterial();
-        glowRenderer.material = glowMaterial;
-        glowRenderer.startWidth = 0.3f; // Much wider for glow effect
-        glowRenderer.endWidth = 0.2f;
-        glowRenderer.positionCount = 10;
-        glowRenderer.sortingLayerName = "Player";
-        glowRenderer.sortingOrder = 1;
-        
-        // Create main (foreground) LineRenderer
-        GameObject mainLightning = new GameObject("MainElectricArc");
-        mainLightning.transform.SetParent(lightning.transform);
-        mainLightning.transform.localPosition = Vector3.zero;
-        
-        LineRenderer lineRenderer = mainLightning.AddComponent<LineRenderer>();
-        lineRenderer.material = CreateLightningMaterial();
-        lineRenderer.startWidth = 0.1f;
-        lineRenderer.endWidth = 0.05f;
-        lineRenderer.positionCount = 10; // More points for bending effect
-        lineRenderer.sortingLayerName = "Player";
-        lineRenderer.sortingOrder = 1;
-        
-        // Create bending arc points
-        Vector3[] arcPoints = CreateBendingArc(startPos, endPos, 10);
-        lineRenderer.SetPositions(arcPoints);
-        glowRenderer.SetPositions(arcPoints); // Use same path for glow
+        GameObject lightning = null;
+
+        if (spawnVisuals)
+        {
+            // Create lightning arc visual with outer glow
+            lightning = new GameObject("ElectricArc");
+            lightning.transform.position = startPos;
+            
+            // Create glow (background) LineRenderer first
+            LineRenderer glowRenderer = lightning.AddComponent<LineRenderer>();
+            Material glowMaterial = CreateLightningGlowMaterial();
+            glowRenderer.material = glowMaterial;
+            glowRenderer.startWidth = 0.3f; // Much wider for glow effect
+            glowRenderer.endWidth = 0.2f;
+            glowRenderer.positionCount = 10;
+            glowRenderer.sortingLayerName = "Player";
+            glowRenderer.sortingOrder = 1;
+            
+            // Create main (foreground) LineRenderer
+            GameObject mainLightning = new GameObject("MainElectricArc");
+            mainLightning.transform.SetParent(lightning.transform);
+            mainLightning.transform.localPosition = Vector3.zero;
+            
+            LineRenderer lineRenderer = mainLightning.AddComponent<LineRenderer>();
+            lineRenderer.material = CreateLightningMaterial();
+            lineRenderer.startWidth = 0.1f;
+            lineRenderer.endWidth = 0.05f;
+            lineRenderer.positionCount = 10; // More points for bending effect
+            lineRenderer.sortingLayerName = "Player";
+            lineRenderer.sortingOrder = 1;
+            
+            // Create bending arc points
+            Vector3[] arcPoints = CreateBendingArc(startPos, endPos, 10);
+            lineRenderer.SetPositions(arcPoints);
+            glowRenderer.SetPositions(arcPoints); // Use same path for glow
+        }
         
         // Deal damage to target on the authoritative instance only
-        if (target != null && lightningHitPrefab != null)
+        if (target != null && spawnVisuals && lightningHitPrefab != null)
         {
             GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
             Debug.Log($"Lightning hit effect triggered at enemy: {target.name}");
@@ -4244,94 +4493,122 @@ public class WeaponClassController : NetworkBehaviour
 
         if (target != null)
         {
-            DealMagicDamageToEnemy(target, lightningDamage);
-            StartCoroutine(TriggerChainLightning(target, lightningDamage));
+            if (applyGameplay)
+            {
+                DealMagicDamageToEnemy(target, lightningDamage);
+            }
+
+            if (applyGameplay || spawnVisuals)
+            {
+                StartCoroutine(TriggerChainLightning(target, lightningDamage, applyGameplay, spawnVisuals));
+            }
         }
         
         // Lightning visual effect duration
         yield return new WaitForSeconds(lightningDuration);
         
-        Destroy(lightning);
+        if (lightning != null)
+        {
+            Destroy(lightning);
+        }
     }
     
-    private IEnumerator CreateChainArc(Vector3 startPos, Vector3 endPos, GameObject target, int chainDamage)
+    private IEnumerator CreateChainArc(Vector3 startPos, Vector3 endPos, GameObject target, int chainDamage, bool applyGameplay, bool spawnVisuals)
     {
-        // Create chain lightning arc visual with outer glow
-        GameObject chainLightning = new GameObject("ChainElectricArc");
-        chainLightning.transform.position = startPos;
-        
-        // Create glow (background) LineRenderer for chain arc
-        LineRenderer chainGlowRenderer = chainLightning.AddComponent<LineRenderer>();
-        Material chainGlowMaterial = CreateLightningGlowMaterial();
-        
-        // Modify glow for purple chain lightning
-        if (chainGlowMaterial.HasProperty("_Color"))
+        if (!applyGameplay && !spawnVisuals)
         {
-            chainGlowMaterial.SetColor("_Color", new Color(0.2f, 0.1f, 0.4f, 0.25f)); // Purple glow
-            chainGlowMaterial.SetColor("_EmissionColor", new Color(0.4f, 0.2f, 0.8f, 0.3f)); // Purple emission
-        }
-        else
-        {
-            chainGlowMaterial.color = new Color(0.3f, 0.2f, 0.8f, 0.2f); // Fallback purple glow
-        }
-        
-        chainGlowRenderer.material = chainGlowMaterial;
-        chainGlowRenderer.startWidth = 0.24f; // Wider glow for chain
-        chainGlowRenderer.endWidth = 0.16f;
-        chainGlowRenderer.positionCount = 8;
-        chainGlowRenderer.sortingLayerName = "Player";
-        chainGlowRenderer.sortingOrder = 1;
-        
-        // Create main chain LineRenderer
-        GameObject mainChain = new GameObject("MainChainArc");
-        mainChain.transform.SetParent(chainLightning.transform);
-        mainChain.transform.localPosition = Vector3.zero;
-        
-        LineRenderer lineRenderer = mainChain.AddComponent<LineRenderer>();
-        Material chainMaterial = CreateLightningMaterial();
-        
-        // Make chain lightning slightly more purple-blue to distinguish from main lightning
-        if (chainMaterial.HasProperty("_Color"))
-        {
-            chainMaterial.SetColor("_Color", new Color(0.4f, 0.5f, 1f, 1f)); // More purple-blue
-        }
-        else
-        {
-            chainMaterial.color = new Color(0.4f, 0.7f, 1.2f, 0.9f); // Fallback purple-blue
-        }
-        
-        lineRenderer.material = chainMaterial;
-        lineRenderer.startWidth = 0.08f; // Slightly thinner than main lightning
-        lineRenderer.endWidth = 0.04f;
-        lineRenderer.positionCount = 8; // Fewer points for quicker creation
-        lineRenderer.sortingLayerName = "Player";
-        lineRenderer.sortingOrder = 1;
-        
-        // Create bending arc points for chain lightning
-        Vector3[] arcPoints = CreateBendingArc(startPos, endPos, 8);
-        lineRenderer.SetPositions(arcPoints);
-        chainGlowRenderer.SetPositions(arcPoints); // Use same path for glow
-        
-        if (target != null && lightningHitPrefab != null)
-        {
-            GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
-            Debug.Log($"Chain lightning hit effect triggered at enemy: {target.name}");
-            Destroy(hitEffect, 3f);
+            yield break;
         }
 
-        if (target != null)
+        GameObject chainLightning = null;
+
+        if (spawnVisuals)
+        {
+            // Create chain lightning arc visual with outer glow
+            chainLightning = new GameObject("ChainElectricArc");
+            chainLightning.transform.position = startPos;
+            
+            // Create glow (background) LineRenderer for chain arc
+            LineRenderer chainGlowRenderer = chainLightning.AddComponent<LineRenderer>();
+            Material chainGlowMaterial = CreateLightningGlowMaterial();
+            
+            // Modify glow for purple chain lightning
+            if (chainGlowMaterial.HasProperty("_Color"))
+            {
+                chainGlowMaterial.SetColor("_Color", new Color(0.2f, 0.1f, 0.4f, 0.25f)); // Purple glow
+                chainGlowMaterial.SetColor("_EmissionColor", new Color(0.4f, 0.2f, 0.8f, 0.3f)); // Purple emission
+            }
+            else
+            {
+                chainGlowMaterial.color = new Color(0.3f, 0.2f, 0.8f, 0.2f); // Fallback purple glow
+            }
+            
+            chainGlowRenderer.material = chainGlowMaterial;
+            chainGlowRenderer.startWidth = 0.24f; // Wider glow for chain
+            chainGlowRenderer.endWidth = 0.16f;
+            chainGlowRenderer.positionCount = 8;
+            chainGlowRenderer.sortingLayerName = "Player";
+            chainGlowRenderer.sortingOrder = 1;
+            
+            // Create main chain LineRenderer
+            GameObject mainChain = new GameObject("MainChainArc");
+            mainChain.transform.SetParent(chainLightning.transform);
+            mainChain.transform.localPosition = Vector3.zero;
+            
+            LineRenderer lineRenderer = mainChain.AddComponent<LineRenderer>();
+            Material chainMaterial = CreateLightningMaterial();
+            
+            // Make chain lightning slightly more purple-blue to distinguish from main lightning
+            if (chainMaterial.HasProperty("_Color"))
+            {
+                chainMaterial.SetColor("_Color", new Color(0.4f, 0.5f, 1f, 1f)); // More purple-blue
+            }
+            else
+            {
+                chainMaterial.color = new Color(0.4f, 0.7f, 1.2f, 0.9f); // Fallback purple-blue
+            }
+            
+            lineRenderer.material = chainMaterial;
+            lineRenderer.startWidth = 0.08f; // Slightly thinner than main lightning
+            lineRenderer.endWidth = 0.04f;
+            lineRenderer.positionCount = 8; // Fewer points for quicker creation
+            lineRenderer.sortingLayerName = "Player";
+            lineRenderer.sortingOrder = 1;
+            
+            // Create bending arc points for chain lightning
+            Vector3[] arcPoints = CreateBendingArc(startPos, endPos, 8);
+            lineRenderer.SetPositions(arcPoints);
+            chainGlowRenderer.SetPositions(arcPoints); // Use same path for glow
+            
+            if (target != null && lightningHitPrefab != null)
+            {
+                GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
+                Debug.Log($"Chain lightning hit effect triggered at enemy: {target.name}");
+                Destroy(hitEffect, 3f);
+            }
+        }
+
+        if (target != null && applyGameplay)
         {
             DealMagicDamageToEnemy(target, chainDamage);
             Debug.Log($"Chain lightning hit {target.name} for {chainDamage} damage");
+        }
+
+        if (!spawnVisuals)
+        {
+            yield break;
         }
         
         // Chain arc visual effect duration
         yield return new WaitForSeconds(chainArcDuration);
         
-        Destroy(chainLightning);
+        if (chainLightning != null)
+        {
+            Destroy(chainLightning);
+        }
     }
     
-    private IEnumerator TriggerChainLightning(GameObject attackedEnemy, int baseDamage)
+    private IEnumerator TriggerChainLightning(GameObject attackedEnemy, int baseDamage, bool applyGameplay, bool spawnVisuals)
     {
         if (attackedEnemy == null) yield break;
         
@@ -4359,10 +4636,13 @@ public class WeaponClassController : NetworkBehaviour
                 Vector3 endPos = targetEnemy.transform.position;
                 
                 // Start chain arc creation
-                StartCoroutine(CreateChainArc(startPos, endPos, targetEnemy, chainDamage));
+                StartCoroutine(CreateChainArc(startPos, endPos, targetEnemy, chainDamage, applyGameplay, spawnVisuals));
                 
-                // Generate ultimate charge for chain arc
-                GenerateUltimateCharge(stormConstantLeftClickCharge * 0.5f); // Half charge for chain arcs
+                // Only grant charge on the client-side visual path so host mode does not double-award it.
+                if (spawnVisuals)
+                {
+                    GenerateUltimateCharge(stormConstantLeftClickCharge * 0.5f); // Half charge for chain arcs
+                }
                 
                 // Wait before next chain arc
                 if (i < nearbyEnemies.Count - 1) // Don't wait after the last arc
@@ -4373,58 +4653,75 @@ public class WeaponClassController : NetworkBehaviour
         }
     }
     
-    private IEnumerator CreateSkyBolt(Vector3 startPos, Vector3 endPos, GameObject target)
+    private IEnumerator CreateSkyBolt(Vector3 startPos, Vector3 endPos, GameObject target, bool applyGameplay, bool spawnVisuals)
     {
-        // Create lightning bolt from sky with outer glow
-        GameObject bolt = new GameObject("LightningBolt");
-        bolt.transform.position = startPos;
-        
-        // Create glow (background) LineRenderer for sky bolt
-        LineRenderer boltGlowRenderer = bolt.AddComponent<LineRenderer>();
-        Material boltGlowMaterial = CreateLightningGlowMaterial();
-        boltGlowRenderer.material = boltGlowMaterial;
-        boltGlowRenderer.startWidth = 0.5f; // Much wider glow for dramatic effect
-        boltGlowRenderer.endWidth = 0.3f;
-        boltGlowRenderer.positionCount = 6;
-        boltGlowRenderer.sortingLayerName = "Player";
-        boltGlowRenderer.sortingOrder = 1;
-        
-        // Create main lightning bolt LineRenderer
-        GameObject mainBolt = new GameObject("MainLightningBolt");
-        mainBolt.transform.SetParent(bolt.transform);
-        mainBolt.transform.localPosition = Vector3.zero;
-        
-        LineRenderer lineRenderer = mainBolt.AddComponent<LineRenderer>();
-        lineRenderer.material = CreateLightningMaterial();
-        lineRenderer.startWidth = 0.2f;
-        lineRenderer.endWidth = 0.1f;
-        lineRenderer.positionCount = 6; // More points for subtle bending
-        lineRenderer.sortingLayerName = "Player";
-        lineRenderer.sortingOrder = 1;
-        
-        // Create slightly squiggly lightning bolt path
-        Vector3[] boltPoints = CreateBendingBolt(startPos, endPos, 6);
-        lineRenderer.SetPositions(boltPoints);
-        boltGlowRenderer.SetPositions(boltPoints); // Use same path for glow
-        
-        if (target != null && lightningHitPrefab != null)
+        GameObject bolt = null;
+
+        if (spawnVisuals)
         {
-            GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
-            Debug.Log($"Lightning bolt hit effect triggered at enemy: {target.name}");
-            Destroy(hitEffect, 3f);
+            // Create lightning bolt from sky with outer glow
+            bolt = new GameObject("LightningBolt");
+            bolt.transform.position = startPos;
+            
+            // Create glow (background) LineRenderer for sky bolt
+            LineRenderer boltGlowRenderer = bolt.AddComponent<LineRenderer>();
+            Material boltGlowMaterial = CreateLightningGlowMaterial();
+            boltGlowRenderer.material = boltGlowMaterial;
+            boltGlowRenderer.startWidth = 0.5f; // Much wider glow for dramatic effect
+            boltGlowRenderer.endWidth = 0.3f;
+            boltGlowRenderer.positionCount = 6;
+            boltGlowRenderer.sortingLayerName = "Player";
+            boltGlowRenderer.sortingOrder = 1;
+            
+            // Create main lightning bolt LineRenderer
+            GameObject mainBolt = new GameObject("MainLightningBolt");
+            mainBolt.transform.SetParent(bolt.transform);
+            mainBolt.transform.localPosition = Vector3.zero;
+            
+            LineRenderer lineRenderer = mainBolt.AddComponent<LineRenderer>();
+            lineRenderer.material = CreateLightningMaterial();
+            lineRenderer.startWidth = 0.2f;
+            lineRenderer.endWidth = 0.1f;
+            lineRenderer.positionCount = 6; // More points for subtle bending
+            lineRenderer.sortingLayerName = "Player";
+            lineRenderer.sortingOrder = 1;
+            
+            // Create slightly squiggly lightning bolt path
+            Vector3[] boltPoints = CreateBendingBolt(startPos, endPos, 6);
+            lineRenderer.SetPositions(boltPoints);
+            boltGlowRenderer.SetPositions(boltPoints); // Use same path for glow
+            
+            if (target != null && lightningHitPrefab != null)
+            {
+                GameObject hitEffect = Instantiate(lightningHitPrefab, target.transform.position, Quaternion.identity);
+                Debug.Log($"Lightning bolt hit effect triggered at enemy: {target.name}");
+                Destroy(hitEffect, 3f);
+            }
         }
 
         if (target != null)
         {
-            DealMagicDamageToEnemy(target, boltDamage);
-            StartCoroutine(TriggerChainLightning(target, boltDamage));
+            if (applyGameplay)
+            {
+                DealMagicDamageToEnemy(target, boltDamage);
+            }
+
+            if (applyGameplay || spawnVisuals)
+            {
+                StartCoroutine(TriggerChainLightning(target, boltDamage, applyGameplay, spawnVisuals));
+            }
         }
         
         // Create ground impact effect
-        GameObject impact = new GameObject("BoltImpact");
-        impact.transform.position = endPos;
+        GameObject impact = null;
+
+        if (applyGameplay || spawnVisuals)
+        {
+            impact = new GameObject("BoltImpact");
+            impact.transform.position = endPos;
+        }
         
-        if (ShouldApplyAuthoritativeMagicGameplay())
+        if (impact != null && applyGameplay)
         {
             BoxCollider2D impactCollider = impact.AddComponent<BoxCollider2D>();
             impactCollider.size = Vector2.one * 2f; // 2x2 impact area
@@ -4448,7 +4745,7 @@ public class WeaponClassController : NetworkBehaviour
         }
         
         // Visual impact effect (animated lightning blast or sprite)
-        if (lightningBlastPrefab != null)
+        if (impact != null && spawnVisuals && lightningBlastPrefab != null)
         {
             // Use animated prefab - instantiate it as child of the impact object
             GameObject animatedBlast = Instantiate(lightningBlastPrefab, impact.transform);
@@ -4462,7 +4759,7 @@ public class WeaponClassController : NetworkBehaviour
                 blastAnimator.SetTrigger("StartBlast");
             }
         }
-        else
+        else if (impact != null && spawnVisuals)
         {
             // Fallback: Use sprite renderer for static sprite
             SpriteRenderer impactRenderer = impact.AddComponent<SpriteRenderer>();
@@ -4493,12 +4790,18 @@ public class WeaponClassController : NetworkBehaviour
         // Lightning and impact duration (using serialized parameters)
         yield return new WaitForSeconds(lightningDuration);
         
-        Destroy(bolt);
+        if (bolt != null)
+        {
+            Destroy(bolt);
+        }
         
         // Impact lasts for bolt duration
         yield return new WaitForSeconds(boltDuration);
         
-        Destroy(impact);
+        if (impact != null)
+        {
+            Destroy(impact);
+        }
     }
     
     private Vector3[] CreateBendingArc(Vector3 start, Vector3 end, int pointCount)
@@ -6095,6 +6398,11 @@ public class WeaponClassController : NetworkBehaviour
     
     private void GenerateUltimateCharge(float chargeAmount)
     {
+        if (IsSpawned && !IsOwner)
+        {
+            return;
+        }
+
         if (playerMovement != null)
         {
             playerMovement.AddUltimateCharge(chargeAmount);
@@ -6139,10 +6447,26 @@ public class WeaponClassController : NetworkBehaviour
         {
             if (equippedShards[i] != ShardType.None)
             {
-                DropShardAtPosition(equippedShards[i], playerPosition, i);
+                ShardType shardType = equippedShards[i];
+
+                if (!RestoreShardToPickupOrigin(shardType, i))
+                {
+                    DropShardAtPosition(shardType, playerPosition, i);
+                }
+
+                SyncShardStateClientRpc(
+                    (int)shardType,
+                    equippedShardPickupPositions[i],
+                    equippedShardPickupRotations[i].eulerAngles,
+                    equippedShardPickupScales[i],
+                    equippedShardHasPickupOrigin[i],
+                    playerPosition,
+                    i);
+
                 droppedCount++;
                 // Clear the equipped shard
                 equippedShards[i] = ShardType.None;
+                ClearShardPickupOrigin(i);
             }
         }
         
@@ -6191,6 +6515,79 @@ public class WeaponClassController : NetworkBehaviour
         {
             Debug.LogWarning($"No prefab found for shard type: {shardType}");
         }
+    }
+
+    private bool RestoreShardToPickupOrigin(ShardType shardType, int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= equippedShards.Length || !equippedShardHasPickupOrigin[slotIndex])
+        {
+            return false;
+        }
+
+        Vector3 restorePosition = equippedShardPickupPositions[slotIndex];
+        Quaternion restoreRotation = equippedShardPickupRotations[slotIndex];
+        Vector3 restoreScale = equippedShardPickupScales[slotIndex];
+        GameObject existingShard = FindAnyShardObjectAtPosition(restorePosition);
+
+        if (existingShard != null)
+        {
+            ConvertShardObject(existingShard, shardType);
+            existingShard.transform.position = restorePosition;
+            existingShard.transform.rotation = restoreRotation;
+            existingShard.transform.localScale = restoreScale;
+            Debug.Log($"Restored {shardType} shard to existing world slot at {restorePosition}");
+            return true;
+        }
+
+        GameObject shardPrefab = GetShardPrefabByType(shardType);
+        if (shardPrefab == null)
+        {
+            return false;
+        }
+
+        GameObject restoredShard = Instantiate(shardPrefab, restorePosition, restoreRotation);
+        restoredShard.transform.localScale = restoreScale;
+        restoredShard.name = GetShardObjectName(shardType);
+        restoredShard.tag = GetShardTag(shardType);
+        Debug.Log($"Restored {shardType} shard to original pickup position {restorePosition}");
+        return true;
+    }
+
+    [ClientRpc]
+    private void SyncShardStateClientRpc(int shardTypeInt, Vector3 pickupPosition, Vector3 pickupRotationEuler, Vector3 pickupScale, bool hasPickupOrigin, Vector3 playerPosition, int slotIndex)
+    {
+        if (IsServer)
+        {
+            return;
+        }
+
+        ShardType shardType = (ShardType)shardTypeInt;
+        if (hasPickupOrigin)
+        {
+            GameObject existingShard = FindAnyShardObjectAtPosition(pickupPosition);
+            if (existingShard != null)
+            {
+                ConvertShardObject(existingShard, shardType);
+                existingShard.transform.position = pickupPosition;
+                existingShard.transform.rotation = Quaternion.Euler(pickupRotationEuler);
+                existingShard.transform.localScale = pickupScale;
+                return;
+            }
+
+            GameObject shardPrefab = GetShardPrefabByType(shardType);
+            if (shardPrefab == null)
+            {
+                return;
+            }
+
+            GameObject restoredShard = Instantiate(shardPrefab, pickupPosition, Quaternion.Euler(pickupRotationEuler));
+            restoredShard.transform.localScale = pickupScale;
+            restoredShard.name = GetShardObjectName(shardType);
+            restoredShard.tag = GetShardTag(shardType);
+            return;
+        }
+
+        DropShardAtPosition(shardType, playerPosition, slotIndex);
     }
     
     /// <summary>

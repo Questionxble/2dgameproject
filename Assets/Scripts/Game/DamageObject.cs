@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using System.Collections.Generic;
+using Unity.Netcode;
 
 [System.Serializable]
 public class DamageObject : MonoBehaviour
@@ -38,14 +40,12 @@ public class DamageObject : MonoBehaviour
     
 
     
-    private bool playerInside = false;
     private bool enemyInside = false;
     private bool playerSummonInside = false;
-    private float lastDamageTime = -1f;
     private float lastEnemyDamageTime = -1f;
     private float lastPlayerSummonDamageTime = -1f;
-    private PlayerMovement playerMovement;
-    private Transform playerTransform;
+    private readonly HashSet<PlayerMovement> playersInside = new HashSet<PlayerMovement>();
+    private readonly Dictionary<PlayerMovement, float> lastPlayerDamageTimes = new Dictionary<PlayerMovement, float>();
     private EnemyBehavior currentEnemy;
     private AttackDummy currentPlayerSummon;
     
@@ -59,25 +59,42 @@ public class DamageObject : MonoBehaviour
             boxCol.isTrigger = true;
         }
         
-        // Find player reference
-        GameObject player = GameObject.FindWithTag("Player");
-        if (player != null)
-        {
-            playerMovement = player.GetComponent<PlayerMovement>();
-            playerTransform = player.transform;
-        }
     }
     
     void Update()
     {
-        // Apply continuous damage while player is inside
-        if (playerInside && Time.time - lastDamageTime >= damageRate)
+        // Apply continuous damage to every player currently inside.
+        if (ShouldProcessPlayerDamage() && playersInside.Count > 0)
         {
-            DealDamageToPlayer();
+            List<PlayerMovement> playersToRemove = null;
+
+            foreach (PlayerMovement player in playersInside)
+            {
+                if (player == null)
+                {
+                    playersToRemove ??= new List<PlayerMovement>();
+                    playersToRemove.Add(player);
+                    continue;
+                }
+
+                if (Time.time - GetLastPlayerDamageTime(player) >= damageRate)
+                {
+                    DealDamageToPlayer(player);
+                }
+            }
+
+            if (playersToRemove != null)
+            {
+                foreach (PlayerMovement player in playersToRemove)
+                {
+                    playersInside.Remove(player);
+                    lastPlayerDamageTimes.Remove(player);
+                }
+            }
         }
         
         // Apply continuous damage while enemy is inside
-        if (enemyInside && canDamageEnemies && Time.time - lastEnemyDamageTime >= damageRate)
+        if (ShouldProcessEnemyDamage() && enemyInside && canDamageEnemies && Time.time - lastEnemyDamageTime >= damageRate)
         {
             // Double-check that we should still be damaging enemies
             if (currentEnemy != null && currentEnemy.CompareTag("Enemy") && !canDamageEnemies)
@@ -114,9 +131,12 @@ public class DamageObject : MonoBehaviour
             {
                 return; // Don't damage player layer objects
             }
-            
-            playerInside = true;
-            DealDamageToPlayer();
+
+            PlayerMovement targetPlayer = TrackPlayer(other);
+            if (targetPlayer != null && ShouldProcessPlayerDamage())
+            {
+                DealDamageToPlayer(targetPlayer);
+            }
         }
         else if (damageOnTrigger && other.GetComponent<EnemyBehavior>() != null)
         {
@@ -130,7 +150,10 @@ public class DamageObject : MonoBehaviour
             {
                 enemyInside = true;
                 currentEnemy = other.GetComponent<EnemyBehavior>();
-                DealDamageToEnemy();
+                if (ShouldProcessEnemyDamage())
+                {
+                    DealDamageToEnemy();
+                }
             }
         }
         else if (damageOnTrigger && other.CompareTag("PlayerSummon"))
@@ -148,7 +171,7 @@ public class DamageObject : MonoBehaviour
     {
         if (damageOnTrigger && other.CompareTag("Player"))
         {
-            playerInside = false;
+            UntrackPlayer(other);
         }
         else if (damageOnTrigger && other.GetComponent<EnemyBehavior>() != null)
         {
@@ -177,9 +200,12 @@ public class DamageObject : MonoBehaviour
             {
                 return; // Don't damage player layer objects
             }
-            
-            playerInside = true; // Set playerInside so continuous damage works
-            DealDamageToPlayer();
+
+            PlayerMovement targetPlayer = TrackPlayer(collision.collider);
+            if (targetPlayer != null && ShouldProcessPlayerDamage())
+            {
+                DealDamageToPlayer(targetPlayer);
+            }
         }
         else if (damageOnCollision && canDamageEnemies && collision.gameObject.GetComponent<EnemyBehavior>() != null)
         {
@@ -191,7 +217,10 @@ public class DamageObject : MonoBehaviour
             
             enemyInside = true;
             currentEnemy = collision.gameObject.GetComponent<EnemyBehavior>();
-            DealDamageToEnemy();
+            if (ShouldProcessEnemyDamage())
+            {
+                DealDamageToEnemy();
+            }
         }
         else if (damageOnCollision && canDamagePlayerSummons && collision.gameObject.CompareTag("PlayerSummon"))
         {
@@ -205,7 +234,7 @@ public class DamageObject : MonoBehaviour
     {
         if (damageOnCollision && collision.gameObject.CompareTag("Player"))
         {
-            playerInside = false; // Stop continuous damage
+            UntrackPlayer(collision.collider);
         }
         else if (damageOnCollision && collision.gameObject.GetComponent<EnemyBehavior>() != null)
         {
@@ -219,27 +248,95 @@ public class DamageObject : MonoBehaviour
         }
     }
     
-    private void DealDamageToPlayer()
+    private PlayerMovement TrackPlayer(Collider2D playerCollider)
     {
-        if (playerMovement != null && Time.time - lastDamageTime >= damageRate)
+        PlayerMovement targetPlayer = playerCollider.GetComponent<PlayerMovement>();
+        if (targetPlayer == null)
         {
-            playerMovement.TakeDamageFromObject(damageAmount);
-            lastDamageTime = Time.time;
-            
+            targetPlayer = playerCollider.GetComponentInParent<PlayerMovement>();
+        }
+
+        if (targetPlayer == null)
+        {
+            return null;
+        }
+
+        playersInside.Add(targetPlayer);
+        if (!lastPlayerDamageTimes.ContainsKey(targetPlayer))
+        {
+            lastPlayerDamageTimes[targetPlayer] = -1f;
+        }
+
+        return targetPlayer;
+    }
+
+    private void UntrackPlayer(Collider2D playerCollider)
+    {
+        PlayerMovement targetPlayer = playerCollider.GetComponent<PlayerMovement>();
+        if (targetPlayer == null)
+        {
+            targetPlayer = playerCollider.GetComponentInParent<PlayerMovement>();
+        }
+
+        if (targetPlayer == null)
+        {
+            return;
+        }
+
+        playersInside.Remove(targetPlayer);
+        lastPlayerDamageTimes.Remove(targetPlayer);
+    }
+
+    private float GetLastPlayerDamageTime(PlayerMovement targetPlayer)
+    {
+        if (targetPlayer != null && lastPlayerDamageTimes.TryGetValue(targetPlayer, out float lastDamageTime))
+        {
+            return lastDamageTime;
+        }
+
+        return -1f;
+    }
+
+    private bool ShouldProcessPlayerDamage()
+    {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        return networkManager == null || !networkManager.IsListening || networkManager.IsServer;
+    }
+
+    private bool ShouldProcessEnemyDamage()
+    {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        return networkManager == null || !networkManager.IsListening || networkManager.IsServer;
+    }
+
+    private void DealDamageToPlayer(PlayerMovement targetPlayer)
+    {
+        if (targetPlayer != null && Time.time - GetLastPlayerDamageTime(targetPlayer) >= damageRate)
+        {
+            targetPlayer.TakeDamageFromObject(damageAmount);
+            lastPlayerDamageTimes[targetPlayer] = Time.time;
+
+            Transform targetTransform = targetPlayer.transform;
+
             // Create damage number
-            CreateDamageNumber(damageAmount, playerTransform.position + Vector3.up * 1.5f);
-            
+            CreateDamageNumber(damageAmount, targetTransform.position + Vector3.up * 1.5f);
+
             // Trigger callback for fire particle effects
             if (onPlayerHit != null)
             {
                 Debug.Log($"DamageObject: Triggering onPlayerHit callback for {name}");
-                onPlayerHit.Invoke(playerTransform);
+                onPlayerHit.Invoke(targetTransform);
             }
         }
     }
     
     private void DealDamageToEnemy()
     {
+        if (!ShouldProcessEnemyDamage())
+        {
+            return;
+        }
+
         if (currentEnemy != null && Time.time - lastEnemyDamageTime >= damageRate)
         {
             currentEnemy.TakeDamage(damageAmount);
@@ -279,8 +376,15 @@ public class DamageObject : MonoBehaviour
     /// </summary>
     public void TriggerDamage()
     {
-        DealDamageToPlayer();
-        if (canDamageEnemies)
+        if (ShouldProcessPlayerDamage())
+        {
+            foreach (PlayerMovement targetPlayer in playersInside)
+            {
+                DealDamageToPlayer(targetPlayer);
+            }
+        }
+
+        if (canDamageEnemies && ShouldProcessEnemyDamage())
         {
             DealDamageToEnemy();
         }

@@ -1,8 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using Unity.Netcode;
 
-public class EnemyBehavior : MonoBehaviour
+public class EnemyBehavior : NetworkBehaviour
 {
     [Header("Enemy Settings")]
     [SerializeField] protected int maxHealth = 50;
@@ -50,6 +51,8 @@ public class EnemyBehavior : MonoBehaviour
     protected float lastAttackTime = 0f;
     protected bool isFacingRight = true;
     protected float lastJumpTime = 0f;
+    protected Transform pendingAttackTarget;
+    protected Coroutine pendingAttackCoroutine;
     
     // Animation System
     protected bool useNextAttackAnimation = false; // For alternating attacks
@@ -66,6 +69,19 @@ public class EnemyBehavior : MonoBehaviour
     protected int shockStacks = 0;
     protected const int maxShockStacks = 8;
     protected const float shockBaseDuration = 1f;
+
+    // Network state replication
+    protected readonly NetworkVariable<int> networkHealth = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    protected readonly NetworkVariable<bool> networkIsDead = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    protected readonly NetworkVariable<Vector3> networkPosition = new NetworkVariable<Vector3>(Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    protected readonly NetworkVariable<bool> networkFacingRight = new NetworkVariable<bool>(true, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    protected readonly NetworkVariable<bool> networkIsWalking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    protected readonly NetworkVariable<bool> networkIsAttacking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    protected readonly NetworkVariable<int> networkAttackType = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    protected readonly NetworkVariable<bool> networkIsShocked = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    protected const float remotePositionLerpSpeed = 15f;
+    protected static readonly Color shockColor = new Color(0f, 0.9f, 1f, 1f);
+    protected int currentAttackAnimationType = 0;
     
     // Public Properties
     public bool IsDead => isDead;
@@ -152,10 +168,221 @@ public class EnemyBehavior : MonoBehaviour
         
         // Create health bar
         CreateHealthBar();
+
+        ApplyCurrentPhysicsAuthority();
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        networkHealth.OnValueChanged += OnNetworkHealthChanged;
+        networkIsDead.OnValueChanged += OnNetworkDeathChanged;
+
+        if (currentHealth <= 0)
+        {
+            currentHealth = maxHealth;
+        }
+
+        if (IsServer)
+        {
+            PublishNetworkState(true);
+        }
+        else
+        {
+            ApplyReplicatedState(true);
+        }
+
+        ApplyCurrentPhysicsAuthority();
+        base.OnNetworkSpawn();
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        networkHealth.OnValueChanged -= OnNetworkHealthChanged;
+        networkIsDead.OnValueChanged -= OnNetworkDeathChanged;
+        base.OnNetworkDespawn();
+    }
+
+    protected virtual void LateUpdate()
+    {
+        ApplyCurrentPhysicsAuthority();
+
+        if (ShouldRunAuthoritativeGameplay() && IsNetworkSessionActive())
+        {
+            PublishNetworkState();
+        }
+    }
+
+    protected virtual void OnNetworkHealthChanged(int previousValue, int newValue)
+    {
+        currentHealth = newValue;
+    }
+
+    protected virtual void OnNetworkDeathChanged(bool previousValue, bool newValue)
+    {
+        isDead = newValue;
+
+        if (newValue)
+        {
+            inDamageZone = false;
+            currentDamageObject = null;
+            lastDamageTime = 0f;
+            pendingAttackTarget = null;
+            isAttacking = false;
+        }
+    }
+
+    protected bool IsNetworkSessionActive()
+    {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        return networkManager != null && networkManager.IsListening;
+    }
+
+    protected bool IsRemoteReplica()
+    {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        return networkManager != null && networkManager.IsListening && networkManager.IsClient && !networkManager.IsServer;
+    }
+
+    protected bool ShouldRunAuthoritativeGameplay()
+    {
+        return !IsNetworkSessionActive() || IsServer;
+    }
+
+    protected virtual void ApplyCurrentPhysicsAuthority()
+    {
+        if (rb == null)
+        {
+            return;
+        }
+
+        bool shouldSimulate = !IsRemoteReplica();
+        if (rb.simulated != shouldSimulate)
+        {
+            rb.simulated = shouldSimulate;
+        }
+
+        if (!shouldSimulate)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+    }
+
+    protected virtual void ApplyReplicatedState(bool immediate)
+    {
+        if (!IsRemoteReplica())
+        {
+            return;
+        }
+
+        ApplyCurrentPhysicsAuthority();
+
+        if (!IsSpawned)
+        {
+            return;
+        }
+
+        currentHealth = networkHealth.Value;
+        isDead = networkIsDead.Value;
+        isAttacking = networkIsAttacking.Value;
+        isFacingRight = networkFacingRight.Value;
+
+        Vector3 targetPosition = networkPosition.Value;
+        if ((transform.position - targetPosition).sqrMagnitude > 25f)
+        {
+            transform.position = targetPosition;
+        }
+        else
+        {
+            float t = immediate ? 1f : Mathf.Clamp01(remotePositionLerpSpeed * Time.deltaTime);
+            transform.position = Vector3.Lerp(transform.position, targetPosition, t);
+        }
+
+        if (transform.rotation != Quaternion.identity)
+        {
+            transform.rotation = Quaternion.identity;
+        }
+
+        if (spriteRenderer != null)
+        {
+            if (!spriteRenderer.enabled)
+            {
+                spriteRenderer.enabled = true;
+            }
+
+            spriteRenderer.flipX = !isFacingRight;
+            spriteRenderer.color = isDead ? deathColor : (networkIsShocked.Value ? shockColor : originalColor);
+        }
+
+        if (animator != null)
+        {
+            animator.SetInteger("attackType", networkAttackType.Value);
+        }
+    }
+
+    protected virtual void PublishNetworkState(bool forcePosition = false)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        if (networkHealth.Value != currentHealth)
+        {
+            networkHealth.Value = currentHealth;
+        }
+
+        if (networkIsDead.Value != isDead)
+        {
+            networkIsDead.Value = isDead;
+        }
+
+        if (networkIsAttacking.Value != isAttacking)
+        {
+            networkIsAttacking.Value = isAttacking;
+        }
+
+        if (networkFacingRight.Value != isFacingRight)
+        {
+            networkFacingRight.Value = isFacingRight;
+        }
+
+        bool isWalking = rb != null && Mathf.Abs(rb.linearVelocity.x) > 0.1f && !isDead && !isAttacking;
+        if (networkIsWalking.Value != isWalking)
+        {
+            networkIsWalking.Value = isWalking;
+        }
+
+        if (networkAttackType.Value != currentAttackAnimationType)
+        {
+            networkAttackType.Value = currentAttackAnimationType;
+        }
+
+        if (networkIsShocked.Value != isShocked)
+        {
+            networkIsShocked.Value = isShocked;
+        }
+
+        if (forcePosition || (networkPosition.Value - transform.position).sqrMagnitude > 0.0001f)
+        {
+            networkPosition.Value = transform.position;
+        }
     }
     
     protected virtual void Update()
     {
+        // Validate essential components before processing
+        if (!ValidateComponents()) return;
+
+        if (IsRemoteReplica())
+        {
+            ApplyReplicatedState(false);
+            UpdateHealthBarPosition();
+            UpdateHealthBar();
+            UpdateAnimations();
+            return;
+        }
+
         // Early exit if dead to prevent any processing
         if (isDead)
         {
@@ -167,10 +394,7 @@ public class EnemyBehavior : MonoBehaviour
             }
             return;
         }
-        
-        // Validate essential components before processing
-        if (!ValidateComponents()) return;
-        
+
         UpdateHealthBarPosition();
         UpdateHealthBar(); // Animate health bar continuously
 
@@ -242,6 +466,15 @@ public class EnemyBehavior : MonoBehaviour
             }
         }
 
+        if (animator == null)
+        {
+            animator = GetComponent<Animator>();
+            if (animator == null)
+            {
+                animator = GetComponentInChildren<Animator>();
+            }
+        }
+
         if (enemyCollider == null)
         {
             enemyCollider = GetComponent<Collider2D>();
@@ -271,7 +504,9 @@ public class EnemyBehavior : MonoBehaviour
         if (!isDead && !isAttacking)
         {
             // Check if moving (has horizontal velocity)
-            bool isMoving = rb != null && Mathf.Abs(rb.linearVelocity.x) > 0.1f;
+            bool isMoving = IsRemoteReplica() && IsSpawned
+                ? networkIsWalking.Value
+                : rb != null && Mathf.Abs(rb.linearVelocity.x) > 0.1f;
             animator.SetBool("isWalking", isMoving);
         }
         else
@@ -286,9 +521,11 @@ public class EnemyBehavior : MonoBehaviour
 
         OnAttackAnimationStarted(target);
 
+        currentAttackAnimationType = GetAttackAnimationType();
+
         if (animator != null)
         {
-            animator.SetInteger("attackType", GetAttackAnimationType());
+            animator.SetInteger("attackType", currentAttackAnimationType);
             animator.SetBool("isAttacking", true);
         }
 
@@ -310,10 +547,26 @@ public class EnemyBehavior : MonoBehaviour
 
     protected virtual void OnAttackAnimationStarted(Transform target)
     {
+        pendingAttackTarget = target;
     }
 
     protected virtual void StartAttackEventFallback()
     {
+        if (pendingAttackCoroutine != null)
+        {
+            StopCoroutine(pendingAttackCoroutine);
+        }
+
+        pendingAttackCoroutine = StartCoroutine(ExecuteAttackAfterDelay());
+    }
+
+    protected virtual IEnumerator ExecuteAttackAfterDelay()
+    {
+        yield return new WaitForSeconds(Mathf.Max(0.05f, attackDuration * 0.5f));
+
+        ExecuteAttack(pendingAttackTarget);
+        pendingAttackTarget = null;
+        pendingAttackCoroutine = null;
     }
 
     protected virtual void ExecuteAttack(Transform target)
@@ -327,7 +580,8 @@ public class EnemyBehavior : MonoBehaviour
         }
 
         PlayerMovement playerMovement = target.GetComponent<PlayerMovement>();
-        if (playerMovement != null)
+        bool shouldApplyPlayerDamage = NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening || NetworkManager.Singleton.IsServer;
+        if (playerMovement != null && shouldApplyPlayerDamage)
         {
             playerMovement.TakeDamageFromObject((int)attackDamage);
             Debug.Log($"Enemy attacked player for {attackDamage} damage");
@@ -343,6 +597,7 @@ public class EnemyBehavior : MonoBehaviour
         // Wait for attack duration plus a small buffer
         yield return new WaitForSeconds(attackDuration + 0.1f);
         isAttacking = false;
+        currentAttackAnimationType = 0;
         
         // Clear the attacking parameter in the animator
         if (animator != null)
@@ -574,8 +829,6 @@ public class EnemyBehavior : MonoBehaviour
         
         // Play attack animation
         PlayAttackAnimation(target);
-
-        ExecuteAttack(target);
         lastAttackTime = Time.time;
     }
     
@@ -729,6 +982,8 @@ public class EnemyBehavior : MonoBehaviour
 
     public virtual void ApplyShock(float duration = -1f)
     {
+        if (!ShouldRunAuthoritativeGameplay()) return;
+
         if (isDead) return;
 
         float shockDuration = duration > 0f ? duration : shockBaseDuration;
@@ -772,6 +1027,8 @@ public class EnemyBehavior : MonoBehaviour
     
     public virtual void TakeDamage(int damage)
     {
+        if (!ShouldRunAuthoritativeGameplay()) return;
+
         if (isDead) return;
         
         currentHealth -= damage;
@@ -794,7 +1051,17 @@ public class EnemyBehavior : MonoBehaviour
     
     protected virtual void Die()
     {
+        if (!ShouldRunAuthoritativeGameplay()) return;
+
         if (isDead) return;
+
+        if (pendingAttackCoroutine != null)
+        {
+            StopCoroutine(pendingAttackCoroutine);
+            pendingAttackCoroutine = null;
+        }
+
+        pendingAttackTarget = null;
         
         isDead = true;
         ResetVariantState();
@@ -862,6 +1129,8 @@ public class EnemyBehavior : MonoBehaviour
     
     protected virtual void Respawn()
     {
+        if (!ShouldRunAuthoritativeGameplay()) return;
+
         Debug.Log($"Enemy {gameObject.name} respawning");
         
         // Reset position to spawn point

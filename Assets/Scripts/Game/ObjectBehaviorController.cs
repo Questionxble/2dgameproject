@@ -127,17 +127,19 @@ public class ObjectBehaviorController : MonoBehaviour
     // WATER SYSTEM
     public void HandleWaterEntry(GameObject player, Collider2D waterCollider = null)
     {
-        if (playerMovement != null)
+        PlayerMovement targetPlayer = player != null ? player.GetComponent<PlayerMovement>() : null;
+        if (targetPlayer != null)
         {
-            playerMovement.SetWaterState(true, GetWaterProperties(), waterCollider);
+            targetPlayer.SetWaterState(true, GetWaterProperties(), waterCollider);
         }
     }
     
     public void HandleWaterExit(GameObject player)
     {
-        if (playerMovement != null)
+        PlayerMovement targetPlayer = player != null ? player.GetComponent<PlayerMovement>() : null;
+        if (targetPlayer != null)
         {
-            playerMovement.SetWaterState(false);
+            targetPlayer.SetWaterState(false);
         }
     }
     
@@ -254,14 +256,6 @@ public class Water : MonoBehaviour, IObjectBehavior
             waterCollider.isTrigger = true;
         }
         
-        // Find player reference
-        player = GameObject.FindWithTag("Player");
-        if (player != null)
-        {
-            playerRb = player.GetComponent<Rigidbody2D>();
-            playerTransform = player.transform;
-            playerMovement = player.GetComponent<PlayerMovement>();
-        }
     }
     
     void Update()
@@ -311,6 +305,10 @@ public class Water : MonoBehaviour, IObjectBehavior
     {
         if (other.CompareTag("Player"))
         {
+            player = other.gameObject;
+            playerRb = other.attachedRigidbody;
+            playerTransform = other.transform;
+            playerMovement = other.GetComponent<PlayerMovement>();
             playerInWater = true;
             if (controller != null)
             {
@@ -334,6 +332,11 @@ public class Water : MonoBehaviour, IObjectBehavior
             {
                 playerTransform.rotation = Quaternion.identity;
             }
+
+            player = null;
+            playerRb = null;
+            playerTransform = null;
+            playerMovement = null;
         }
     }
 }
