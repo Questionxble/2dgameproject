@@ -54,13 +54,13 @@ TagManager:
   - name: 'Furthest '
     uniqueID: 489980507
     locked: 0
-  - name: Default
-    uniqueID: 0
-    locked: 1
   - name: 'b2 '
     uniqueID: 3336826925
     locked: 0
-  - name: backgroun
+  - name: Default
+    uniqueID: 0
+    locked: 1
+  - name: background
     uniqueID: 3322507321
     locked: 0
   - name: middle
@@ -75,7 +75,7 @@ TagManager:
   - name: Player Effects Fg
     uniqueID: 313975313
     locked: 0
-  - name: 'f1 '
+  - name: foreground 1
     uniqueID: 256988333
     locked: 0
   - name: foreground 2
