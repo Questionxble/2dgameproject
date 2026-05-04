@@ -18,6 +18,7 @@ Supporting files:
 
 - `install_server_service.sh`
 - `server_run.sh`
+- `sync_gce_instance_metadata.sh`
 - `gcp/cloud_run/compute_engine_orchestrator.py`
 - `gcp/cloud_run/cloud_run.env.yaml.example`
 - `gcp/firebase/firebase.auth.json`
@@ -47,10 +48,11 @@ Strongly recommended:
 Example deployment folder:
 
 ```text
-/home/ubuntu/game-server/
+/home/<linux-user>/game-server/
   2dgameproject_server
   2dgameproject_server_Data/
   server_run.sh
+  sync_gce_instance_metadata.sh
   server_start.sh
   install_server_service.sh
 ```
@@ -60,16 +62,19 @@ Example deployment folder:
 On the VM:
 
 ```bash
-chmod +x server_run.sh server_start.sh install_server_service.sh
+chmod +x server_run.sh server_start.sh install_server_service.sh sync_gce_instance_metadata.sh
 ./install_server_service.sh \
-  --working-dir /home/ubuntu/game-server \
-  --executable /home/ubuntu/game-server/2dgameproject_server \
+  --service-user <linux-user> \
+  --working-dir /home/<linux-user>/game-server \
+  --executable /home/<linux-user>/game-server/2dgameproject_server \
   --port 7777 \
   --max-players 4 \
   --idle-timeout 300 \
   --join-ticket-secret '<same secret as cloud service>' \
   --target-id 'game-server-primary'
 ```
+
+`--service-user`, `--working-dir`, and `--executable` must all match the same real Linux account and deployment folder. If your VM uses `/home/chris/LinuxBuildFiles`, then use `--service-user chris`, `--working-dir /home/chris/LinuxBuildFiles`, and the executable path from that same folder.
 
 What this does:
 
@@ -78,7 +83,13 @@ What this does:
 - Restarts it automatically if the process crashes
 - Stops the dedicated server after the configured idle timeout when no players remain connected
 - Powers off the VM after an idle-triggered clean exit
-- Writes a protected environment file with `JOIN_TICKET_SECRET`, `GAME_SERVER_TARGET_ID`, and the idle-stop settings
+- Writes a protected environment file with `JOIN_TICKET_SECRET`, `GAME_SERVER_TARGET_ID`, `GAME_TRANSPORT_MODE`, and the runtime-heartbeat settings used by Relay-capable builds
+- Writes a service-user runtime override file that can safely replace `GAME_SERVER_TARGET_ID` on a per-instance basis without changing the protected secret file
+- Runs `sync_gce_instance_metadata.sh` before each start so a managed GCE VM can consume the `game-server-target-id` and `game-server-lobby-code` metadata attributes
+
+If you want secure Relay transport on the VM, add `--transport-mode relay --orchestration-url https://<your-control-plane-host>` to the installer command so the headless server can publish its live Relay join code back to Cloud Run.
+
+For disposable per-lobby templates, make sure `sync_gce_instance_metadata.sh` is deployed alongside the other startup scripts inside the VM image or instance template.
 
 Useful commands afterward:
 
@@ -104,6 +115,7 @@ Required environment variables:
 - `SERVER_PORT=7777`
 - `MAX_PLAYERS=4`
 - `JOIN_TICKET_SECRET=<long random secret shared with the VM>`
+- `GAME_TRANSPORT_MODE=direct` or `GAME_TRANSPORT_MODE=relay`
 
 Recommended environment variables:
 
@@ -113,6 +125,19 @@ Recommended environment variables:
 - `SERVER_ADDRESS_OVERRIDE=<static ip or dns name>`
 - `REQUIRE_PUBLIC_ADDRESS=true`
 - `ALLOW_ANONYMOUS_JOIN_TICKETS=false`
+- `RELAY_CONNECTION_TYPE=dtls`
+- `SERVER_RUNTIME_HEARTBEAT_TTL_SECONDS=20`
+- `SERVER_REGISTRATION_TOKEN=<optional; defaults to JOIN_TICKET_SECRET when omitted>`
+
+Per-lobby template mode only:
+
+- `SERVER_ALLOCATION_MODE=per-lobby-template`
+- `SERVER_ALLOCATION_STORE=firestore`
+- `LOBBY_ALLOCATION_COLLECTION=serverLobbyAllocations`
+- `MANAGED_INSTANCE_TEMPLATE=<global instance template resource>`
+- `MANAGED_INSTANCE_NAME_PREFIX=lobby-`
+- `MANAGED_INSTANCE_METADATA_TARGET_ID_KEY=game-server-target-id`
+- `MANAGED_INSTANCE_METADATA_LOBBY_CODE_KEY=game-server-lobby-code`
 
 If you are enforcing player auth through an upstream OIDC layer, also set:
 
@@ -128,7 +153,12 @@ For Firebase Authentication email/password on this project, the working values a
 - `OIDC_REQUIRED_SCOPE=`
 - `OIDC_REQUIRED_GROUP=`
 
-Use `gcp/cloud_run/cloud_run.env.yaml.example` as the starting point for your Cloud Run env vars. Replace the placeholder issuer and audience values with the real values from your identity provider before deployment.
+Use `gcp/cloud_run/cloud_run.env.yaml.example` as the starting point for your Cloud Run env vars. Copy it to `gcp/cloud_run/cloud_run.env.local.yaml` for real deploys, keep that local file untracked, and do not commit live secret values.
+
+For `JOIN_TICKET_SECRET` and `SERVER_REGISTRATION_TOKEN`, either:
+
+- set them in `gcp/cloud_run/cloud_run.env.local.yaml`, or
+- inject them from Secret Manager at deploy time with `--update-secrets`
 
 Minimal GCP permissions for the Cloud Run service account:
 
@@ -141,9 +171,22 @@ Example deployment command:
 
 ```bash
 gcloud run deploy game-server-orchestrator \
-  --source . \
+  --source ./gcp/cloud_run \
   --region us-central1 \
-  --env-vars-file gcp/cloud_run/cloud_run.env.yaml \
+  --env-vars-file ./gcp/cloud_run/cloud_run.env.local.yaml \
+  --allow-unauthenticated
+```
+
+Run that command from the repository root. If you `cd gcp/cloud_run` first, then use `--source .` and `--env-vars-file ./cloud_run.env.local.yaml` instead.
+
+If you prefer Secret Manager, keep the tracked env file secret-free and add the secret bindings during deploy, for example:
+
+```bash
+gcloud run deploy game-server-orchestrator \
+  --source ./gcp/cloud_run \
+  --region us-central1 \
+  --env-vars-file ./gcp/cloud_run/cloud_run.env.yaml \
+  --update-secrets JOIN_TICKET_SECRET=join-ticket-secret:latest,SERVER_REGISTRATION_TOKEN=server-registration-token:latest \
   --allow-unauthenticated
 ```
 
@@ -168,9 +211,11 @@ Your public HTTPS service must expose:
 - `POST /server/start`
 - `GET /server/status`
 - `POST /server/join-token`
+- `POST /server/runtime`
 - `OPTIONS /server/start`
 - `OPTIONS /server/status`
 - `OPTIONS /server/join-token`
+- `OPTIONS /server/runtime`
 
 Cloud Run can serve these routes directly. If you need quota, auth centralization, or a stable edge layer, put API Gateway or another managed gateway in front of Cloud Run.
 
@@ -240,6 +285,8 @@ The center-screen menu now uses a dedicated-lobby flow:
 
 With signed join tickets enabled, the client calls `POST /server/join-token` before `StartClient()` and places the returned token into NGO connection data.
 
+When `GAME_TRANSPORT_MODE=relay`, the dedicated server now creates the Relay allocation itself and heartbeats the live Relay join code to `POST /server/runtime`. The control plane then returns that join code from `/server/status` and `/server/join-token`, and the client switches to Relay/DTLS automatically.
+
 Notes:
 
 - The client now accepts either `targetId` or `instanceId` from the API response.
@@ -269,13 +316,14 @@ Recommended validation order:
 1. Stop the Compute Engine VM.
 2. Call `POST /server/start` manually and confirm the response changes from `terminated` or `provisioning` to `running`.
 3. Confirm the VM boots and `unity-game-server.service` starts automatically.
-4. Launch one client and click Connect.
-5. Confirm the client shows the startup status, waits for readiness, and then connects.
-6. Launch up to 4 clients and confirm all 4 can join.
-7. Confirm a 5th client is rejected with a full-session message.
+4. If Relay is enabled, confirm `/server/status` begins returning `transportMode=relay` and a non-empty `relayJoinCode` after the Unity server starts.
+5. Launch one client and click Connect.
+6. Confirm the client shows the startup status, waits for readiness, and then connects.
+7. Launch up to 4 clients and confirm all 4 can join.
+8. Confirm a 5th client is rejected with a full-session message.
 
 ## GCP Notes
 
 - If you do not reserve a static external IP, the public IP may change each time the VM is started.
 - Small GCP tiers often need more warmup time than the old AWS examples assumed. `15` to `30` seconds is a safer starting point on constrained VMs.
-- If you want a real readiness signal, extend the orchestrator to check a health endpoint or VM-reported heartbeat instead of relying only on VM state and public-address presence.
+- The GCP sample now supports a VM-reported runtime heartbeat. Direct transport can use it for a stronger ready signal, and Relay transport depends on it to publish live join codes.

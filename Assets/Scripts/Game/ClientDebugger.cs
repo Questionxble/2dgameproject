@@ -38,11 +38,18 @@ public class ClientDebugger : MonoBehaviour
     [SerializeField] private float serverStartupTimeoutSeconds = 180f;
     [SerializeField] private float serverStatusPollIntervalSeconds = 3f;
     [SerializeField] private float postReadyConnectDelaySeconds = 8f;
+    [SerializeField] private float directClientConnectTimeoutSeconds = 25f;
+    [SerializeField] private int orchestratedReconnectRetries = 2;
+    [SerializeField] private float orchestratedReconnectDelaySeconds = 3f;
 
     [Header("Join Ticket Auth")]
     [SerializeField] private bool enableJoinTicketAuth = true;
     [SerializeField] private string joinTicketEndpoint = "/server/join-token";
     [SerializeField] private float joinTicketTimeoutSeconds = 10f;
+
+    [Header("Secure Transport")]
+    [SerializeField] private bool enableSecureRelayTransport = true;
+    [SerializeField] private string preferredRelayConnectionType = RelayTransportBootstrap.DefaultConnectionType;
 
     [Header("Firebase Anonymous Auth")]
     [SerializeField] private bool enableFirebaseAnonymousAuth = false;
@@ -63,6 +70,7 @@ public class ClientDebugger : MonoBehaviour
     private bool launchConnectTriggered = false;
     private Coroutine orchestratedConnectRoutine;
     private Coroutine joinTicketConnectRoutine;
+    private Coroutine orchestratedRetryRoutine;
     private string targetServerId = "";
     private string lastLoggedOrchestrationMessage = string.Empty;
     private string joinLobbyCodeInput = "";
@@ -75,6 +83,8 @@ public class ClientDebugger : MonoBehaviour
     private string cachedFirebaseRefreshToken = string.Empty;
     private long cachedFirebaseIdTokenExpiresAtUnix;
     private string cachedFirebaseUserId = string.Empty;
+    private int remainingOrchestratedReconnectRetries;
+    private bool lastConnectionUsedJoinTicket;
 
     private const int MaxLobbyCodeLength = 12;
     private const string FirebaseAnonymousSignInEndpoint = "https://identitytoolkit.googleapis.com/v1/accounts:signUp";
@@ -266,6 +276,23 @@ public class ClientDebugger : MonoBehaviour
         {
             postReadyConnectDelaySeconds = 0f;
         }
+
+        if (directClientConnectTimeoutSeconds <= 0f)
+        {
+            directClientConnectTimeoutSeconds = 25f;
+        }
+
+        if (orchestratedReconnectRetries < 0)
+        {
+            orchestratedReconnectRetries = 0;
+        }
+
+        if (orchestratedReconnectDelaySeconds < 0f)
+        {
+            orchestratedReconnectDelaySeconds = 0f;
+        }
+
+        remainingOrchestratedReconnectRetries = orchestratedReconnectRetries;
     }
 
     private void TryAutoConnectOnLaunch()
@@ -330,9 +357,15 @@ public class ClientDebugger : MonoBehaviour
         }
         
         // Monitor connection timeout
-        if (isConnecting && !isWaitingForServerAvailability && Time.time - connectionStartTime > 10f)
+        if (isConnecting && !isWaitingForServerAvailability && Time.time - connectionStartTime > directClientConnectTimeoutSeconds)
         {
             LogDebug("Connection timeout - stopping connection attempt");
+
+            if (TryResumeOrchestratedConnectionAfterFailedConnect($"Connection attempt timed out after {directClientConnectTimeoutSeconds:F0}s."))
+            {
+                return;
+            }
+
             isConnecting = false;
             if (networkManager.IsClient)
             {
@@ -341,7 +374,7 @@ public class ClientDebugger : MonoBehaviour
 
             if (string.IsNullOrWhiteSpace(serverStartupStatus))
             {
-                serverStartupStatus = "Connection attempt timed out.";
+                serverStartupStatus = $"Connection attempt timed out after {directClientConnectTimeoutSeconds:F0}s.";
             }
         }
     }
@@ -526,6 +559,8 @@ public class ClientDebugger : MonoBehaviour
             return;
         }
 
+        ResetOrchestratedReconnectBudget();
+
         if (ShouldUseLobbyWorkflow())
         {
             string sanitizedLobbyCode = SanitizeLobbyCode(joinLobbyCodeInput);
@@ -626,6 +661,8 @@ public class ClientDebugger : MonoBehaviour
             return;
         }
 
+        ResetOrchestratedReconnectBudget();
+
         pendingLobbyRequestAction = action;
         pendingLobbyCode = SanitizeLobbyCode(lobbyCode);
         PlayerSessionSettings.LocalPlayerName = playerNameInput;
@@ -657,6 +694,63 @@ public class ClientDebugger : MonoBehaviour
         orchestratedConnectRoutine = StartCoroutine(OrchestrateServerStartupAndConnect(requestServerStart));
     }
 
+    private void ResetOrchestratedReconnectBudget()
+    {
+        remainingOrchestratedReconnectRetries = Mathf.Max(0, orchestratedReconnectRetries);
+        lastConnectionUsedJoinTicket = false;
+
+        if (orchestratedRetryRoutine != null)
+        {
+            StopCoroutine(orchestratedRetryRoutine);
+            orchestratedRetryRoutine = null;
+        }
+    }
+
+    private bool TryResumeOrchestratedConnectionAfterFailedConnect(string failureReason)
+    {
+        if (!lastConnectionUsedJoinTicket || !HasOrchestrationConfiguration() || remainingOrchestratedReconnectRetries <= 0)
+        {
+            return false;
+        }
+
+        remainingOrchestratedReconnectRetries--;
+
+        if (networkManager != null && networkManager.IsClient)
+        {
+            networkManager.Shutdown();
+        }
+
+        if (networkManager != null)
+        {
+            networkManager.NetworkConfig.ConnectionData = Array.Empty<byte>();
+        }
+
+        isConnecting = false;
+        isWaitingForServerAvailability = false;
+        isConnected = false;
+        serverStartupStatus = $"{failureReason} Retrying dedicated server availability check...";
+        LogDebug($"{failureReason} Retrying orchestration readiness check. Remaining retries: {remainingOrchestratedReconnectRetries}");
+
+        if (orchestratedRetryRoutine != null)
+        {
+            StopCoroutine(orchestratedRetryRoutine);
+        }
+
+        orchestratedRetryRoutine = StartCoroutine(RetryOrchestratedConnectionAfterDelay());
+        return true;
+    }
+
+    private IEnumerator RetryOrchestratedConnectionAfterDelay()
+    {
+        if (orchestratedReconnectDelaySeconds > 0f)
+        {
+            yield return new WaitForSeconds(orchestratedReconnectDelaySeconds);
+        }
+
+        orchestratedRetryRoutine = null;
+        StartOrchestratedConnection(false);
+    }
+
     private IEnumerator OrchestrateServerStartupAndConnect(bool requestServerStart)
     {
         isConnecting = true;
@@ -672,7 +766,7 @@ public class ClientDebugger : MonoBehaviour
 
         string initialMethod = requestServerStart ? UnityWebRequest.kHttpVerbPOST : UnityWebRequest.kHttpVerbGET;
         string initialEndpoint = requestServerStart ? startServerEndpoint : BuildStatusEndpoint(targetServerId);
-        string initialBody = requestServerStart ? "{}" : null;
+    string initialBody = requestServerStart ? BuildStartServerRequestPayloadJson() : null;
 
         yield return SendOrchestrationRequest(
             initialMethod,
@@ -683,8 +777,31 @@ public class ClientDebugger : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(requestError))
         {
-            HandleOrchestrationFailure(requestError);
-            yield break;
+            if (!requestServerStart)
+            {
+                HandleOrchestrationFailure(requestError);
+                yield break;
+            }
+
+            LogDebug($"Dedicated server start request failed: {requestError}");
+            serverStartupStatus = "Start request failed. Checking current dedicated server status...";
+            LogOrchestrationStatusChanged(serverStartupStatus);
+
+            requestError = null;
+            latestResponse = null;
+
+            yield return SendOrchestrationRequest(
+                UnityWebRequest.kHttpVerbGET,
+                BuildStatusEndpoint(targetServerId),
+                null,
+                response => latestResponse = response,
+                error => requestError = error);
+
+            if (!string.IsNullOrWhiteSpace(requestError))
+            {
+                HandleOrchestrationFailure(requestError);
+                yield break;
+            }
         }
 
         if (!requestServerStart && !CanWaitForLobbyAvailability(latestResponse))
@@ -779,14 +896,49 @@ public class ClientDebugger : MonoBehaviour
 
     private string BuildStatusEndpoint(string targetId)
     {
-        if (string.IsNullOrWhiteSpace(targetId))
+        string requestedLobbyCode = ResolveRequestedLobbyCode();
+        bool hasTargetId = !string.IsNullOrWhiteSpace(targetId);
+        bool hasLobbyCode = ShouldUseLobbyWorkflow() && !string.IsNullOrWhiteSpace(requestedLobbyCode);
+
+        if (!hasTargetId && !hasLobbyCode)
         {
             return serverStatusEndpoint;
         }
 
+        StringBuilder builder = new StringBuilder(serverStatusEndpoint);
         string delimiter = serverStatusEndpoint.Contains("?") ? "&" : "?";
-        string escapedTargetId = UnityWebRequest.EscapeURL(targetId);
-        return $"{serverStatusEndpoint}{delimiter}targetId={escapedTargetId}&instanceId={escapedTargetId}";
+
+        if (hasTargetId)
+        {
+            string escapedTargetId = UnityWebRequest.EscapeURL(targetId);
+            builder.Append(delimiter);
+            builder.Append($"targetId={escapedTargetId}&instanceId={escapedTargetId}");
+            delimiter = "&";
+        }
+
+        if (hasLobbyCode)
+        {
+            string escapedLobbyCode = UnityWebRequest.EscapeURL(requestedLobbyCode);
+            builder.Append(delimiter);
+            builder.Append($"lobbyCode={escapedLobbyCode}");
+        }
+
+        return builder.ToString();
+    }
+
+    private string BuildStartServerRequestPayloadJson()
+    {
+        string requestedLobbyCode = ResolveRequestedLobbyCode();
+        string requestedLobbyAction = ResolveRequestedLobbyAction();
+        StartServerRequestPayload requestPayload = new StartServerRequestPayload
+        {
+            targetId = targetServerId,
+            instanceId = targetServerId,
+            lobbyCode = requestedLobbyCode,
+            lobbyAction = requestedLobbyAction,
+        };
+
+        return JsonUtility.ToJson(requestPayload);
     }
 
     private string BuildServerStartupStatus(OrchestrationApiResponse response)
@@ -872,6 +1024,11 @@ public class ClientDebugger : MonoBehaviour
     private void ApplyConnectionDataFromResponse(OrchestrationApiResponse response)
     {
         if (transport == null || response == null)
+        {
+            return;
+        }
+
+        if (string.Equals(response.transportMode, RelayTransportBootstrap.TransportModeRelay, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -976,7 +1133,28 @@ public class ClientDebugger : MonoBehaviour
             targetServerId = responseTargetId;
         }
 
-        if (transport != null && !string.IsNullOrWhiteSpace(response.connectionAddress))
+        if (ShouldUseRelayTransport(response))
+        {
+            string relayError = null;
+            string configuredConnectionType = null;
+            serverStartupStatus = "Configuring secure relay transport...";
+
+            yield return RelayTransportBootstrap.ConfigureClientTransportForRelay(
+                transport,
+                response.relayJoinCode,
+                ResolveRelayConnectionType(response.relayConnectionType),
+                connectionType => configuredConnectionType = connectionType,
+                error => relayError = error);
+
+            if (!string.IsNullOrWhiteSpace(relayError))
+            {
+                HandleOrchestrationFailure(relayError);
+                yield break;
+            }
+
+            LogDebug($"Configured secure Relay transport using {configuredConnectionType}. Region: {response.relayRegion}");
+        }
+        else if (transport != null && !string.IsNullOrWhiteSpace(response.connectionAddress))
         {
             ushort port = response.port > 0 ? response.port : transport.ConnectionData.Port;
             transport.SetConnectionData(response.connectionAddress, port, "0.0.0.0");
@@ -1023,6 +1201,7 @@ public class ClientDebugger : MonoBehaviour
         networkManager.NetworkConfig.ConnectionData = string.IsNullOrWhiteSpace(joinTicket)
             ? Array.Empty<byte>()
             : Encoding.UTF8.GetBytes(joinTicket);
+        lastConnectionUsedJoinTicket = !string.IsNullOrWhiteSpace(joinTicket);
         
         isConnecting = true;
         isWaitingForServerAvailability = false;
@@ -1038,10 +1217,30 @@ public class ClientDebugger : MonoBehaviour
             serverStartupStatus = "NetworkManager failed to enter client mode.";
         }
     }
+
+    private bool ShouldUseRelayTransport(JoinTicketApiResponse response)
+    {
+        if (!enableSecureRelayTransport || response == null || string.IsNullOrWhiteSpace(response.relayJoinCode))
+        {
+            return false;
+        }
+
+        return string.IsNullOrWhiteSpace(response.transportMode)
+            || string.Equals(response.transportMode, RelayTransportBootstrap.TransportModeRelay, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string ResolveRelayConnectionType(string responseConnectionType)
+    {
+        string requestedConnectionType = string.IsNullOrWhiteSpace(responseConnectionType)
+            ? preferredRelayConnectionType
+            : responseConnectionType;
+        return RelayTransportBootstrap.NormalizeConnectionType(requestedConnectionType);
+    }
     
     private void AttemptDisconnection()
     {
         LogDebug("=== Disconnecting ===");
+        ResetOrchestratedReconnectBudget();
 
         if (orchestratedConnectRoutine != null)
         {
@@ -1053,6 +1252,12 @@ public class ClientDebugger : MonoBehaviour
         {
             StopCoroutine(joinTicketConnectRoutine);
             joinTicketConnectRoutine = null;
+        }
+
+        if (orchestratedRetryRoutine != null)
+        {
+            StopCoroutine(orchestratedRetryRoutine);
+            orchestratedRetryRoutine = null;
         }
 
         if (networkManager != null && networkManager.IsListening)
@@ -1079,6 +1284,13 @@ public class ClientDebugger : MonoBehaviour
         isConnecting = false;
         isWaitingForServerAvailability = false;
         isConnected = true;
+
+        if (orchestratedRetryRoutine != null)
+        {
+            StopCoroutine(orchestratedRetryRoutine);
+            orchestratedRetryRoutine = null;
+        }
+
         showCreateLobbyDialog = false;
         serverStartupStatus = "Connected to dedicated server.";
     }
@@ -1086,12 +1298,18 @@ public class ClientDebugger : MonoBehaviour
     private void OnClientDisconnected(ulong clientId)
     {
         LogDebug($"❌ Client disconnected. Client ID: {clientId}");
+        bool retryableInitialDisconnect = isConnecting && !isWaitingForServerAvailability && !isConnected;
         isConnecting = false;
         isWaitingForServerAvailability = false;
         isConnected = false;
         if (string.IsNullOrWhiteSpace(serverStartupStatus) || serverStartupStatus == "Connected to dedicated server.")
         {
             serverStartupStatus = "Disconnected from server.";
+        }
+
+        if (retryableInitialDisconnect && TryResumeOrchestratedConnectionAfterFailedConnect("The server rejected or dropped the initial connection attempt."))
+        {
+            return;
         }
         
         // Clean up connection state to allow fresh reconnect
@@ -2302,10 +2520,23 @@ public class ClientDebugger : MonoBehaviour
         public string publicDnsName;
         public string connectionAddress;
         public ushort port;
+        public string transportMode;
+        public string relayJoinCode;
+        public string relayRegion;
+        public string relayConnectionType;
         public int maxPlayers;
         public bool isReady;
         public float serverWarmupSeconds;
         public string message;
+    }
+
+    [Serializable]
+    private class StartServerRequestPayload
+    {
+        public string targetId;
+        public string instanceId;
+        public string lobbyCode;
+        public string lobbyAction;
     }
 
     [Serializable]
@@ -2325,6 +2556,10 @@ public class ClientDebugger : MonoBehaviour
         public string instanceId;
         public string connectionAddress;
         public ushort port;
+        public string transportMode;
+        public string relayJoinCode;
+        public string relayRegion;
+        public string relayConnectionType;
         public string playerName;
         public string lobbyCode;
         public string lobbyAction;

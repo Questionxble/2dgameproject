@@ -4,6 +4,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+load_runtime_environment() {
+    local runtime_env_file="${GAME_SERVER_RUNTIME_ENV_FILE_PATH:-}"
+    if [ -z "${runtime_env_file}" ] || [ ! -r "${runtime_env_file}" ]; then
+        return 0
+    fi
+
+    set -a
+    # shellcheck disable=SC1090
+    . "${runtime_env_file}"
+    set +a
+}
+
+load_runtime_environment
+
 resolve_default_executable() {
     local candidates=(
         "${SCRIPT_DIR}/2dgameproject_server"
@@ -78,19 +92,17 @@ mkdir -p "$(dirname "${LOG_FILE}")"
 touch "${LOG_FILE}"
 chmod +x "${GAME_EXECUTABLE}"
 rm -f "${IDLE_STOP_MARKER_FILE}"
+export SERVER_PORT
+export MAX_PLAYERS
 
 echo "=== Unity Dedicated Server Runner ==="
 echo "Executable : ${GAME_EXECUTABLE}"
 echo "Port       : ${SERVER_PORT}"
 echo "Max Players: ${MAX_PLAYERS}"
 echo "Log File   : ${LOG_FILE}"
+echo "Runtime Env: ${GAME_SERVER_RUNTIME_ENV_FILE_PATH:-"(not set)"}"
 echo "Idle Marker: ${IDLE_STOP_MARKER_FILE}"
 echo "====================================="
 
 exec "${GAME_EXECUTABLE}" \
-    -batchmode \
-    -nographics \
-    -server \
-    -port "${SERVER_PORT}" \
-    -maxplayers "${MAX_PLAYERS}" \
     -logFile "${LOG_FILE}"

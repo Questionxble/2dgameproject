@@ -119,3 +119,6 @@ mono_crash.mem.*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Local Cloud Run deploy config with real secrets
+gcp/cloud_run/cloud_run.env.local.yaml
