@@ -81,8 +81,8 @@ namespace Tests.EditMode
         [Test]
         public void DamageObject_TagAssignment()
         {
-            damageObject.tag = "Damage";
-            Assert.AreEqual("Damage", damageObject.tag);
+            damageObject.tag = "Trigger";
+            Assert.AreEqual("Trigger", damageObject.tag);
         }
         
         [Test]

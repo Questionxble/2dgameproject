@@ -43,6 +43,7 @@ public class PlayerMovement : MonoBehaviour
     
     [Header("Animation System")]
     [SerializeField] private RuntimeAnimatorController defaultPlayerAnimController = null; // Default animation when no shards equipped
+    [SerializeField] private float soulShardDeathFizzleDuration = 1f;
     
     [Header("Buff Icon Fire Animation")]
     [SerializeField] private Sprite[] fireAnimationSprites; // Array of fire animation frames
@@ -78,12 +79,10 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] private Vector2 healthBarScreenSize = new Vector2(200f, 20f);
     [SerializeField] private Vector2 ultimateBarScreenSize = new Vector2(150f, 15f);
     [SerializeField] private Vector2 buffListSize = new Vector2(300f, 100f);
+    [SerializeField] private int buffMergeMaxLevel = 3;
+    [SerializeField] private Vector2 buffHoverHitboxScale = new Vector2(0.38f, 0.62f);
     
-    [Header("Damage Modifiers")]
     // Damage modifiers applied through GetModifiedMeleeDamage/GetModifiedMagicDamage methods
-    
-    // Ladder System
-    private GameObject nearbyLadder = null;
     
     // Buff System
     public enum BuffType { Attack, Aegis, Durability, Strength, Vitality, Flux, Swiftness }
@@ -96,6 +95,7 @@ public class PlayerMovement : MonoBehaviour
         public float duration;
         public float startTime;
         public string description;
+        public int mergeLevel = 0;
         
         public ActiveBuff(BuffType buffType, float buffValue, float buffDuration, string desc = "")
         {
@@ -137,6 +137,7 @@ public class PlayerMovement : MonoBehaviour
     private bool isPlayerJumping = false; 
     private bool isPlayerWalking = false;
     private bool isPlayerDead = false;
+    private bool isSoulShardRespawning = false;
     private int currentAttackType = 0; // 0=None, 1=Melee, 2=Projectile, 3=Ultimate
     private RuntimeAnimatorController currentAnimController = null;
 
@@ -206,11 +207,26 @@ public class PlayerMovement : MonoBehaviour
     private const float tooltipMaxDisplayTime = 10f; // Auto-hide after 10 seconds
     private bool isTooltipVisible = false;
     private string currentTooltipType = "";
-    private int ultimateBarUpdateCount = 0;
     private float lastLoggedUltimateCharge = -1f;
     
     // Weapon System
     private WeaponClassController weaponController;
+
+    // Shock Status Effect System
+    private bool isShocked = false;
+    private float shockEndTime = 0f;
+    private int shockStacks = 0;
+    private const int maxShockStacks = 8;
+    private const float shockBaseDuration = 1f;
+
+    // Petrification Status Effect System
+    private bool isPetrified = false;
+    private float petrificationEndTime = 0f;
+    private int petrificationStacks = 0;
+    private const int maxPetrificationStacks = 8;
+    private const float petrificationBaseDuration = 1f;
+    private Color defaultSpriteColor = Color.white;
+    private bool wasAnimatorEnabledBeforePetrification = true;
 
     void Awake()
     {
@@ -228,6 +244,8 @@ public class PlayerMovement : MonoBehaviour
         spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         if (spriteRenderer == null)
             spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null)
+            defaultSpriteColor = spriteRenderer.color;
             
         // Try to get Animator component
         playerAnimator = GetComponentInChildren<Animator>();
@@ -241,8 +259,7 @@ public class PlayerMovement : MonoBehaviour
             currentAnimController = defaultPlayerAnimController;
         }
 
-        // Prevent player from rotating when falling off edges
-        rb.freezeRotation = true;
+        EnsurePhysicsComponents();
         
         // Improve slope handling with physics material
         PhysicsMaterial2D slopeMaterial = new PhysicsMaterial2D("PlayerSlopeMaterial");
@@ -260,7 +277,7 @@ public class PlayerMovement : MonoBehaviour
         // Initialize water physics system
         originalMoveSpeed = moveSpeed;
         originalJumpForce = jumpForce;
-        originalGravityScale = rb.gravityScale;
+        originalGravityScale = rb != null ? rb.gravityScale : 1f;
         
         // Create screen UI system (replaces world-space health bar)
         if (useScreenUI)
@@ -277,6 +294,27 @@ public class PlayerMovement : MonoBehaviour
         weaponController = GetComponent<WeaponClassController>();
     }
 
+    void Start()
+    {
+        EnsurePhysicsComponents();
+    }
+
+    private void EnsurePhysicsComponents()
+    {
+        if (rb == null)
+        {
+            rb = GetComponent<Rigidbody2D>();
+        }
+
+        if (rb == null)
+        {
+            return;
+        }
+
+        // Prevent player from rotating when falling off edges
+        rb.freezeRotation = true;
+    }
+
     void Update()
     {
         GetInput();
@@ -284,6 +322,8 @@ public class PlayerMovement : MonoBehaviour
         CheckCeilingClearance();
         HandleFallDamage();
         HandleWaterPhysics();
+        HandleShockEffect();
+        HandlePetrificationEffect();
         HandleMovement();
         HandleHealthRegeneration();
         HandleBurningEffect();
@@ -318,8 +358,6 @@ public class PlayerMovement : MonoBehaviour
             previousMaxHealth = newMaxHealth;
             UpdateAegisOutline();
             UpdateHealthBar(); // Update health bar to reflect new values
-            
-            Debug.Log($"Max health changed: {previousMaxHealth} -> {newMaxHealth}. Health: {currentHealth}/{newMaxHealth}, Aegis: {currentAegisShield:F1}/{maxAegisShield:F1}");
         }
     }
     
@@ -357,6 +395,19 @@ public class PlayerMovement : MonoBehaviour
     
     private void HandleMovement()
     {
+        if (isSoulShardRespawning)
+        {
+            rb.linearVelocity = Vector2.zero;
+            return;
+        }
+
+        // Cannot move while shocked or petrified.
+        if (isShocked || isPetrified)
+        {
+            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+            return;
+        }
+
         // Check if weapon menu is open - disable movement if it is
         if (weaponController != null && weaponController.IsWeaponMenuOpen())
         {
@@ -430,6 +481,11 @@ public class PlayerMovement : MonoBehaviour
         {
             // Normal jumping - only if we have ceiling clearance
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+
+            if (weaponController != null)
+            {
+                weaponController.OnPlayerJumped();
+            }
         }
         
         // Drop down through one-way platform
@@ -713,6 +769,139 @@ public class PlayerMovement : MonoBehaviour
         }
     }
     
+    // ===== SHOCK STATUS EFFECT =====
+
+    private void HandleShockEffect()
+    {
+        if (!isShocked) return;
+
+        if (Time.time >= shockEndTime)
+        {
+            isShocked = false;
+            shockStacks = 0;
+            Debug.Log("Player: Shock ended");
+        }
+    }
+
+    /// <summary>
+    /// Apply the Shock stun status effect to the player. Stacks up to 8 seconds total.
+    /// </summary>
+    public void ApplyShock(float duration = -1f)
+    {
+        float shockDuration = duration > 0f ? duration : shockBaseDuration;
+
+        if (isShocked)
+        {
+            if (shockStacks < maxShockStacks)
+            {
+                shockStacks++;
+                float timeRemaining = Mathf.Max(shockEndTime - Time.time, 0f);
+                shockEndTime = Time.time + timeRemaining + shockDuration;
+                Debug.Log($"Player: Shock stacked to {shockStacks}. Duration: {shockEndTime - Time.time:F1}s");
+            }
+        }
+        else
+        {
+            isShocked = true;
+            shockStacks = 1;
+            shockEndTime = Time.time + shockDuration;
+            Debug.Log($"Player: Shocked for {shockDuration:F1}s");
+        }
+    }
+
+    private void HandlePetrificationEffect()
+    {
+        if (!isPetrified) return;
+
+        if (Time.time >= petrificationEndTime)
+        {
+            isPetrified = false;
+            petrificationStacks = 0;
+            SetPetrificationVisualState(false);
+            Debug.Log("Player: Petrification ended");
+        }
+    }
+
+    /// <summary>
+    /// Apply petrification (movement disable only, no direct damage).
+    /// </summary>
+    public void ApplyPetrification(float duration = -1f)
+    {
+        float appliedDuration = duration > 0f ? duration : petrificationBaseDuration;
+
+        if (isPetrified)
+        {
+            if (petrificationStacks < maxPetrificationStacks)
+            {
+                petrificationStacks++;
+                float timeRemaining = Mathf.Max(petrificationEndTime - Time.time, 0f);
+                petrificationEndTime = Time.time + timeRemaining + appliedDuration;
+                Debug.Log($"Player: Petrification stacked to {petrificationStacks}. Duration: {petrificationEndTime - Time.time:F1}s");
+            }
+        }
+        else
+        {
+            isPetrified = true;
+            petrificationStacks = 1;
+            petrificationEndTime = Time.time + appliedDuration;
+            SetPetrificationVisualState(true);
+            Debug.Log($"Player: Petrified for {appliedDuration:F1}s");
+        }
+    }
+
+    private void SetPetrificationVisualState(bool isActive)
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = isActive ? GetDesaturatedColor(defaultSpriteColor) : defaultSpriteColor;
+        }
+
+        if (playerAnimator == null)
+        {
+            return;
+        }
+
+        if (isActive)
+        {
+            wasAnimatorEnabledBeforePetrification = playerAnimator.enabled;
+
+            if (AnimatorHasParameter(playerAnimator, "isAttacking", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isAttacking", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "isWalking", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isWalking", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "isJumping", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isJumping", false);
+            }
+
+            if (AnimatorHasParameter(playerAnimator, "attackType", AnimatorControllerParameterType.Int))
+            {
+                playerAnimator.SetInteger("attackType", 0);
+            }
+
+            playerAnimator.enabled = false;
+        }
+        else if (!isPlayerDead)
+        {
+            playerAnimator.enabled = wasAnimatorEnabledBeforePetrification;
+            playerAnimator.Update(0f);
+        }
+    }
+
+    private Color GetDesaturatedColor(Color sourceColor)
+    {
+        float luminance = (sourceColor.r * 0.299f) + (sourceColor.g * 0.587f) + (sourceColor.b * 0.114f);
+        return new Color(luminance, luminance, luminance, sourceColor.a);
+    }
+
+    // ===== END SHOCK STATUS EFFECT =====
+
     private void HandleBurningEffect()
     {
         if (!isBurning) return;
@@ -852,6 +1041,16 @@ public class PlayerMovement : MonoBehaviour
     public void TakeDamageFromObject(int damage)
     {
         TakeDamage(damage);
+    }
+
+    // Public method for support classes that heal allies (Soul Shard, etc.)
+    public void HealFromSupport(int healAmount)
+    {
+        if (healAmount <= 0 || currentHealth <= 0) return;
+
+        int maxAllowedHealth = GetModifiedMaxHealth();
+        currentHealth = Mathf.Min(currentHealth + healAmount, maxAllowedHealth);
+        UpdateHealthBar();
     }
     
     // Public method for water state management
@@ -995,6 +1194,53 @@ public class PlayerMovement : MonoBehaviour
     
     private void Die()
     {
+        if (isSoulShardRespawning)
+        {
+            return;
+        }
+
+        Vector3 deathPosition = transform.position;
+        StartCoroutine(SoulShardDeathRespawnRoutine(deathPosition));
+    }
+
+    private IEnumerator SoulShardDeathRespawnRoutine(Vector3 deathPosition)
+    {
+        isSoulShardRespawning = true;
+
+        bool useSoulShardFizzle = weaponController != null && weaponController.IsSoulShardActive;
+
+        if (useSoulShardFizzle && weaponController != null)
+        {
+            weaponController.OnPlayerDeathEffects(deathPosition);
+        }
+
+        StopBurningEffect();
+        SetDeathAnimation(true);
+
+        rb.linearVelocity = Vector2.zero;
+
+        if (useSoulShardFizzle)
+        {
+            SetPlayerVisualsEnabled(false);
+        }
+
+        float waitDuration = Mathf.Max(0.05f, soulShardDeathFizzleDuration);
+        yield return new WaitForSeconds(waitDuration);
+
+        if (useSoulShardFizzle)
+        {
+            SetPlayerVisualsEnabled(true);
+        }
+
+        SetDeathAnimation(false);
+
+        RespawnImmediately();
+
+        isSoulShardRespawning = false;
+    }
+
+    private void RespawnImmediately()
+    {
         // Stop any status effects
         StopBurningEffect();
         
@@ -1023,6 +1269,15 @@ public class PlayerMovement : MonoBehaviour
         if (cameraFollow != null)
         {
             cameraFollow.CenterOnTarget();
+        }
+    }
+
+    private void SetPlayerVisualsEnabled(bool enabled)
+    {
+        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            renderers[i].enabled = enabled;
         }
     }
     
@@ -1251,7 +1506,19 @@ public class PlayerMovement : MonoBehaviour
         {
             playerAnimator.runtimeAnimatorController = targetController;
             currentAnimController = targetController;
-            Debug.Log($"Switched animation controller to: {(targetController != null ? targetController.name : "null")}");
+        }
+    }
+
+    public void SetAnimatorBool(string parameterName, bool value)
+    {
+        if (playerAnimator == null)
+        {
+            return;
+        }
+
+        if (AnimatorHasParameter(playerAnimator, parameterName, AnimatorControllerParameterType.Bool))
+        {
+            playerAnimator.SetBool(parameterName, value);
         }
     }
     
@@ -1268,7 +1535,6 @@ public class PlayerMovement : MonoBehaviour
             if (defaultPlayerAnimController != null)
             {
                 SetAnimationController(defaultPlayerAnimController);
-                Debug.Log("PlayerMovement: Fallback to default animation controller");
             }
             else
             {
@@ -1290,13 +1556,35 @@ public class PlayerMovement : MonoBehaviour
         if (isPlayerJumping != isJumping)
         {
             isPlayerJumping = isJumping;
-            playerAnimator.SetBool("isJumping", isPlayerJumping);
+
+            if (AnimatorHasParameter(playerAnimator, "isJumping", AnimatorControllerParameterType.Bool))
+            {
+                playerAnimator.SetBool("isJumping", isPlayerJumping);
+            }
         }
         
         // Update other parameters
         playerAnimator.SetBool("isDead", isPlayerDead);
         playerAnimator.SetBool("isAttacking", isPlayerAttacking);
         playerAnimator.SetInteger("attackType", currentAttackType);
+    }
+
+    private bool AnimatorHasParameter(Animator animator, string parameterName, AnimatorControllerParameterType parameterType)
+    {
+        if (animator == null || animator.parameters == null)
+        {
+            return false;
+        }
+
+        foreach (AnimatorControllerParameter parameter in animator.parameters)
+        {
+            if (parameter.name == parameterName && parameter.type == parameterType)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
     
     /// <summary>
@@ -1356,8 +1644,6 @@ public class PlayerMovement : MonoBehaviour
                 method.Invoke(weaponController, null);
             }
         }
-        
-        Debug.Log("Attack animation ended via animation event");
     }
     
     /// <summary>
@@ -1533,7 +1819,6 @@ public class PlayerMovement : MonoBehaviour
     
     public void AddUltimateCharge(float charge)
     {
-        float oldCharge = currentUltimateCharge;
         bool wasAlreadyFull = currentUltimateCharge >= maxUltimateCharge;
         currentUltimateCharge = Mathf.Min(currentUltimateCharge + charge, maxUltimateCharge);
         
@@ -1543,8 +1828,6 @@ public class PlayerMovement : MonoBehaviour
             StartCoroutine(PlayUltimateFullEffect());
             Debug.Log("Ultimate already full! Triggering full effect from overflow charge.");
         }
-        
-        Debug.Log($"Ultimate charge: {oldCharge:F1} + {charge:F1} = {currentUltimateCharge:F1} / {maxUltimateCharge:F1} ({(currentUltimateCharge/maxUltimateCharge)*100:F1}%)");
     }
     
     public float GetCurrentUltimateCharge()
@@ -1638,12 +1921,6 @@ public class PlayerMovement : MonoBehaviour
         return !spriteRenderer.flipX; // Assuming flipX = true means facing left
     }
     
-    // Ladder System Methods
-    public void SetNearbyLadder(GameObject ladder)
-    {
-        nearbyLadder = ladder;
-    }
-    
     // Buff System Methods
     public void ApplyAegisBuff(float shieldPercentage = 100f)
     {
@@ -1729,11 +2006,73 @@ public class PlayerMovement : MonoBehaviour
         // Add new buff
         ActiveBuff newBuff = new ActiveBuff(buffType, value, duration, description);
         activeBuffs.Add(newBuff);
-        
-        Debug.Log($"Buff applied: {buffType}, value: {value}, duration: {duration}, stacking: {allowStacking}");
+
+        if (allowStacking)
+        {
+            TryMergeBuffs(buffType);
+        }
+
         UpdateBuffUI();
     }
     
+    private void TryMergeBuffs(BuffType buffType)
+    {
+        bool mergedAny;
+        do
+        {
+            mergedAny = false;
+
+            // Collect all unique merge levels present for this buff type
+            List<int> levels = new List<int>();
+            foreach (ActiveBuff b in activeBuffs)
+            {
+                if (b.type == buffType && !levels.Contains(b.mergeLevel))
+                    levels.Add(b.mergeLevel);
+            }
+            levels.Sort();
+
+            foreach (int level in levels)
+            {
+                // Find two buffs at this level to merge
+                ActiveBuff first = null;
+                ActiveBuff second = null;
+                foreach (ActiveBuff b in activeBuffs)
+                {
+                    if (b.type == buffType && b.mergeLevel == level)
+                    {
+                        if (first == null) first = b;
+                        else { second = b; break; }
+                    }
+                }
+
+                if (first != null && second != null)
+                {
+                    int nextLevel = level + 1;
+                    if (nextLevel > buffMergeMaxLevel)
+                    {
+                        // At cap — leave both as-is, stop trying to merge at this level
+                        continue;
+                    }
+
+                    float combinedDuration = first.TimeRemaining + second.TimeRemaining + 2f;
+                    float combinedValue = Mathf.Max(first.value, second.value);
+                    string desc = first.description;
+
+                    activeBuffs.Remove(first);
+                    activeBuffs.Remove(second);
+
+                    ActiveBuff merged = new ActiveBuff(buffType, combinedValue, combinedDuration, desc);
+                    merged.mergeLevel = nextLevel;
+                    activeBuffs.Add(merged);
+
+                    mergedAny = true;
+                    break;
+                }
+            }
+        }
+        while (mergedAny);
+    }
+
     private void UpdateBuffs()
     {
         bool buffsChanged = false;
@@ -2030,9 +2369,6 @@ public class PlayerMovement : MonoBehaviour
         ultimateBarFill.fillMethod = Image.FillMethod.Horizontal;
         ultimateBarFill.fillAmount = 0f; // Start empty
         
-        // Debug: Verify Image component settings immediately after creation
-        Debug.Log($"UltimateFill Image created: type={ultimateBarFill.type}, fillMethod={ultimateBarFill.fillMethod}, fillAmount={ultimateBarFill.fillAmount}, sprite={ultimateBarFill.sprite?.name ?? "null"}");
-        
         // Ultimate text
         GameObject ultimateTextGO = new GameObject("UltimateText");
         ultimateTextGO.transform.SetParent(ultimateBarGO.transform, false);
@@ -2081,7 +2417,7 @@ public class PlayerMovement : MonoBehaviour
         
         // Add horizontal layout group for side-by-side buff icons
         HorizontalLayoutGroup layoutGroup = buffIconGO.AddComponent<HorizontalLayoutGroup>();
-        layoutGroup.spacing = 5f; // Tighter spacing for closer buff icons
+        layoutGroup.spacing = 2.5f; // Halved spacing so buff icons sit closer together
         layoutGroup.childAlignment = TextAnchor.MiddleCenter;
         layoutGroup.childControlHeight = true;
         layoutGroup.childControlWidth = false;
@@ -2142,57 +2478,8 @@ public class PlayerMovement : MonoBehaviour
             // Verify the fillAmount was actually set correctly
             float actualFillAmount = ultimateBarFill.fillAmount;
             
-            // Debug: Only log when ultimate charge actually changes
             if (currentUltimateCharge != lastLoggedUltimateCharge)
             {
-                ultimateBarUpdateCount++;
-                Debug.Log($"Ultimate bar charge changed #{ultimateBarUpdateCount}: {currentUltimateCharge:F1}/{maxUltimateCharge:F1} = {ultimatePercent:F3} ({ultimatePercent*100:F1}%)");
-                // Debug.Log($"  Fill amounts: Previous={previousFillAmount:F3} -> Expected={ultimatePercent:F3} -> Actual={actualFillAmount:F3}");
-                // Debug.Log($"  Ultimate bar properties: Type={ultimateBarFill.type}, FillMethod={ultimateBarFill.fillMethod}, Active={ultimateBarFill.gameObject.activeInHierarchy}");
-                
-                // Check for multiple ultimate fill objects and all ultimate-related objects
-                GameObject[] allUltimateFills = FindObjectsByType<GameObject>(FindObjectsSortMode.None).Where(go => go.name == "UltimateFill").ToArray();
-                GameObject[] allUltimateBars = FindObjectsByType<GameObject>(FindObjectsSortMode.None).Where(go => go.name == "UltimateBar").ToArray();
-                GameObject[] allUltimateObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None).Where(go => go.name.ToLower().Contains("ultimate")).ToArray();
-                
-                // Debug.Log($"ULTIMATE OBJECT AUDIT: UltimateFill={allUltimateFills.Length}, UltimateBar={allUltimateBars.Length}, Any Ultimate={allUltimateObjects.Length}");
-                
-                if (allUltimateFills.Length > 1)
-                {
-                    Debug.LogWarning($"MULTIPLE ULTIMATE BARS DETECTED: Found {allUltimateFills.Length} UltimateFill objects!");
-                }
-                
-                // Log all ultimate-related objects with detailed info
-                /* for (int i = 0; i < allUltimateObjects.Length; i++)
-                {
-                    Image img = allUltimateObjects[i].GetComponent<Image>();
-                    string fillInfo = "no Image component";
-                    if (img != null)
-                    {
-                        string spriteInfo = img.sprite != null ? $"sprite={img.sprite.name}" : "sprite=null";
-                        fillInfo = $"fillAmount={img.fillAmount:F3}, type={img.type}, fillMethod={img.fillMethod}, {spriteInfo}, color=({img.color.r:F2},{img.color.g:F2},{img.color.b:F2},{img.color.a:F2})";
-                    }
-                    Debug.Log($"  Ultimate Object #{i}: {allUltimateObjects[i].name} - {fillInfo}, active={allUltimateObjects[i].activeInHierarchy}, parent={allUltimateObjects[i].transform.parent?.name ?? "null"}");
-                } */
-                
-                // Extra debug - check if the fill amount is actually being set correctly
-                if (Mathf.Abs(ultimateBarFill.fillAmount - ultimatePercent) > 0.001f)
-                {
-                    Debug.LogWarning($"MISMATCH: Expected fill {ultimatePercent:F3} but got {ultimateBarFill.fillAmount:F3}!");
-                }
-                
-                // Color changes based on charge: grey when empty, orange when charging
-                if (ultimatePercent <= 0.01f)
-                {
-                    ultimateBarFill.color = new Color(0.4f, 0.4f, 0.4f, 1f); // Grey when empty
-                    // Debug.Log($"  Color set to GREY: ultimatePercent={ultimatePercent:F3} <= 0.01f");
-                }
-                else
-                {
-                    ultimateBarFill.color = new Color(1f, 0.5f, 0f, 1f); // Orange when charging
-                    // Debug.Log($"  Color set to ORANGE: ultimatePercent={ultimatePercent:F3} > 0.01f");
-                }
-                
                 lastLoggedUltimateCharge = currentUltimateCharge;
             }
             
@@ -2263,15 +2550,14 @@ public class PlayerMovement : MonoBehaviour
         buffIconGO.transform.SetParent(buffListPanel, false);
         
         RectTransform iconRect = buffIconGO.AddComponent<RectTransform>();
-        iconRect.sizeDelta = new Vector2(120f, 120f); // 3x larger icons (40f * 3 = 120f)
+        float mergeGrowth = 120f + buff.mergeLevel * 8f; // Subtle +8px per merge level
+        iconRect.sizeDelta = new Vector2(mergeGrowth, mergeGrowth);
         iconRect.localScale = Vector3.one * 3.0f; // Much larger scale multiplier for big fire sprites (1.5 * 2 = 3.0)
         
         // Anchor to bottom of icon area so it scales upward from the healthbar top
         iconRect.anchorMin = new Vector2(0f, 0f);
         iconRect.anchorMax = new Vector2(0f, 0f);
         iconRect.pivot = new Vector2(0.5f, 0f); // Pivot at bottom center so it grows upward
-        
-        Debug.Log($"Creating fire buff icon for {buff.type}. Fire sprites available: {fireAnimationSprites != null && fireAnimationSprites.Length > 0}");
         
         // Fire image with colored tint for buff type
         Image fireImage = buffIconGO.AddComponent<Image>();
@@ -2289,8 +2575,6 @@ public class PlayerMovement : MonoBehaviour
             // Add fire animation component
             FireSpriteAnimator fireAnimator = buffIconGO.AddComponent<FireSpriteAnimator>();
             fireAnimator.Initialize(fireImage, fireAnimationSprites, fireAnimationSpeed);
-            
-            Debug.Log($"Fire sprite animation added for {buff.type} with {fireAnimationSprites.Length} frames");
         }
         else
         {
@@ -2344,35 +2628,29 @@ public class PlayerMovement : MonoBehaviour
         // IndividualBuffTooltipHandler tooltipHandler = buffIconGO.AddComponent<IndividualBuffTooltipHandler>();
         // tooltipHandler.Initialize(this, buff);
         
-        // Create larger invisible hover area to improve mouse detection
+        // Create invisible hover area centered on the icon, but narrower to avoid cross-triggering neighbors
         GameObject hoverArea = new GameObject("HoverArea");
         hoverArea.transform.SetParent(buffIconGO.transform, false);
-        
-        // Add Canvas to ensure proper layering and event handling
-        Canvas hoverCanvas = hoverArea.AddComponent<Canvas>();
-        hoverCanvas.overrideSorting = true;
-        hoverCanvas.sortingOrder = 300 + activeBuffUI.Count; // Ensure each hover area has unique sorting order
-        
+
+        // No nested Canvas — a nested Canvas without its own GraphicRaycaster breaks pointer events
         Image hoverImage = hoverArea.AddComponent<Image>();
-        hoverImage.color = new Color(1f, 0f, 0f, 0f); // Fully transparent (invisible) hover area
-        hoverImage.raycastTarget = true; // Detects mouse events
-        
+        hoverImage.color = new Color(0f, 0f, 0f, 0f); // Fully transparent
+        hoverImage.raycastTarget = true;
+
         RectTransform hoverRect = hoverArea.GetComponent<RectTransform>();
         hoverRect.anchorMin = Vector2.zero;
         hoverRect.anchorMax = Vector2.one;
         hoverRect.sizeDelta = Vector2.zero;
         hoverRect.anchoredPosition = Vector2.zero;
-        hoverRect.localScale = new Vector3(0.2f, 0.6f, 1f); // Your working values that fit perfectly around icons
-        
-        // Add the tooltip handler only to the hover area (prevents duplicate events)
+        hoverRect.localScale = new Vector3(
+            Mathf.Clamp(buffHoverHitboxScale.x, 0.1f, 1f),
+            Mathf.Clamp(buffHoverHitboxScale.y, 0.1f, 1f),
+            1f);
+
+        // Add the tooltip handler to the hover area
         IndividualBuffTooltipHandler hoverTooltipHandler = hoverArea.AddComponent<IndividualBuffTooltipHandler>();
         hoverTooltipHandler.Initialize(this, buff);
-        
-        Debug.Log($"Added tooltip handler for {buff.type} to hover area. Hover area scale: {hoverRect.localScale}");
-        Debug.Log($"Buff icon {buff.type} position: {buffIconGO.transform.position}, localPosition: {buffIconGO.transform.localPosition}");
-        
-        Debug.Log($"Created fire buff icon for {buff.type} at scale {iconRect.localScale} with size {iconRect.sizeDelta}. Raycast target: {fireImage.raycastTarget}");
-        
+
         activeBuffUI.Add(buffIconGO);
     }
     
@@ -2384,9 +2662,9 @@ public class PlayerMovement : MonoBehaviour
             case BuffType.Strength: return new Color(1f, 0.6f, 0f, 1f); // Orange fire  
             case BuffType.Vitality: return new Color(0.3f, 1f, 0.3f, 1f); // Green fire
             case BuffType.Flux: return new Color(0.8f, 0.3f, 1f, 1f); // Purple fire
-            case BuffType.Durability: return new Color(0.5f, 0.8f, 0.5f, 1f); // Forest Green fire
-            case BuffType.Swiftness: return new Color(1f, 1f, 0.3f, 1f); // Yellow fire
-            case BuffType.Aegis: return new Color(0.4f, 0.7f, 1f, 1f); // Blue fire
+            case BuffType.Durability: return new Color(0.65f, 0.65f, 0.65f, 1f); // Grey fire
+            case BuffType.Swiftness: return new Color(0.4f, 0.7f, 1f, 1f); // Blue fire
+            case BuffType.Aegis: return new Color(1f, 1f, 0.3f, 1f); // Yellow fire
             default: return Color.white; // White fire
         }
     }
@@ -2399,9 +2677,9 @@ public class PlayerMovement : MonoBehaviour
             case BuffType.Strength: return new Color(1f, 0.5f, 0.2f, 0.9f); // Orange  
             case BuffType.Vitality: return new Color(0.2f, 1f, 0.2f, 0.9f); // Bright Green
             case BuffType.Flux: return new Color(0.5f, 0.2f, 1f, 0.9f); // Purple
-            case BuffType.Durability: return new Color(0.3f, 0.8f, 0.3f, 0.9f); // Green
-            case BuffType.Swiftness: return new Color(1f, 1f, 0.2f, 0.9f); // Yellow
-            case BuffType.Aegis: return new Color(0.3f, 0.6f, 1f, 0.9f); // Blue
+            case BuffType.Durability: return new Color(0.6f, 0.6f, 0.6f, 0.9f); // Grey
+            case BuffType.Swiftness: return new Color(0.3f, 0.6f, 1f, 0.9f); // Blue
+            case BuffType.Aegis: return new Color(1f, 1f, 0.2f, 0.9f); // Yellow
             default: return new Color(0.5f, 0.5f, 0.5f, 0.9f); // Gray
         }
     }
@@ -2779,26 +3057,30 @@ public class IndividualBuffTooltipHandler : MonoBehaviour, IPointerEnterHandler,
 {
     private PlayerMovement playerMovement;
     private PlayerMovement.ActiveBuff buff;
-    
+
     public void Initialize(PlayerMovement player, PlayerMovement.ActiveBuff buffInstance)
     {
         playerMovement = player;
         buff = buffInstance;
-        Debug.Log($"IndividualBuffTooltipHandler initialized for {buff.type} with player: {player != null}");
     }
-    
+
+    private void Awake()
+    {
+        Debug.Log($"[IndividualBuffTooltipHandler] Awake on '{gameObject.name}' (parent: '{transform.parent?.name}')");
+    }
+
     public void OnPointerEnter(PointerEventData eventData)
     {
-        Debug.Log($"IndividualBuffTooltipHandler: Mouse entered buff icon for {buff.type} at position {eventData.position}");
-        if (playerMovement != null)
+        Debug.Log($"[IndividualBuffTooltipHandler] OnPointerEnter on '{gameObject.name}', buff={(buff != null ? buff.type.ToString() : "null")}, player={(playerMovement != null ? "ok" : "null")}");
+        if (playerMovement != null && buff != null)
         {
             playerMovement.ShowIndividualBuffTooltip(buff, eventData.position);
         }
     }
-    
+
     public void OnPointerExit(PointerEventData eventData)
     {
-        Debug.Log($"IndividualBuffTooltipHandler: Mouse exited buff icon for {buff.type}");
+        Debug.Log($"[IndividualBuffTooltipHandler] OnPointerExit on '{gameObject.name}'");
         if (playerMovement != null)
         {
             playerMovement.HideBuffTooltip();

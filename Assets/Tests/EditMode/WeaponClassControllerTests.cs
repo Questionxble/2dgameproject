@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace Tests.EditMode
@@ -130,12 +131,37 @@ namespace Tests.EditMode
         public void WeaponClassController_TagAndLayerManagement()
         {
             // Test tag assignment
-            weaponObject.tag = "Weapon";
-            Assert.AreEqual("Weapon", weaponObject.tag);
+            weaponObject.tag = "WhisperShard";
+            Assert.AreEqual("WhisperShard", weaponObject.tag);
             
             // Test layer assignment  
             weaponObject.layer = LayerMask.NameToLayer("Default");
             Assert.AreEqual(LayerMask.NameToLayer("Default"), weaponObject.layer);
+        }
+
+        [Test]
+        public void SoulShardAttack1Clip_UsesSingleNonLoopingStartEvent()
+        {
+            AnimationClip clip = LoadAnimationClip("Assets/Textures/SoulShardSprites/SoulShardAttack1.anim");
+
+            Assert.IsFalse(clip.isLooping);
+            Assert.AreEqual(1, clip.events.Length);
+            Assert.AreEqual("SoulVortexStart", clip.events[0].functionName);
+        }
+
+        [Test]
+        public void VortexEffectClip_IsNonLooping()
+        {
+            AnimationClip clip = LoadAnimationClip("Assets/Textures/SoulShardSprites/VortexEffect.anim");
+
+            Assert.IsFalse(clip.isLooping);
+        }
+
+        private static AnimationClip LoadAnimationClip(string assetPath)
+        {
+            AnimationClip clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(assetPath);
+            Assert.IsNotNull(clip, $"Missing animation clip at {assetPath}");
+            return clip;
         }
     }
 }

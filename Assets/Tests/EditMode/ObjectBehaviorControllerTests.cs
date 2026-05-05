@@ -93,8 +93,8 @@ namespace Tests.EditMode
         [Test]
         public void ObjectBehaviorController_TagAndLayerManagement()
         {
-            behaviorObject.tag = "Behavior";
-            Assert.AreEqual("Behavior", behaviorObject.tag);
+            behaviorObject.tag = "Trigger";
+            Assert.AreEqual("Trigger", behaviorObject.tag);
             
             behaviorObject.layer = LayerMask.NameToLayer("Default");
             Assert.AreEqual(LayerMask.NameToLayer("Default"), behaviorObject.layer);

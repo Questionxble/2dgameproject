@@ -21,6 +21,7 @@ namespace Tests.PlayMode
             dragonObject.AddComponent<BoxCollider2D>();
             
             playerObject = new GameObject("TestPlayer");
+            playerObject.tag = "Player";
             // Add Rigidbody2D BEFORE PlayerMovement to ensure it's available in Awake()
             playerObject.AddComponent<Rigidbody2D>();
             playerObject.AddComponent<CapsuleCollider2D>();
@@ -51,7 +52,7 @@ namespace Tests.PlayMode
         [UnityTest]
         public IEnumerator DragonBoss_PlayerDetection()
         {
-            yield return new WaitForEndOfFrame();
+            yield return null;
             
             var foundPlayer = Object.FindFirstObjectByType<PlayerMovement>();
             Assert.IsNotNull(foundPlayer);
@@ -86,7 +87,7 @@ namespace Tests.PlayMode
             dragonObject.transform.position = Vector3.zero;
             playerObject.transform.position = Vector3.right * 10f;
             
-            yield return new WaitForEndOfFrame();
+            yield return null;
             
             float distance = Vector3.Distance(
                 dragonObject.transform.position, 

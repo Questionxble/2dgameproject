@@ -1,0 +1,19 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.69.3"
+  },
+  "ReportID": "019d6d9a-198c-7a13-8e80-adcaa4c06201",
+  "CreatedAt": "2026-04-08T09:58:28.8766604-05:00",
+  "ArtifactID": "sha256:1fa13b6c75d0bf53ff74748bb9ea62b3295de2f4f262c1936bb62880870f758c",
+  "ArtifactName": "c:/Users/chris/source/repos/2dgameproject",
+  "ArtifactType": "repository",
+  "Metadata": {
+    "RepoURL": "https://github.com/Questionxble/2dgameproject.git",
+    "Branch": "new-weapon-classes",
+    "Commit": "0cc8a8276f18a795425e90f1035396db28302f5e",
+    "CommitMsg": "fix: make build step non-fatal for Unity projects\n\nChanged the workflow to warn and skip instead of throwing when no\n.sln/.csproj files are found. This is appropriate for Unity projects\nwhere build files are typically generated locally by Unity/IDE, not\ncommitted to the repo. Sonar analysis will proceed regardless.",
+    "Author": "Questionxble \u003cchristian.henken02@gmail.com\u003e",
+    "Committer": "Questionxble \u003cchristian.henken02@gmail.com\u003e"
+  }
+}

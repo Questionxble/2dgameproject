@@ -1,0 +1,262 @@
+name: SonarQube PR CC Analysis
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: read
+
+concurrency:
+  group: sonar-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sonar:
+    name: Unity Coverage and Sonar
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Validate CI secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SONAR_TOKEN:-}" ]; then
+            echo "SONAR_TOKEN is required for SonarQube analysis." >&2
+            exit 1
+          fi
+
+          if [ -z "${UNITY_LICENSE:-}" ] && { [ -z "${UNITY_EMAIL:-}" ] || [ -z "${UNITY_PASSWORD:-}" ]; }; then
+            echo "Provide UNITY_LICENSE or UNITY_EMAIL and UNITY_PASSWORD so Unity tests can run in CI." >&2
+            echo "If this repository is using a Unity Personal license and email/password activation fails, add UNITY_LICENSE and rerun the workflow." >&2
+            exit 1
+          fi
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt', 'Assets/**/*.asmdef') }}
+          restore-keys: |
+            Library-${{ runner.os }}-
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Clean old coverage artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf CodeCoverage artifacts/test-results
+
+      - name: Run EditMode tests with coverage
+        id: unity-editmode-tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: .
+          testMode: EditMode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity EditMode Test Results
+          artifactsPath: artifacts/test-results/editmode
+          coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Game,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:/github/workspace
+          customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
+
+      - name: Run PlayMode tests with coverage
+        id: unity-playmode-tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: .
+          testMode: PlayMode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity PlayMode Test Results
+          artifactsPath: artifacts/test-results/playmode
+          coverageOptions: generateAdditionalMetrics;dontClear;assemblyFilters:+Game,+Tests.*,-Unity.*;pathFilters:+Assets/Scripts/**,+Assets/*.cs,-Assets/Tests/**,-Assets/**/Tests/**,-**/Editor/**,-**/Plugins/**;pathReplacePatterns:/github/workspace/,${{ github.workspace }}/;sourcePaths:/github/workspace
+          customParameters: -enableCodeCoverage -debugCodeOptimization -coverageResultsPath CodeCoverage -coverageHistoryPath CodeCoverage/Report-history
+
+      - name: Show Unity test runner outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "EditMode artifactsPath: ${{ steps.unity-editmode-tests.outputs.artifactsPath }}"
+          echo "EditMode coveragePath: ${{ steps.unity-editmode-tests.outputs.coveragePath }}"
+          echo "PlayMode artifactsPath: ${{ steps.unity-playmode-tests.outputs.artifactsPath }}"
+          echo "PlayMode coveragePath: ${{ steps.unity-playmode-tests.outputs.coveragePath }}"
+
+      - name: Upload EditMode coverage outputs
+        if: always() && steps.unity-editmode-tests.outputs.coveragePath != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-editmode-coverage
+          path: ${{ steps.unity-editmode-tests.outputs.coveragePath }}
+          if-no-files-found: warn
+
+      - name: Upload PlayMode coverage outputs
+        if: always() && steps.unity-playmode-tests.outputs.coveragePath != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-playmode-coverage
+          path: ${{ steps.unity-playmode-tests.outputs.coveragePath }}
+          if-no-files-found: warn
+
+      - name: Prepare coverage outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          edit_coverage_path='${{ steps.unity-editmode-tests.outputs.coveragePath }}'
+          play_coverage_path='${{ steps.unity-playmode-tests.outputs.coveragePath }}'
+
+          candidate_paths=()
+          for candidate in "$edit_coverage_path" "$play_coverage_path" CodeCoverage; do
+            if [ -n "$candidate" ] && [ -e "$candidate" ]; then
+              case " ${candidate_paths[*]} " in
+                *" $candidate "*) ;;
+                *) candidate_paths+=("$candidate") ;;
+              esac
+            fi
+          done
+
+          if [ ${#candidate_paths[@]} -eq 0 ]; then
+            echo "No coverage output paths exist after Unity test runs." >&2
+            echo "EditMode coveragePath: $edit_coverage_path" >&2
+            echo "PlayMode coveragePath: $play_coverage_path" >&2
+            exit 1
+          fi
+
+          mkdir -p CodeCoverage
+
+          if find CodeCoverage -type f -name 'TestCoverageResults_*.xml' -print -quit 2>/dev/null | grep -q .; then
+            exit 0
+          fi
+
+          for candidate in "${candidate_paths[@]}"; do
+            case "$candidate" in
+              CodeCoverage|CodeCoverage/*)
+                echo "Coverage output path is already inside CodeCoverage: $candidate"
+                ;;
+              *)
+                if [ -d "$candidate" ]; then
+                  sudo cp -a "$candidate"/. CodeCoverage/
+                else
+                  sudo cp -a "$candidate" CodeCoverage/
+                fi
+                ;;
+            esac
+          done
+
+          sudo chown -R "$USER:$USER" CodeCoverage || true
+
+      - name: Validate coverage outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          edit_coverage_path='${{ steps.unity-editmode-tests.outputs.coveragePath }}'
+          play_coverage_path='${{ steps.unity-playmode-tests.outputs.coveragePath }}'
+          search_roots=()
+          for candidate in CodeCoverage "$edit_coverage_path" "$play_coverage_path"; do
+            if [ -n "$candidate" ] && [ -e "$candidate" ]; then
+              case " ${search_roots[*]} " in
+                *" $candidate "*) ;;
+                *) search_roots+=("$candidate") ;;
+              esac
+            fi
+          done
+
+          if [ ${#search_roots[@]} -eq 0 ]; then
+            echo "No coverage roots exist to validate." >&2
+            echo "EditMode coveragePath: $edit_coverage_path" >&2
+            echo "PlayMode coveragePath: $play_coverage_path" >&2
+            exit 1
+          fi
+
+          reports=$(find "${search_roots[@]}" -type f \( -name 'TestCoverageResults*.xml' -o -name '*OpenCover*.xml' -o -name '*opencover*.xml' \) -printf '%T@ %p\n' 2>/dev/null | sort -n | awk '!seen[$2]++ {print $2}')
+          if [ -z "$reports" ]; then
+            echo "Unity did not produce any OpenCover coverage XML files under CodeCoverage/." >&2
+            echo "Searched roots: ${search_roots[*]}" >&2
+            echo "EditMode coveragePath: $edit_coverage_path" >&2
+            echo "PlayMode coveragePath: $play_coverage_path" >&2
+            find "${search_roots[@]}" -maxdepth 5 -type f 2>/dev/null | sort >&2 || true
+            exit 1
+          fi
+
+          first_report=$(printf '%s\n' "$reports" | tail -n 1)
+          if ! grep -Fq "fullPath=\"${GITHUB_WORKSPACE}/" "$first_report"; then
+            echo "Coverage XML paths do not resolve to the GitHub workspace, so Sonar would skip coverage import." >&2
+            echo "First report checked: $first_report" >&2
+            grep -m 5 'fullPath=' "$first_report" >&2 || true
+            exit 1
+          fi
+
+      - name: Upload Unity test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-test-results
+          path: artifacts/test-results
+          if-no-files-found: warn
+
+      - name: Upload Unity coverage results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-coverage
+          path: CodeCoverage
+          if-no-files-found: warn
+
+      - name: Cache Sonar packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: |
+            ${{ runner.os }}-sonar
+
+      - name: SonarQube scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          projectBaseDir: .

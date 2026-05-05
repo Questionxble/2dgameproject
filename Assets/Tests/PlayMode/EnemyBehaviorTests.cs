@@ -22,9 +22,10 @@ namespace Tests.PlayMode
             
             // Create player object for enemy to potentially target
             playerObject = new GameObject("TestPlayer");
-            playerObject.AddComponent<PlayerMovement>();
+            playerObject.tag = "Player";
             playerObject.AddComponent<Rigidbody2D>();
             playerObject.AddComponent<CapsuleCollider2D>();
+            playerObject.AddComponent<PlayerMovement>();
         }
         
         [TearDown]
@@ -53,7 +54,7 @@ namespace Tests.PlayMode
         [UnityTest]
         public IEnumerator EnemyBehavior_CanFindPlayer()
         {
-            yield return new WaitForEndOfFrame();
+            yield return null;
             
             // Test that player exists in scene for enemy to find
             var foundPlayer = Object.FindFirstObjectByType<PlayerMovement>();

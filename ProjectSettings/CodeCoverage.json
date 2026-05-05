@@ -12,7 +12,7 @@
     "-**/Plugins/**"
   ],
   "assemblyFilters": [
-    "+Assembly-CSharp",
+    "+Game",
     "+Tests.*",
     "-Unity.*"
   ]
