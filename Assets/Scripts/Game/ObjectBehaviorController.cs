@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Collections;
 using UnityEngine.InputSystem;
 using UnityEngine.Tilemaps;
 using System.Collections;
@@ -738,12 +739,15 @@ public class EnvironmentCheckpoint : MonoBehaviour, IObjectBehavior
 {
     [Header("Checkpoint Settings")]
     public bool isActivated = false;
+    [SerializeField] private string checkpointId = string.Empty;
     
     private ObjectBehaviorController controller;
+    private MultiplayerGameManager multiplayerGameManager;
     
     public void Initialize(ObjectBehaviorController behaviorController, string objectType)
     {
         controller = behaviorController;
+        multiplayerGameManager = FindFirstObjectByType<MultiplayerGameManager>();
         
         Collider2D col = GetComponent<Collider2D>();
         if (col == null)
@@ -755,11 +759,50 @@ public class EnvironmentCheckpoint : MonoBehaviour, IObjectBehavior
     
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (other.CompareTag("Player") && controller != null && !isActivated)
+        PlayerMovement triggeringPlayer = other.GetComponentInParent<PlayerMovement>();
+        if (triggeringPlayer == null)
         {
-            isActivated = true;
-            controller.HandleCheckpoint(gameObject);
+            return;
         }
+
+        isActivated = true;
+        controller?.HandleCheckpoint(gameObject);
+
+        MultiplayerGameManager gameManager = ResolveMultiplayerGameManager();
+        if (gameManager == null)
+        {
+            return;
+        }
+
+        string resolvedCheckpointId = GetCheckpointId();
+
+        if (gameManager.IsServer)
+        {
+            gameManager.SetActiveCheckpoint(transform.position, resolvedCheckpointId);
+            return;
+        }
+
+        if (triggeringPlayer.IsOwner && gameManager.IsSpawned)
+        {
+            gameManager.ActivateCheckpointServerRpc(transform.position, new FixedString128Bytes(resolvedCheckpointId));
+        }
+    }
+
+    private MultiplayerGameManager ResolveMultiplayerGameManager()
+    {
+        if (multiplayerGameManager == null)
+        {
+            multiplayerGameManager = FindFirstObjectByType<MultiplayerGameManager>();
+        }
+
+        return multiplayerGameManager;
+    }
+
+    private string GetCheckpointId()
+    {
+        return string.IsNullOrWhiteSpace(checkpointId)
+            ? gameObject.name
+            : checkpointId.Trim();
     }
 }
 

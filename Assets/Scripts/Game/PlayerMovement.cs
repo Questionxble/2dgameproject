@@ -17,6 +17,20 @@ public class PlayerMovement : NetworkBehaviour
     [SerializeField] private float coyoteTime = 0.12f;
     [SerializeField] private float jumpBufferTime = 0.12f;
 
+    [Header("Dash")]
+    [SerializeField] private Key dashKey = Key.Q;
+    [SerializeField] private float dashSpeed = 13f;
+    [SerializeField] private float dashDuration = 0.14f;
+    [SerializeField] private float dashCooldown = 0.45f;
+
+    [Header("Jump And Dash Smoke Effects")]
+    [SerializeField] private GameObject jumpSmokeEffectPrefab;
+    [SerializeField] private Vector3 jumpSmokeSpawnOffset = new Vector3(0.18f, -0.55f, 0f);
+    [SerializeField] private float jumpSmokeLifetime = 0.5f;
+    [SerializeField] private GameObject dashSmokeEffectPrefab;
+    [SerializeField] private Vector3 dashSmokeSpawnOffset = new Vector3(-0.35f, -0.55f, 0f);
+    [SerializeField] private float dashSmokeLifetime = 0.4f;
+
     [Header("Ground Detection")]
     public LayerMask groundLayerMask = 1;
     public LayerMask solidObjectLayerMask = 1; // For detecting solid objects (not one-way platforms)
@@ -82,6 +96,21 @@ public class PlayerMovement : NetworkBehaviour
     [SerializeField] private Vector2 healthBarScreenSize = new Vector2(200f, 20f);
     [SerializeField] private Vector2 ultimateBarScreenSize = new Vector2(150f, 15f);
     [SerializeField] private Vector2 buffListSize = new Vector2(300f, 100f);
+    [Header("Collectible Items")]
+    [SerializeField] private string silverPenniesLabel = "Silver Pennies";
+
+    [Header("Blocking")]
+    [SerializeField] private Key blockKey = Key.LeftShift;
+    [SerializeField] private float maxBlockDuration = 2f;
+    [SerializeField] private Sprite blockingShieldSprite;
+    [SerializeField] private Vector3 blockingShieldOffset = new Vector3(0f, 0.2f, 0f);
+    [SerializeField] private Vector3 blockingShieldScale = new Vector3(1.4f, 1.7f, 1f);
+    [SerializeField] private Color blockingShieldTint = new Color(0.45f, 0.8f, 1f, 0.55f);
+    [SerializeField] private Sprite blockedSlashSprite;
+    [SerializeField] private Vector3 blockedSlashOffset = new Vector3(0.85f, 0.1f, 0f);
+    [SerializeField] private Vector3 blockedSlashScale = new Vector3(0.65f, 1.05f, 1f);
+    [SerializeField] private float blockedSlashDuration = 0.18f;
+    [SerializeField] private Color blockedSlashTint = new Color(1f, 1f, 1f, 0.95f);
     
     [Header("Damage Modifiers")]
     // Damage modifiers applied through GetModifiedMeleeDamage/GetModifiedMagicDamage methods
@@ -103,7 +132,7 @@ public class PlayerMovement : NetworkBehaviour
         
         public ActiveBuff(BuffType buffType, float buffValue, float buffDuration, string desc = "")
         {
-            type = buffType;
+            type = NormalizeBuffType(buffType);
             value = buffValue;
             duration = buffDuration;
             startTime = Time.time;
@@ -115,6 +144,11 @@ public class PlayerMovement : NetworkBehaviour
     }
     
     private List<ActiveBuff> activeBuffs = new List<ActiveBuff>();
+
+    private static BuffType NormalizeBuffType(BuffType buffType)
+    {
+        return buffType == BuffType.Attack ? BuffType.Strength : buffType;
+    }
     
     // Components
     private Rigidbody2D rb;
@@ -166,6 +200,9 @@ public class PlayerMovement : NetworkBehaviour
     private NetworkVariable<bool> networkIsAttacking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     private NetworkVariable<int> networkAttackType = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     private NetworkVariable<FixedString64Bytes> networkDisplayName = new NetworkVariable<FixedString64Bytes>(new FixedString64Bytes(PlayerSessionSettings.DefaultPlayerName), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<int> networkSilverPennies = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> networkHasLockpickRelic = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> networkIsBlocking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     
     // Health Regeneration System
     private float lastDamageTime;
@@ -177,6 +214,17 @@ public class PlayerMovement : NetworkBehaviour
     private float burnEndTime = 0f;
     private float nextBurnDamageTime = 0f;
     private GameObject burnEffectObject;
+    private bool isDashing = false;
+    private float dashEndTime = 0f;
+    private float lastDashTime = float.NegativeInfinity;
+    private float currentDashDirection = 1f;
+    private bool isBlocking = false;
+    private float localBlockEndTime = 0f;
+    private float serverBlockEndTime = 0f;
+    private GameObject blockingShieldObject;
+    private GameObject blockedSlashFlashObject;
+    private Coroutine blockedSlashFlashCoroutine;
+    private static Sprite fallbackEffectSprite;
 
     // Petrification Status Effect System
     private bool isPetrified = false;
@@ -227,6 +275,7 @@ public class PlayerMovement : NetworkBehaviour
     private Image ultimateBarBackground;
     private Image ultimateBarFill;
     private Text screenHealthText;
+    private Text silverPenniesText;
     private Image ultimateFullEffect;
     private bool wasUltimateFull = false;
     private bool isUltimateEffectPlaying = false;
@@ -243,10 +292,24 @@ public class PlayerMovement : NetworkBehaviour
     
     // Weapon System
     private WeaponClassController weaponController;
+    private BottledSoulTutorialController bottledSoulTutorialController;
+    private int silverPennies;
+    private bool hasLockpickRelic;
+
+    private const string SilverPenniesPrefsKey = "PlayerMovement.SilverPennies";
+    private const string LockpickRelicPrefsKey = "PlayerMovement.HasLockpickRelic";
+
+    public static event System.Action<int> LocalSilverPenniesChanged;
+    public static event System.Action<bool> LocalLockpickRelicChanged;
 
     public bool IsDead => isPlayerDead;
     public string DisplayName => GetDisplayNameText();
     public Vector3 ChatBubbleAnchorWorldPosition => GetChatBubbleAnchorWorldPosition();
+    public int SilverPennies => silverPennies;
+    public bool HasLockpickRelic => hasLockpickRelic;
+    public bool HasBottledSoul => bottledSoulTutorialController != null && bottledSoulTutorialController.HasBottledSoul;
+    public bool IsBlocking => isBlocking;
+    public bool IsDashing => isDashing;
 
     void Awake()
     {
@@ -291,6 +354,8 @@ public class PlayerMovement : NetworkBehaviour
         // Initialize health system
         currentHealth = maxHealth;
         spawnPosition = transform.position;
+        silverPennies = LoadPersistedSilverPennies();
+        hasLockpickRelic = LoadPersistedLockpickRelic();
         
         // Initialize aegis shield system
         maxAegisShield = maxHealth;
@@ -307,6 +372,7 @@ public class PlayerMovement : NetworkBehaviour
         
         // Get weapon controller (should be on the same GameObject)
         weaponController = GetComponent<WeaponClassController>();
+        EnsureBottledSoulTutorialController();
     }
 
     public override void OnNetworkSpawn()
@@ -358,6 +424,31 @@ public class PlayerMovement : NetworkBehaviour
         networkIsAttacking.OnValueChanged += OnAttackingStatusChanged;
         networkAttackType.OnValueChanged += OnAttackTypeChanged;
         networkDisplayName.OnValueChanged += OnDisplayNameChanged;
+        networkSilverPennies.OnValueChanged += OnSilverPenniesChanged;
+        networkHasLockpickRelic.OnValueChanged += OnLockpickRelicChanged;
+        networkIsBlocking.OnValueChanged += OnBlockingStateChanged;
+
+        if (IsOwner)
+        {
+            if (IsServer)
+            {
+                networkSilverPennies.Value = silverPennies;
+                networkHasLockpickRelic.Value = hasLockpickRelic;
+            }
+            else
+            {
+                SubmitLoadedSilverPenniesServerRpc(silverPennies);
+                SubmitLoadedLockpickRelicServerRpc(hasLockpickRelic);
+            }
+
+            EnsureBottledSoulTutorialController();
+            bottledSoulTutorialController.BeginTutorialIfNeeded();
+        }
+        else
+        {
+            silverPennies = networkSilverPennies.Value;
+            hasLockpickRelic = networkHasLockpickRelic.Value;
+        }
         
         // Sync current health with network variable
         currentHealth = networkHealth.Value;
@@ -367,6 +458,9 @@ public class PlayerMovement : NetworkBehaviour
         SetPetrificationVisualState(isPetrified);
         UpdateDisplayNameLabel();
         UpdateWorldHealthBarPresentation();
+        UpdateSilverPenniesUI();
+        isBlocking = networkIsBlocking.Value;
+        UpdateBlockingVisuals();
 
         if (IsOwner)
         {
@@ -390,6 +484,9 @@ public class PlayerMovement : NetworkBehaviour
             networkIsAttacking.OnValueChanged -= OnAttackingStatusChanged;
             networkAttackType.OnValueChanged -= OnAttackTypeChanged;
             networkDisplayName.OnValueChanged -= OnDisplayNameChanged;
+            networkSilverPennies.OnValueChanged -= OnSilverPenniesChanged;
+            networkHasLockpickRelic.OnValueChanged -= OnLockpickRelicChanged;
+            networkIsBlocking.OnValueChanged -= OnBlockingStateChanged;
         }
         
         base.OnNetworkDespawn();
@@ -397,6 +494,7 @@ public class PlayerMovement : NetworkBehaviour
 
     public override void OnDestroy()
     {
+        CleanupBlockingVisuals();
         CleanupGeneratedUI();
         base.OnDestroy();
     }
@@ -528,6 +626,41 @@ public class PlayerMovement : NetworkBehaviour
     {
         UpdateDisplayNameLabel();
     }
+
+    private void OnLockpickRelicChanged(bool previousValue, bool newValue)
+    {
+        ApplyLockpickRelicLocally(newValue, persistIfOwner: true);
+    }
+
+    private void OnBlockingStateChanged(bool previousValue, bool newValue)
+    {
+        ApplyBlockingStateLocally(newValue);
+
+        if (newValue)
+        {
+            float clampedBlockDuration = Mathf.Max(0.05f, maxBlockDuration);
+            if (IsOwner || !IsSpawned)
+            {
+                localBlockEndTime = Time.time + clampedBlockDuration;
+            }
+
+            if (IsServer || !IsSpawned)
+            {
+                serverBlockEndTime = Time.time + clampedBlockDuration;
+            }
+        }
+        else
+        {
+            localBlockEndTime = 0f;
+            serverBlockEndTime = 0f;
+        }
+    }
+
+    [ServerRpc]
+    private void SubmitLoadedLockpickRelicServerRpc(bool playerHasLockpickRelic)
+    {
+        networkHasLockpickRelic.Value = playerHasLockpickRelic;
+    }
     
     private void UpdateShieldVisuals()
     {
@@ -548,6 +681,17 @@ public class PlayerMovement : NetworkBehaviour
                 Debug.Log($"PlayerCollision: Ignoring collision between {gameObject.name} and {otherPlayer.gameObject.name}");
             }
         }
+    }
+
+    private void OnSilverPenniesChanged(int previousValue, int newValue)
+    {
+        ApplySilverPenniesLocally(newValue, persistIfOwner: true);
+    }
+
+    [ServerRpc]
+    private void SubmitLoadedSilverPenniesServerRpc(int loadedSilverPennies)
+    {
+        networkSilverPennies.Value = Mathf.Max(0, loadedSilverPennies);
     }
     
     private void SetupCameraFollow()
@@ -589,6 +733,9 @@ public class PlayerMovement : NetworkBehaviour
             return;
         }
 
+        HandleBlockingTimers();
+        HandleDashTimers();
+
         // Refresh contact checks before consuming one-frame inputs so land-and-jump works reliably.
         CheckGrounded();
         CheckCeilingClearance();
@@ -597,8 +744,10 @@ public class PlayerMovement : NetworkBehaviour
         // Handle networked vs non-networked movement
         if (IsOwner || !IsSpawned)
         {
+            HandleBlockingInput();
             // IsSpawned false means we're testing without networking
             GetInput();
+            HandleDashInput();
             HandleMovement();
         }
 
@@ -669,6 +818,11 @@ public class PlayerMovement : NetworkBehaviour
             return;
         }
 
+        if (isBlocking)
+        {
+            return;
+        }
+
         // Check keyboard directly
         if (Keyboard.current != null)
         {
@@ -701,6 +855,18 @@ public class PlayerMovement : NetworkBehaviour
     private void HandleMovement()
     {
         if (isPetrified)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            return;
+        }
+
+        if (isDashing)
+        {
+            rb.linearVelocity = new Vector2(currentDashDirection * dashSpeed, rb.linearVelocity.y);
+            return;
+        }
+
+        if (isBlocking)
         {
             rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
             return;
@@ -788,6 +954,7 @@ public class PlayerMovement : NetworkBehaviour
         }
         else if (CanUseBufferedJump())
         {
+            SpawnActionSmokeEffect(jumpSmokeEffectPrefab, jumpSmokeSpawnOffset, jumpSmokeLifetime, GetFacingDirectionSign());
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
             isGrounded = false;
             lastGroundedTime = float.NegativeInfinity;
@@ -1109,6 +1276,259 @@ public class PlayerMovement : NetworkBehaviour
             Die();
         }
     }
+
+    private void HandleBlockingTimers()
+    {
+        if (!IsSpawned)
+        {
+            if (isBlocking && localBlockEndTime > 0f && Time.time >= localBlockEndTime)
+            {
+                ApplyBlockingStateLocally(false);
+            }
+
+            return;
+        }
+
+        if (IsServer && networkIsBlocking.Value && serverBlockEndTime > 0f && Time.time >= serverBlockEndTime)
+        {
+            networkIsBlocking.Value = false;
+        }
+    }
+
+    private void HandleDashTimers()
+    {
+        if (isDashing && dashEndTime > 0f && Time.time >= dashEndTime)
+        {
+            StopDash();
+        }
+    }
+
+    private void HandleBlockingInput()
+    {
+        if (Keyboard.current == null)
+        {
+            return;
+        }
+
+        var blockKeyControl = Keyboard.current[blockKey];
+        if (blockKeyControl == null)
+        {
+            return;
+        }
+
+        if (PlayerChat.IsTextEntryActive)
+        {
+            if (isBlocking)
+            {
+                StopBlocking();
+            }
+
+            return;
+        }
+
+        if (isBlocking)
+        {
+            if (!blockKeyControl.isPressed || Time.time >= localBlockEndTime || !CanStartBlocking())
+            {
+                StopBlocking();
+            }
+
+            return;
+        }
+
+        if (blockKeyControl.wasPressedThisFrame && CanStartBlocking())
+        {
+            StartBlocking();
+        }
+    }
+
+    private bool CanStartBlocking()
+    {
+        if (isPlayerDead || isPetrified || isDashing)
+        {
+            return false;
+        }
+
+        if (weaponController == null)
+        {
+            weaponController = GetComponent<WeaponClassController>();
+        }
+
+        return weaponController == null || !weaponController.IsWeaponMenuOpen();
+    }
+
+    private void StartBlocking()
+    {
+        float clampedBlockDuration = Mathf.Max(0.05f, maxBlockDuration);
+        localBlockEndTime = Time.time + clampedBlockDuration;
+
+        if (!IsSpawned)
+        {
+            ApplyBlockingStateLocally(true);
+            return;
+        }
+
+        if (!IsOwner)
+        {
+            return;
+        }
+
+        networkIsBlocking.Value = true;
+        ApplyBlockingStateLocally(true);
+
+        if (IsServer)
+        {
+            serverBlockEndTime = Time.time + clampedBlockDuration;
+        }
+    }
+
+    private void StopBlocking()
+    {
+        if (!isBlocking && (!IsSpawned || !networkIsBlocking.Value))
+        {
+            return;
+        }
+
+        if (!IsSpawned)
+        {
+            ApplyBlockingStateLocally(false);
+            return;
+        }
+
+        if (!IsOwner && !IsServer)
+        {
+            return;
+        }
+
+        networkIsBlocking.Value = false;
+        ApplyBlockingStateLocally(false);
+    }
+
+    private void HandleDashInput()
+    {
+        if (Keyboard.current == null)
+        {
+            return;
+        }
+
+        var dashKeyControl = Keyboard.current[dashKey];
+        if (dashKeyControl == null || !dashKeyControl.wasPressedThisFrame || !CanStartDash())
+        {
+            return;
+        }
+
+        StartDash();
+    }
+
+    private bool CanStartDash()
+    {
+        if (isPlayerDead || isPetrified || isBlocking || isDashing)
+        {
+            return false;
+        }
+
+        if (PlayerChat.IsTextEntryActive)
+        {
+            return false;
+        }
+
+        if (Time.time - lastDashTime < dashCooldown)
+        {
+            return false;
+        }
+
+        if (weaponController == null)
+        {
+            weaponController = GetComponent<WeaponClassController>();
+        }
+
+        return weaponController == null || !weaponController.IsWeaponMenuOpen();
+    }
+
+    private void StartDash()
+    {
+        float resolvedDirection = 0f;
+        if (horizontalInput < -0.1f)
+        {
+            resolvedDirection = -1f;
+        }
+        else if (horizontalInput > 0.1f)
+        {
+            resolvedDirection = 1f;
+        }
+        else if (spriteRenderer != null)
+        {
+            resolvedDirection = spriteRenderer.flipX ? -1f : 1f;
+        }
+        else
+        {
+            resolvedDirection = networkFacingLeft.Value ? -1f : 1f;
+        }
+
+        currentDashDirection = resolvedDirection < 0f ? -1f : 1f;
+        isDashing = true;
+        lastDashTime = Time.time;
+        dashEndTime = Time.time + Mathf.Max(0.05f, dashDuration);
+
+        SpawnActionSmokeEffect(dashSmokeEffectPrefab, dashSmokeSpawnOffset, dashSmokeLifetime, currentDashDirection);
+
+        if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(currentDashDirection * dashSpeed, rb.linearVelocity.y);
+        }
+    }
+
+    private void StopDash()
+    {
+        isDashing = false;
+        dashEndTime = 0f;
+
+        if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+        }
+    }
+
+    private float GetFacingDirectionSign()
+    {
+        if (horizontalInput < -0.1f)
+        {
+            return -1f;
+        }
+
+        if (horizontalInput > 0.1f)
+        {
+            return 1f;
+        }
+
+        if (spriteRenderer != null)
+        {
+            return spriteRenderer.flipX ? -1f : 1f;
+        }
+
+        return networkFacingLeft.Value ? -1f : 1f;
+    }
+
+    private void SpawnActionSmokeEffect(GameObject effectPrefab, Vector3 spawnOffset, float effectLifetime, float facingDirectionSign)
+    {
+        if (effectPrefab == null)
+        {
+            return;
+        }
+
+        float resolvedDirectionSign = facingDirectionSign < 0f ? -1f : 1f;
+        Vector3 resolvedOffset = new Vector3(spawnOffset.x * resolvedDirectionSign, spawnOffset.y, spawnOffset.z);
+        GameObject spawnedEffect = Instantiate(effectPrefab, transform.position + resolvedOffset, Quaternion.identity);
+
+        if (spawnedEffect != null)
+        {
+            Vector3 localScale = spawnedEffect.transform.localScale;
+            localScale.x = Mathf.Abs(localScale.x) * resolvedDirectionSign;
+            spawnedEffect.transform.localScale = localScale;
+
+            Destroy(spawnedEffect, Mathf.Max(0.05f, effectLifetime));
+        }
+    }
     
     private void ProcessPlayerDeath()
     {
@@ -1151,6 +1571,14 @@ public class PlayerMovement : NetworkBehaviour
                 weaponController.CleanupOwnedEffectsAndState();
             }
 
+            if (IsServer && IsSpawned && networkIsBlocking.Value)
+            {
+                networkIsBlocking.Value = false;
+            }
+
+            ApplyBlockingStateLocally(false);
+            HideBlockedSlashFlash();
+
             ResetMotionAndAnimationState(resetNetworkState: IsOwner);
             
             // Trigger respawn after delay (only on server)
@@ -1163,6 +1591,8 @@ public class PlayerMovement : NetworkBehaviour
 
     private void HandlePlayerRespawned()
     {
+        ApplyBlockingStateLocally(false);
+        HideBlockedSlashFlash();
         ResetMotionAndAnimationState(resetNetworkState: false);
         UpdateAnimationController(networkEquippedShardType.Value);
         UpdateHealthUI();
@@ -1331,6 +1761,186 @@ public class PlayerMovement : NetworkBehaviour
         Debug.Log("Burn visual effect created");
     }
 
+    private void UpdateBlockingVisuals()
+    {
+        if (isBlocking)
+        {
+            EnsureBlockingShieldVisual();
+            blockingShieldObject.transform.localPosition = blockingShieldOffset;
+            blockingShieldObject.transform.localScale = blockingShieldScale;
+            blockingShieldObject.SetActive(true);
+        }
+        else if (blockingShieldObject != null)
+        {
+            blockingShieldObject.SetActive(false);
+        }
+    }
+
+    private void EnsureBlockingShieldVisual()
+    {
+        if (blockingShieldObject != null)
+        {
+            return;
+        }
+
+        blockingShieldObject = new GameObject("BlockingShieldEffect");
+        blockingShieldObject.transform.SetParent(transform);
+        blockingShieldObject.transform.localPosition = blockingShieldOffset;
+        blockingShieldObject.transform.localScale = blockingShieldScale;
+
+        SpriteRenderer shieldRenderer = blockingShieldObject.AddComponent<SpriteRenderer>();
+        shieldRenderer.sprite = ResolveEffectSprite(blockingShieldSprite);
+        shieldRenderer.color = blockingShieldTint;
+        shieldRenderer.sortingLayerName = spriteRenderer != null ? spriteRenderer.sortingLayerName : "Player";
+        shieldRenderer.sortingOrder = (spriteRenderer != null ? spriteRenderer.sortingOrder : 0) + 2;
+
+        blockingShieldObject.SetActive(false);
+    }
+
+    private void ConsumeBlockedEnemyAttack(Vector3 attackOrigin)
+    {
+        float attackedSideSign = attackOrigin.x <= transform.position.x ? -1f : 1f;
+
+        if (!IsSpawned)
+        {
+            ApplyBlockingStateLocally(false);
+            ShowBlockedSlashFlashLocally(attackedSideSign);
+            return;
+        }
+
+        if (!IsServer)
+        {
+            return;
+        }
+
+        networkIsBlocking.Value = false;
+        ShowBlockedSlashFlashClientRpc(attackedSideSign);
+    }
+
+    [ClientRpc]
+    private void ShowBlockedSlashFlashClientRpc(float attackedSideSign)
+    {
+        ShowBlockedSlashFlashLocally(attackedSideSign);
+    }
+
+    private void ShowBlockedSlashFlashLocally(float attackedSideSign)
+    {
+        if (blockedSlashFlashCoroutine != null)
+        {
+            StopCoroutine(blockedSlashFlashCoroutine);
+        }
+
+        blockedSlashFlashCoroutine = StartCoroutine(PlayBlockedSlashFlash(attackedSideSign));
+    }
+
+    private IEnumerator PlayBlockedSlashFlash(float attackedSideSign)
+    {
+        EnsureBlockedSlashFlashVisual();
+
+        float resolvedSideSign = attackedSideSign < 0f ? -1f : 1f;
+        blockedSlashFlashObject.transform.localPosition = new Vector3(Mathf.Abs(blockedSlashOffset.x) * resolvedSideSign, blockedSlashOffset.y, blockedSlashOffset.z);
+        blockedSlashFlashObject.transform.localScale = blockedSlashScale;
+
+        SpriteRenderer slashRenderer = blockedSlashFlashObject.GetComponent<SpriteRenderer>();
+        if (slashRenderer != null)
+        {
+            slashRenderer.flipX = resolvedSideSign < 0f;
+            slashRenderer.color = blockedSlashTint;
+        }
+
+        blockedSlashFlashObject.SetActive(true);
+        yield return new WaitForSeconds(Mathf.Max(0.05f, blockedSlashDuration));
+
+        if (blockedSlashFlashObject != null)
+        {
+            blockedSlashFlashObject.SetActive(false);
+        }
+
+        blockedSlashFlashCoroutine = null;
+    }
+
+    private void EnsureBlockedSlashFlashVisual()
+    {
+        if (blockedSlashFlashObject != null)
+        {
+            return;
+        }
+
+        blockedSlashFlashObject = new GameObject("BlockedSlashFlash");
+        blockedSlashFlashObject.transform.SetParent(transform);
+        blockedSlashFlashObject.transform.localPosition = blockedSlashOffset;
+        blockedSlashFlashObject.transform.localScale = blockedSlashScale;
+
+        SpriteRenderer slashRenderer = blockedSlashFlashObject.AddComponent<SpriteRenderer>();
+        slashRenderer.sprite = ResolveEffectSprite(blockedSlashSprite);
+        slashRenderer.color = blockedSlashTint;
+        slashRenderer.sortingLayerName = spriteRenderer != null ? spriteRenderer.sortingLayerName : "Player";
+        slashRenderer.sortingOrder = (spriteRenderer != null ? spriteRenderer.sortingOrder : 0) + 3;
+
+        blockedSlashFlashObject.SetActive(false);
+    }
+
+    private void ApplyBlockingStateLocally(bool value)
+    {
+        isBlocking = value;
+        if (!value)
+        {
+            localBlockEndTime = 0f;
+        }
+
+        UpdateBlockingVisuals();
+    }
+
+    private void HideBlockedSlashFlash()
+    {
+        if (blockedSlashFlashCoroutine != null)
+        {
+            StopCoroutine(blockedSlashFlashCoroutine);
+            blockedSlashFlashCoroutine = null;
+        }
+
+        if (blockedSlashFlashObject != null)
+        {
+            blockedSlashFlashObject.SetActive(false);
+        }
+    }
+
+    private void CleanupBlockingVisuals()
+    {
+        HideBlockedSlashFlash();
+
+        if (blockingShieldObject != null)
+        {
+            Destroy(blockingShieldObject);
+            blockingShieldObject = null;
+        }
+
+        if (blockedSlashFlashObject != null)
+        {
+            Destroy(blockedSlashFlashObject);
+            blockedSlashFlashObject = null;
+        }
+    }
+
+    private Sprite ResolveEffectSprite(Sprite configuredSprite)
+    {
+        return configuredSprite != null ? configuredSprite : GetFallbackEffectSprite();
+    }
+
+    private static Sprite GetFallbackEffectSprite()
+    {
+        if (fallbackEffectSprite == null)
+        {
+            fallbackEffectSprite = Sprite.Create(
+                Texture2D.whiteTexture,
+                new Rect(0f, 0f, Texture2D.whiteTexture.width, Texture2D.whiteTexture.height),
+                new Vector2(0.5f, 0.5f),
+                16f);
+        }
+
+        return fallbackEffectSprite;
+    }
+
     public void ApplyPetrification(float duration = -1f)
     {
         if (!IsSpawned)
@@ -1398,6 +2008,323 @@ public class PlayerMovement : NetworkBehaviour
         }
 
         HealFromSupportServerRpc(healAmount);
+    }
+
+    public bool CanCollectHealth(int healAmount)
+    {
+        if (healAmount <= 0 || isPlayerDead)
+        {
+            return false;
+        }
+
+        int displayedHealth = GetDisplayedHealthValue();
+        return displayedHealth < GetModifiedMaxHealth();
+    }
+
+    public void HealFromCollectible(int healAmount)
+    {
+        if (!CanCollectHealth(healAmount))
+        {
+            return;
+        }
+
+        if (!IsSpawned)
+        {
+            currentHealth = Mathf.Min(currentHealth + healAmount, GetModifiedMaxHealth());
+            UpdateHealthUI();
+            return;
+        }
+
+        if (IsServer)
+        {
+            ProcessSupportHealing(healAmount);
+            return;
+        }
+
+        HealFromCollectibleServerRpc(healAmount);
+    }
+
+    [ServerRpc]
+    private void HealFromCollectibleServerRpc(int healAmount)
+    {
+        ProcessSupportHealing(healAmount);
+    }
+
+    public void CollectSilverPennies(int amount)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        if (!IsSpawned)
+        {
+            ApplySilverPenniesLocally(silverPennies + amount, persistIfOwner: true);
+            return;
+        }
+
+        if (IsServer)
+        {
+            ProcessSilverPennyCollection(amount);
+            return;
+        }
+
+        CollectSilverPenniesServerRpc(amount);
+    }
+
+    public void ApplySavedSilverPennies(int amount)
+    {
+        int sanitizedAmount = Mathf.Max(0, amount);
+        if (!IsSpawned)
+        {
+            ApplySilverPenniesLocally(sanitizedAmount, persistIfOwner: true);
+            return;
+        }
+
+        if (IsServer)
+        {
+            networkSilverPennies.Value = sanitizedAmount;
+            ApplySilverPenniesLocally(sanitizedAmount, persistIfOwner: true);
+            return;
+        }
+
+        ApplySavedSilverPenniesServerRpc(sanitizedAmount);
+    }
+
+    public void AcquireLockpickRelic()
+    {
+        if (hasLockpickRelic)
+        {
+            return;
+        }
+
+        if (!IsSpawned)
+        {
+            ApplyLockpickRelicLocally(true, persistIfOwner: true);
+            return;
+        }
+
+        if (IsServer)
+        {
+            ProcessLockpickRelicAcquisition();
+            return;
+        }
+
+        AcquireLockpickRelicServerRpc();
+    }
+
+    public void ApplySavedLockpickRelic(bool shouldOwnLockpickRelic)
+    {
+        if (!IsSpawned)
+        {
+            ApplyLockpickRelicLocally(shouldOwnLockpickRelic, persistIfOwner: true);
+            return;
+        }
+
+        if (IsServer)
+        {
+            networkHasLockpickRelic.Value = shouldOwnLockpickRelic;
+            ApplyLockpickRelicLocally(shouldOwnLockpickRelic, persistIfOwner: true);
+            return;
+        }
+
+        ApplySavedLockpickRelicServerRpc(shouldOwnLockpickRelic);
+    }
+
+    public void RequestNpcDialogueNodeCompletion(string npcProgressionKey, string nodeId)
+    {
+        if (string.IsNullOrWhiteSpace(npcProgressionKey) || string.IsNullOrWhiteSpace(nodeId))
+        {
+            return;
+        }
+
+        if (!IsSpawned)
+        {
+            return;
+        }
+
+        if (IsServer)
+        {
+            NpcDialogueInteractable interactable = NpcDialogueInteractable.FindByProgressionSaveKey(npcProgressionKey);
+            if (interactable != null)
+            {
+                interactable.TryGrantNodeRewardsAuthoritatively(nodeId, this);
+            }
+
+            return;
+        }
+
+        RequestNpcDialogueNodeCompletionServerRpc(npcProgressionKey, nodeId);
+    }
+
+    public void AcquireBottledSoul()
+    {
+        EnsureBottledSoulTutorialController();
+
+        if (HasBottledSoul)
+        {
+            bottledSoulTutorialController.BeginTutorialIfNeeded();
+            return;
+        }
+
+        if (!IsSpawned)
+        {
+            bottledSoulTutorialController.GrantBottledSoul();
+            return;
+        }
+
+        if (IsServer)
+        {
+            GrantBottledSoulToOwner();
+            return;
+        }
+
+        AcquireBottledSoulServerRpc();
+    }
+
+    [ServerRpc]
+    private void CollectSilverPenniesServerRpc(int amount)
+    {
+        ProcessSilverPennyCollection(amount);
+    }
+
+    [ServerRpc]
+    private void ApplySavedSilverPenniesServerRpc(int amount)
+    {
+        networkSilverPennies.Value = Mathf.Max(0, amount);
+    }
+
+    [ServerRpc]
+    private void RequestNpcDialogueNodeCompletionServerRpc(string npcProgressionKey, string nodeId, ServerRpcParams serverRpcParams = default)
+    {
+        if (OwnerClientId != serverRpcParams.Receive.SenderClientId)
+        {
+            return;
+        }
+
+        NpcDialogueInteractable interactable = NpcDialogueInteractable.FindByProgressionSaveKey(npcProgressionKey);
+        if (interactable == null)
+        {
+            return;
+        }
+
+        interactable.TryGrantNodeRewardsAuthoritatively(nodeId, this);
+    }
+
+    [ServerRpc]
+    private void AcquireLockpickRelicServerRpc()
+    {
+        ProcessLockpickRelicAcquisition();
+    }
+
+    [ServerRpc]
+    private void ApplySavedLockpickRelicServerRpc(bool shouldOwnLockpickRelic)
+    {
+        networkHasLockpickRelic.Value = shouldOwnLockpickRelic;
+    }
+
+    [ServerRpc]
+    private void AcquireBottledSoulServerRpc()
+    {
+        GrantBottledSoulToOwner();
+    }
+
+    [ClientRpc]
+    private void GrantBottledSoulClientRpc(ClientRpcParams clientRpcParams = default)
+    {
+        EnsureBottledSoulTutorialController();
+        bottledSoulTutorialController.GrantBottledSoul();
+    }
+
+    private void ProcessSilverPennyCollection(int amount)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        networkSilverPennies.Value = Mathf.Max(0, networkSilverPennies.Value + amount);
+    }
+
+    private void ProcessLockpickRelicAcquisition()
+    {
+        if (networkHasLockpickRelic.Value)
+        {
+            return;
+        }
+
+        networkHasLockpickRelic.Value = true;
+    }
+
+    private void GrantBottledSoulToOwner()
+    {
+        GrantBottledSoulClientRpc(new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { OwnerClientId },
+            },
+        });
+    }
+
+    private void ApplySilverPenniesLocally(int value, bool persistIfOwner)
+    {
+        silverPennies = Mathf.Max(0, value);
+
+        if (persistIfOwner && IsOwner)
+        {
+            SavePersistedSilverPennies(silverPennies);
+            LocalSilverPenniesChanged?.Invoke(silverPennies);
+        }
+
+        UpdateSilverPenniesUI();
+    }
+
+    private int LoadPersistedSilverPennies()
+    {
+        return Mathf.Max(0, PlayerPrefs.GetInt(SilverPenniesPrefsKey, 0));
+    }
+
+    private void SavePersistedSilverPennies(int value)
+    {
+        PlayerPrefs.SetInt(SilverPenniesPrefsKey, Mathf.Max(0, value));
+        PlayerPrefs.Save();
+    }
+
+    private void ApplyLockpickRelicLocally(bool value, bool persistIfOwner)
+    {
+        hasLockpickRelic = value;
+
+        if (persistIfOwner && IsOwner)
+        {
+            SavePersistedLockpickRelic(hasLockpickRelic);
+            LocalLockpickRelicChanged?.Invoke(hasLockpickRelic);
+        }
+    }
+
+    private bool LoadPersistedLockpickRelic()
+    {
+        return PlayerPrefs.GetInt(LockpickRelicPrefsKey, 0) != 0;
+    }
+
+    private void SavePersistedLockpickRelic(bool value)
+    {
+        PlayerPrefs.SetInt(LockpickRelicPrefsKey, value ? 1 : 0);
+        PlayerPrefs.Save();
+    }
+
+    private void EnsureBottledSoulTutorialController()
+    {
+        if (bottledSoulTutorialController == null)
+        {
+            bottledSoulTutorialController = GetComponent<BottledSoulTutorialController>();
+            if (bottledSoulTutorialController == null)
+            {
+                bottledSoulTutorialController = gameObject.AddComponent<BottledSoulTutorialController>();
+            }
+        }
+
+        bottledSoulTutorialController.Initialize(this, weaponController);
     }
 
     [ServerRpc]
@@ -1652,6 +2579,24 @@ public class PlayerMovement : NetworkBehaviour
     public void TakeDamageFromObject(int damage)
     {
         TakeDamage(damage);
+    }
+
+    public bool ReceiveEnemyAttack(int damage, Vector3 attackOrigin, bool isBlockable = true)
+    {
+        if (damage <= 0 || isPlayerDead)
+        {
+            return false;
+        }
+
+        bool canBlockAttack = isBlockable && (IsSpawned ? networkIsBlocking.Value : isBlocking);
+        if (canBlockAttack)
+        {
+            ConsumeBlockedEnemyAttack(attackOrigin);
+            return true;
+        }
+
+        TakeDamage(damage);
+        return false;
     }
     
     // Public method for water state management
@@ -2700,16 +3645,7 @@ public class PlayerMovement : NetworkBehaviour
     public int GetModifiedMeleeDamage(float baseDamage)
     {
         float modifiedDamage = baseDamage;
-        
-        // Apply Attack buffs (general melee damage)
-        foreach (ActiveBuff buff in activeBuffs)
-        {
-            if (buff.type == BuffType.Attack && !buff.IsExpired)
-            {
-                modifiedDamage += baseDamage * (buff.value / 100f);
-            }
-        }
-        
+
         // Apply Strength buffs (melee-specific damage)
         foreach (ActiveBuff buff in activeBuffs)
         {
@@ -2767,17 +3703,20 @@ public class PlayerMovement : NetworkBehaviour
     }
     
     // Buff System Methods
-    public void ApplyAegisBuff(float shieldPercentage = 100f)
+    public void ApplyAegisShieldBuff(float shieldPercentage = 10f)
     {
-        // Aegis is now a durationless shield system, not a timed buff
         float currentMaxHealth = GetModifiedMaxHealth();
-        maxAegisShield = currentMaxHealth; // Set max shield to current max health
-        float shieldValue = maxAegisShield * (shieldPercentage / 100f);
+        maxAegisShield = currentMaxHealth;
+
+        float shieldValue = currentMaxHealth * Mathf.Max(0f, shieldPercentage) / 100f;
+        if (shieldValue <= 0f)
+        {
+            return;
+        }
+
         currentAegisShield = Mathf.Min(currentAegisShield + shieldValue, maxAegisShield);
-        
-        // Update tracking variable
         previousMaxHealth = currentMaxHealth;
-        
+
         Debug.Log($"Aegis Shield Applied: +{shieldValue:F1} shield ({currentAegisShield:F1}/{maxAegisShield:F1})");
         UpdateAegisOutline();
     }
@@ -2809,7 +3748,7 @@ public class PlayerMovement : NetworkBehaviour
         Debug.Log($"Valor Attack Aegis Applied: +{shieldValue:F1} shield ({currentAegisShield:F1}/{maxAegisShield:F1}) [Cap: {valorAegisCap:F1} ({capPercentage}%)]");
         UpdateAegisOutline();
     }
-    
+
     public void ApplyStrengthBuff(float percentage = 10f, float duration = 15f)
     {
         ApplyBuff(BuffType.Strength, percentage, duration, "Increases melee attack damage");
@@ -2837,6 +3776,8 @@ public class PlayerMovement : NetworkBehaviour
     
     public void ApplyBuff(BuffType buffType, float value, float duration, string description = "")
     {
+        buffType = NormalizeBuffType(buffType);
+
         // For networked gameplay, buffs are applied locally but critical ones are synced
         // Check if buff type allows stacking - most buffs are now stackable
         bool allowStacking = (buffType == BuffType.Durability || buffType == BuffType.Flux || 
@@ -2932,6 +3873,9 @@ public class PlayerMovement : NetworkBehaviour
         
         // Create health bar at bottom of screen
         CreateScreenHealthBar();
+
+        // Create collectible counter at top-left
+        CreateSilverPenniesDisplay();
         
         // Create ultimate bar
         CreateUltimateBar();
@@ -3201,6 +4145,54 @@ public class PlayerMovement : NetworkBehaviour
         ultimateFullEffect.color = new Color(1f, 0f, 0f, 0.8f); // Red color
         ultimateFullEffect.gameObject.SetActive(false); // Hidden by default
     }
+
+    private void CreateSilverPenniesDisplay()
+    {
+        if (screenUICanvas == null || silverPenniesText != null)
+        {
+            return;
+        }
+
+        GameObject panelGO = new GameObject("SilverPenniesPanel");
+        panelGO.transform.SetParent(screenUICanvas.transform, false);
+
+        RectTransform panelRect = panelGO.AddComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0f, 1f);
+        panelRect.anchorMax = new Vector2(0f, 1f);
+        panelRect.pivot = new Vector2(0f, 1f);
+        panelRect.sizeDelta = new Vector2(240f, 40f);
+        panelRect.anchoredPosition = new Vector2(24f, -24f);
+
+        Image panelBackground = panelGO.AddComponent<Image>();
+        panelBackground.color = new Color(0.08f, 0.1f, 0.12f, 0.82f);
+
+        GameObject textGO = new GameObject("SilverPenniesText");
+        textGO.transform.SetParent(panelGO.transform, false);
+
+        silverPenniesText = textGO.AddComponent<Text>();
+        silverPenniesText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        silverPenniesText.fontSize = 18;
+        silverPenniesText.color = new Color(0.86f, 0.92f, 0.98f, 1f);
+        silverPenniesText.alignment = TextAnchor.MiddleLeft;
+
+        RectTransform textRect = silverPenniesText.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(12f, 0f);
+        textRect.offsetMax = new Vector2(-12f, 0f);
+
+        UpdateSilverPenniesUI();
+    }
+
+    private void UpdateSilverPenniesUI()
+    {
+        if (silverPenniesText == null)
+        {
+            return;
+        }
+
+        silverPenniesText.text = $"{silverPenniesLabel}: {silverPennies}";
+    }
     
     private void CreateBuffIconArray()
     {
@@ -3264,6 +4256,8 @@ public class PlayerMovement : NetworkBehaviour
             int modifiedMaxHealth = GetModifiedMaxHealth();
             screenHealthText.text = $"{GetDisplayedHealthValue()}/{modifiedMaxHealth}";
         }
+
+        UpdateSilverPenniesUI();
         
         // Update ultimate bar
         if (ultimateBarFill != null)
@@ -3515,9 +4509,10 @@ public class PlayerMovement : NetworkBehaviour
     
     private Color GetFireColorForBuff(BuffType buffType)
     {
+        buffType = NormalizeBuffType(buffType);
+
         switch (buffType)
         {
-            case BuffType.Attack: return new Color(1f, 0.3f, 0.3f, 1f); // Red fire
             case BuffType.Strength: return new Color(1f, 0.6f, 0f, 1f); // Orange fire  
             case BuffType.Vitality: return new Color(0.3f, 1f, 0.3f, 1f); // Green fire
             case BuffType.Flux: return new Color(0.8f, 0.3f, 1f, 1f); // Purple fire
@@ -3530,9 +4525,10 @@ public class PlayerMovement : NetworkBehaviour
     
     private Color GetBuffColor(BuffType buffType)
     {
+        buffType = NormalizeBuffType(buffType);
+
         switch (buffType)
         {
-            case BuffType.Attack: return new Color(1f, 0.3f, 0.3f, 0.9f); // Red
             case BuffType.Strength: return new Color(1f, 0.5f, 0.2f, 0.9f); // Orange  
             case BuffType.Vitality: return new Color(0.2f, 1f, 0.2f, 0.9f); // Bright Green
             case BuffType.Flux: return new Color(0.5f, 0.2f, 1f, 0.9f); // Purple
@@ -3545,9 +4541,10 @@ public class PlayerMovement : NetworkBehaviour
     
     private string GetBuffIcon(BuffType buffType)
     {
+        buffType = NormalizeBuffType(buffType);
+
         switch (buffType)
         {
-            case BuffType.Attack: return "⚔"; // Sword
             case BuffType.Strength: return "💪"; // Muscle
             case BuffType.Vitality: return "❤"; // Heart
             case BuffType.Flux: return "✨"; // Sparkles
@@ -3560,9 +4557,10 @@ public class PlayerMovement : NetworkBehaviour
     
     private string GetBuffStatText(BuffType buffType, float value)
     {
+        buffType = NormalizeBuffType(buffType);
+
         switch (buffType)
         {
-            case BuffType.Attack: return $"+{value:F1}% attack damage";
             case BuffType.Strength: return $"+{value:F1}% melee damage"; 
             case BuffType.Vitality: return $"+{value:F1}% health regen";
             case BuffType.Flux: return $"+{value:F1}% magic damage";
@@ -3575,9 +4573,10 @@ public class PlayerMovement : NetworkBehaviour
     
     private string GetBuffDescription(BuffType buffType)
     {
+        buffType = NormalizeBuffType(buffType);
+
         switch (buffType)
         {
-            case BuffType.Attack: return "Increases attack damage";
             case BuffType.Strength: return "Increases melee attack damage"; 
             case BuffType.Vitality: return "Increases health regeneration rate";
             case BuffType.Flux: return "Increases magic damage output";
@@ -3946,6 +4945,8 @@ public class PlayerMovement : NetworkBehaviour
         currentAttackType = 0;
         isPlayerJumping = false;
         isFalling = false;
+        isDashing = false;
+        dashEndTime = 0f;
         wasGroundedLastFrame = false;
         lastGroundedTime = float.NegativeInfinity;
         lastJumpPressedTime = float.NegativeInfinity;

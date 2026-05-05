@@ -31,6 +31,11 @@ public class DamageObject : MonoBehaviour
     
     [Tooltip("LayerMask of objects that should NOT be damaged by this object")]
     public LayerMask excludeLayers = 0;
+
+    [Header("Enemy Attack Blocking")]
+    [SerializeField] private bool countsAsEnemyAttack = false;
+    [SerializeField] private bool isBlockable = true;
+    [SerializeField] private bool dispelOnBlockedHit = true;
     
     // Callback system for weapon passives
     public System.Action onEnemyHit;
@@ -79,7 +84,10 @@ public class DamageObject : MonoBehaviour
 
                 if (Time.time - GetLastPlayerDamageTime(player) >= damageRate)
                 {
-                    DealDamageToPlayer(player);
+                    if (DealDamageToPlayer(player))
+                    {
+                        return;
+                    }
                 }
             }
 
@@ -135,7 +143,10 @@ public class DamageObject : MonoBehaviour
             PlayerMovement targetPlayer = TrackPlayer(other);
             if (targetPlayer != null && ShouldProcessPlayerDamage())
             {
-                DealDamageToPlayer(targetPlayer);
+                if (DealDamageToPlayer(targetPlayer))
+                {
+                    return;
+                }
             }
         }
         else if (damageOnTrigger && other.GetComponent<EnemyBehavior>() != null)
@@ -204,7 +215,10 @@ public class DamageObject : MonoBehaviour
             PlayerMovement targetPlayer = TrackPlayer(collision.collider);
             if (targetPlayer != null && ShouldProcessPlayerDamage())
             {
-                DealDamageToPlayer(targetPlayer);
+                if (DealDamageToPlayer(targetPlayer))
+                {
+                    return;
+                }
             }
         }
         else if (damageOnCollision && canDamageEnemies && collision.gameObject.GetComponent<EnemyBehavior>() != null)
@@ -309,25 +323,48 @@ public class DamageObject : MonoBehaviour
         return networkManager == null || !networkManager.IsListening || networkManager.IsServer;
     }
 
-    private void DealDamageToPlayer(PlayerMovement targetPlayer)
+    private bool DealDamageToPlayer(PlayerMovement targetPlayer)
     {
-        if (targetPlayer != null && Time.time - GetLastPlayerDamageTime(targetPlayer) >= damageRate)
+        if (targetPlayer == null || Time.time - GetLastPlayerDamageTime(targetPlayer) < damageRate)
+        {
+            return false;
+        }
+
+        bool wasBlocked = false;
+        if (countsAsEnemyAttack)
+        {
+            wasBlocked = targetPlayer.ReceiveEnemyAttack(damageAmount, transform.position, isBlockable);
+        }
+        else
         {
             targetPlayer.TakeDamageFromObject(damageAmount);
-            lastPlayerDamageTimes[targetPlayer] = Time.time;
-
-            Transform targetTransform = targetPlayer.transform;
-
-            // Create damage number
-            CreateDamageNumber(damageAmount, targetTransform.position + Vector3.up * 1.5f);
-
-            // Trigger callback for fire particle effects
-            if (onPlayerHit != null)
-            {
-                Debug.Log($"DamageObject: Triggering onPlayerHit callback for {name}");
-                onPlayerHit.Invoke(targetTransform);
-            }
         }
+
+        lastPlayerDamageTimes[targetPlayer] = Time.time;
+        if (wasBlocked)
+        {
+            if (dispelOnBlockedHit)
+            {
+                DispelBlockedEnemyAttack();
+                return true;
+            }
+
+            return false;
+        }
+
+        Transform targetTransform = targetPlayer.transform;
+
+        // Create damage number
+        CreateDamageNumber(damageAmount, targetTransform.position + Vector3.up * 1.5f);
+
+        // Trigger callback for fire particle effects
+        if (onPlayerHit != null)
+        {
+            Debug.Log($"DamageObject: Triggering onPlayerHit callback for {name}");
+            onPlayerHit.Invoke(targetTransform);
+        }
+
+        return false;
     }
     
     private void DealDamageToEnemy()
@@ -380,7 +417,10 @@ public class DamageObject : MonoBehaviour
         {
             foreach (PlayerMovement targetPlayer in playersInside)
             {
-                DealDamageToPlayer(targetPlayer);
+                if (DealDamageToPlayer(targetPlayer))
+                {
+                    return;
+                }
             }
         }
 
@@ -404,6 +444,18 @@ public class DamageObject : MonoBehaviour
     public void SetDamageRate(float newRate)
     {
         damageRate = newRate;
+    }
+
+    public void ConfigureAsEnemyAttack(bool blockable = true, bool destroyOnBlockedHit = true)
+    {
+        countsAsEnemyAttack = true;
+        isBlockable = blockable;
+        dispelOnBlockedHit = destroyOnBlockedHit;
+    }
+
+    private void DispelBlockedEnemyAttack()
+    {
+        Destroy(gameObject);
     }
     
     /// <summary>

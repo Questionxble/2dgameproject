@@ -28,6 +28,7 @@ TARGET_INSTANCE_ID = os.environ.get("TARGET_INSTANCE_ID", GCP_INSTANCE_NAME)
 SERVER_ALLOCATION_MODE = os.environ.get("SERVER_ALLOCATION_MODE", "single-instance")
 SERVER_ALLOCATION_STORE = os.environ.get("SERVER_ALLOCATION_STORE", "firestore")
 LOBBY_ALLOCATION_COLLECTION = os.environ.get("LOBBY_ALLOCATION_COLLECTION", "serverLobbyAllocations")
+SAVE_DOCUMENT_COLLECTION = os.environ.get("SAVE_DOCUMENT_COLLECTION", "gameSessionSaves")
 MANAGED_INSTANCE_TEMPLATE = os.environ.get("MANAGED_INSTANCE_TEMPLATE", "")
 MANAGED_INSTANCE_NAME_PREFIX = os.environ.get("MANAGED_INSTANCE_NAME_PREFIX", "lobby-")
 MANAGED_INSTANCE_DESCRIPTION_PREFIX = os.environ.get("MANAGED_INSTANCE_DESCRIPTION_PREFIX", "Ephemeral dedicated lobby server")
@@ -56,9 +57,13 @@ OIDC_REQUIRED_SCOPE = os.environ.get("OIDC_REQUIRED_SCOPE", "")
 OIDC_REQUIRED_GROUP = os.environ.get("OIDC_REQUIRED_GROUP", "")
 MAX_PLAYER_NAME_LENGTH = 24
 MAX_LOBBY_CODE_LENGTH = 12
+MAX_SAVE_ID_LENGTH = 64
+MAX_SAVE_NAME_LENGTH = 48
+SAVE_SCHEMA_VERSION = max(1, int(os.environ.get("SAVE_SCHEMA_VERSION", "1")))
 FIREBASE_TOKEN_CLOCK_SKEW_SECONDS = int(os.environ.get("FIREBASE_TOKEN_CLOCK_SKEW_SECONDS", "30"))
 runtime_server_registry = {}
 lobby_allocation_registry = {}
+save_document_registry = {}
 firestore_client = None
 firestore_warning_logged = False
 
@@ -74,7 +79,7 @@ except ValueError:
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = CORS_ORIGIN
     response.headers["Access-Control-Allow-Headers"] = f"Content-Type,Authorization,X-Api-Key,X-Auth-Claims,{SERVER_REGISTRATION_HEADER_NAME}"
-    response.headers["Access-Control-Allow-Methods"] = "OPTIONS,GET,POST"
+    response.headers["Access-Control-Allow-Methods"] = "OPTIONS,GET,POST,PATCH,DELETE"
     return response
 
 
@@ -123,9 +128,10 @@ def start_server():
     if validation_error:
         return jsonify({"ok": False, "message": validation_error}), 500
 
-    authorization_failure = require_authenticated_identity()
-    if authorization_failure:
-        return authorization_failure
+    claims, claims_error = get_authorizer_claims()
+    authorization_error, subject = authorize_request(claims, claims_error)
+    if authorization_error:
+        return jsonify({"ok": False, "message": authorization_error[1]}), authorization_error[0]
 
     request_body = parse_request_body()
     requested_lobby_code = sanitize_lobby_code(request_body.get("lobbyCode"))
@@ -140,6 +146,13 @@ def start_server():
         if target_context.get("error"):
             return jsonify({"ok": False, "message": target_context["error"]}), 409
 
+        save_record = resolve_requested_save_document(
+            owner_subject=subject,
+            request_body=request_body,
+            requested_lobby_code=requested_lobby_code,
+            create_if_missing=requested_lobby_action == "create",
+        )
+
         if target_context["lobbyCode"] and requested_lobby_action == "create":
             upsert_lobby_allocation(target_context["lobbyCode"], target_context, status="allocating")
 
@@ -148,7 +161,7 @@ def start_server():
             if should_create_managed_instance(target_context, requested_lobby_action):
                 create_instance_from_template(target_context)
                 upsert_lobby_allocation(target_context["lobbyCode"], target_context, status="provisioning")
-                return jsonify(build_pending_status_payload(target_context, build_pending_instance_message(target_context)))
+                return jsonify(build_pending_status_payload(target_context, build_pending_instance_message(target_context), save_id=get_save_id(save_record)))
 
             missing_message = build_missing_lobby_allocation_message(target_context.get("lobbyCode"))
             return jsonify({"ok": False, "message": missing_message}), 409
@@ -167,7 +180,7 @@ def start_server():
             upsert_lobby_allocation(target_context["lobbyCode"], target_context, status=current_state or "assigned")
 
         is_ready = get_instance_ready(target_context, instance)
-        return jsonify(build_status_payload(target_context, instance, is_ready, build_status_message(target_context, instance, is_ready)))
+        return jsonify(build_status_payload(target_context, instance, is_ready, build_status_message(target_context, instance, is_ready), save_id=get_save_id(save_record)))
     except ValueError as error:
         return jsonify({"ok": False, "message": str(error)}), 400
     except HttpError as error:
@@ -195,15 +208,17 @@ def server_status():
         if target_context.get("error"):
             return jsonify({"ok": False, "message": target_context["error"]}), 409
 
+        requested_save_id = sanitize_save_id(resolve_request_value(None, "saveId"))
+
         instance = describe_instance_if_exists(target_context)
         if instance is None:
             if should_report_pending_instance(target_context):
-                return jsonify(build_pending_status_payload(target_context, build_pending_instance_message(target_context)))
+                return jsonify(build_pending_status_payload(target_context, build_pending_instance_message(target_context), save_id=requested_save_id))
 
             return jsonify({"ok": False, "message": "Requested dedicated server instance does not exist."}), 404
 
         is_ready = get_instance_ready(target_context, instance)
-        return jsonify(build_status_payload(target_context, instance, is_ready, build_status_message(target_context, instance, is_ready)))
+        return jsonify(build_status_payload(target_context, instance, is_ready, build_status_message(target_context, instance, is_ready), save_id=requested_save_id))
     except ValueError as error:
         return jsonify({"ok": False, "message": str(error)}), 400
     except HttpError as error:
@@ -271,6 +286,13 @@ def join_token():
         if not lobby_action:
             return jsonify({"ok": False, "message": "Lobby action must be 'create' or 'join'."}), 400
 
+        save_record = resolve_requested_save_document(
+            owner_subject=subject,
+            request_body=request_body,
+            requested_lobby_code=lobby_code,
+            create_if_missing=False,
+        )
+
         if lobby_action == "create":
             upsert_lobby_allocation(lobby_code, target_context, owner_subject=subject, status="assigned")
 
@@ -291,6 +313,7 @@ def join_token():
                 "playerName": player_name,
                 "lobbyCode": lobby_code,
                 "lobbyAction": lobby_action,
+                "saveId": get_save_id(save_record),
                 "joinToken": join_token_value,
                 "expiresAtUnix": expires_at_unix,
                 "message": "Lobby create ticket issued." if lobby_action == "create" else "Lobby join ticket issued.",
@@ -303,6 +326,73 @@ def join_token():
     except Exception:
         app.logger.exception("Transient error while issuing a join token.")
         return jsonify({"ok": False, "message": "Temporary control-plane error while issuing a join token. Retry in a few seconds."}), 503
+
+
+@app.route("/saves", methods=["GET", "POST", "OPTIONS"])
+def saves_collection():
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True})
+
+    claims, claims_error = get_authorizer_claims()
+    authorization_error, subject = authorize_request(claims, claims_error)
+    if authorization_error:
+        return jsonify({"ok": False, "message": authorization_error[1]}), authorization_error[0]
+
+    if request.method == "GET":
+        saves = list_save_documents_for_owner(subject)
+        return jsonify({"ok": True, "saves": saves, "count": len(saves)})
+
+    request_body = parse_request_body()
+
+    try:
+        save_record = create_save_document(
+            owner_subject=subject,
+            lobby_code=sanitize_lobby_code(request_body.get("lobbyCode")),
+            save_name=sanitize_save_name(request_body.get("name"), build_default_save_name(request_body.get("lobbyCode"))),
+        )
+        return jsonify({"ok": True, "save": save_record}), 201
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Transient error while creating save document.")
+        return jsonify({"ok": False, "message": "Temporary save-service error while creating a save."}), 503
+
+
+@app.route("/saves/<save_id>", methods=["GET", "PATCH", "DELETE", "OPTIONS"])
+def save_document(save_id):
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True})
+
+    claims, claims_error = get_authorizer_claims()
+    authorization_error, subject = authorize_request(claims, claims_error)
+    if authorization_error:
+        return jsonify({"ok": False, "message": authorization_error[1]}), authorization_error[0]
+
+    save_id = sanitize_save_id(save_id)
+    if not save_id:
+        return jsonify({"ok": False, "message": "Save id is required."}), 400
+
+    existing_record = get_save_document(save_id)
+    if existing_record is None or existing_record.get("ownerSubject") != subject:
+        return jsonify({"ok": False, "message": "Save document was not found."}), 404
+
+    if request.method == "GET":
+        return jsonify({"ok": True, "save": existing_record})
+
+    if request.method == "DELETE":
+        delete_save_document(save_id)
+        return jsonify({"ok": True, "saveId": save_id})
+
+    request_body = parse_request_body()
+
+    try:
+        updated_record = update_save_document(save_id, subject, request_body)
+        return jsonify({"ok": True, "save": updated_record})
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Transient error while updating save document.")
+        return jsonify({"ok": False, "message": "Temporary save-service error while updating a save."}), 503
 
 
 def validate_configuration(require_join_secret=False, require_server_registration_token=False):
@@ -504,7 +594,7 @@ def resolve_connection_address(instance, runtime_state=None):
     return instance.get("networkIP", "")
 
 
-def build_pending_status_payload(target_context, message, instance_state="provisioning"):
+def build_pending_status_payload(target_context, message, instance_state="provisioning", save_id=""):
     transport_mode = normalize_transport_mode(GAME_TRANSPORT_MODE)
     return {
         "ok": True,
@@ -512,6 +602,7 @@ def build_pending_status_payload(target_context, message, instance_state="provis
         "instanceId": target_context["targetId"],
         "allocationMode": target_context["allocationMode"],
         "lobbyCode": target_context.get("lobbyCode", ""),
+        "saveId": sanitize_save_id(save_id),
         "instanceState": instance_state,
         "publicIpAddress": "",
         "publicDnsName": "",
@@ -532,7 +623,7 @@ def build_pending_status_payload(target_context, message, instance_state="provis
     }
 
 
-def build_status_payload(target_context, instance, is_ready, message):
+def build_status_payload(target_context, instance, is_ready, message, save_id=""):
     runtime_state = get_runtime_server_state(target_context["targetId"]) if get_instance_state(instance) == "running" else None
     public_ip_address = resolve_connection_address(instance)
     connection_address = resolve_connection_address(instance, runtime_state)
@@ -548,6 +639,7 @@ def build_status_payload(target_context, instance, is_ready, message):
         "instanceId": target_context["targetId"],
         "allocationMode": target_context["allocationMode"],
         "lobbyCode": target_context.get("lobbyCode", ""),
+        "saveId": sanitize_save_id(save_id),
         "instanceState": get_instance_state(instance),
         "publicIpAddress": public_ip_address,
         "publicDnsName": "",
@@ -691,6 +783,13 @@ def normalize_relay_connection_type(raw_value):
 def parse_int(raw_value, fallback):
     try:
         return int(raw_value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def parse_float(raw_value, fallback):
+    try:
+        return float(raw_value)
     except (TypeError, ValueError):
         return fallback
 
@@ -1058,6 +1157,316 @@ def get_lobby_allocation_collection_ref():
         return None
 
     return client.collection(collection_name)
+
+
+def get_save_document_collection_ref():
+    collection_name = str(SAVE_DOCUMENT_COLLECTION or "").strip()
+    if not collection_name:
+        return None
+
+    client = get_firestore_client()
+    if client is None:
+        return None
+
+    return client.collection(collection_name)
+
+
+def sanitize_save_id(raw_value):
+    candidate = str(raw_value or "").strip()
+    if not candidate:
+        return ""
+
+    sanitized = []
+    for character in candidate:
+        if character.isalnum() or character in ("-", "_"):
+            sanitized.append(character)
+
+        if len(sanitized) >= MAX_SAVE_ID_LENGTH:
+            break
+
+    return "".join(sanitized)
+
+
+def sanitize_save_name(raw_value, fallback="Session Save"):
+    candidate = str(raw_value or "").strip()
+    if not candidate:
+        candidate = str(fallback or "Session Save").strip() or "Session Save"
+
+    if len(candidate) > MAX_SAVE_NAME_LENGTH:
+        candidate = candidate[:MAX_SAVE_NAME_LENGTH]
+
+    return candidate
+
+
+def build_default_save_name(lobby_code=""):
+    lobby_code = sanitize_lobby_code(lobby_code)
+    return f"Lobby {lobby_code}" if lobby_code else "Session Save"
+
+
+def get_save_id(save_record):
+    return sanitize_save_id(save_record.get("saveId")) if isinstance(save_record, dict) else ""
+
+
+def build_vector3_payload(raw_value):
+    if not isinstance(raw_value, dict):
+        return {"x": 0.0, "y": 0.0, "z": 0.0}
+
+    return {
+        "x": parse_float(raw_value.get("x"), 0.0),
+        "y": parse_float(raw_value.get("y"), 0.0),
+        "z": parse_float(raw_value.get("z"), 0.0),
+    }
+
+
+def normalize_checkpoint_state(raw_value):
+    raw_value = raw_value if isinstance(raw_value, dict) else {}
+    return {
+        "checkpointId": str(raw_value.get("checkpointId") or raw_value.get("id") or "").strip(),
+        "position": build_vector3_payload(raw_value.get("position") or raw_value),
+        "updatedAtUnix": max(0, parse_int(raw_value.get("updatedAtUnix"), 0)),
+    }
+
+
+def normalize_world_shard_entry(raw_value):
+    if not isinstance(raw_value, dict):
+        return None
+
+    tag = str(raw_value.get("tag") or "").strip()
+    name = str(raw_value.get("name") or "").strip()
+    if not tag and not name:
+        return None
+
+    return {
+        "tag": tag,
+        "name": name,
+        "position": build_vector3_payload(raw_value.get("position") or raw_value),
+    }
+
+
+def normalize_world_state(raw_value):
+    raw_value = raw_value if isinstance(raw_value, dict) else {}
+    raw_shards = raw_value.get("presentShards") or raw_value.get("shards") or []
+    present_shards = []
+    if isinstance(raw_shards, list):
+        for raw_shard in raw_shards:
+            normalized_shard = normalize_world_shard_entry(raw_shard)
+            if normalized_shard is not None:
+                present_shards.append(normalized_shard)
+
+    return {
+        "presentShards": present_shards,
+    }
+
+
+def normalize_player_state(raw_value):
+    raw_value = raw_value if isinstance(raw_value, dict) else {}
+    return {
+        "silverPennies": max(0, parse_int(raw_value.get("silverPennies"), 0)),
+        "hasLockpickRelic": parse_bool(raw_value.get("hasLockpickRelic")),
+    }
+
+
+def normalize_save_document_record(raw_record):
+    if not isinstance(raw_record, dict):
+        return None
+
+    save_id = sanitize_save_id(raw_record.get("saveId") or raw_record.get("id"))
+    owner_subject = str(raw_record.get("ownerSubject") or "").strip()
+    if not save_id or not owner_subject:
+        return None
+
+    now = int(time.time())
+    lobby_code = sanitize_lobby_code(raw_record.get("lobbyCode"))
+    return {
+        "saveId": save_id,
+        "ownerSubject": owner_subject,
+        "name": sanitize_save_name(raw_record.get("name"), build_default_save_name(lobby_code)),
+        "schemaVersion": max(1, parse_int(raw_record.get("schemaVersion"), SAVE_SCHEMA_VERSION)),
+        "lobbyCode": lobby_code,
+        "createdAtUnix": parse_int(raw_record.get("createdAtUnix"), now),
+        "updatedAtUnix": parse_int(raw_record.get("updatedAtUnix"), now),
+        "lastExportedAtUnix": max(0, parse_int(raw_record.get("lastExportedAtUnix"), 0)),
+        "hasUnexportedChanges": parse_bool(raw_record.get("hasUnexportedChanges")),
+        "checkpoint": normalize_checkpoint_state(raw_record.get("checkpoint")),
+        "playerState": normalize_player_state(raw_record.get("playerState")),
+        "worldState": normalize_world_state(raw_record.get("worldState")),
+        "lastMutationSource": str(raw_record.get("lastMutationSource") or "").strip(),
+    }
+
+
+def get_save_document(save_id):
+    save_id = sanitize_save_id(save_id)
+    if not save_id:
+        return None
+
+    collection_ref = get_save_document_collection_ref()
+    if collection_ref is not None:
+        try:
+            snapshot = collection_ref.document(save_id).get()
+            if snapshot.exists:
+                normalized = normalize_save_document_record(snapshot.to_dict())
+                if normalized is not None:
+                    return normalized
+        except Exception as error:
+            log_firestore_warning(f"Firestore save document read failed ({type(error).__name__}). Falling back to in-memory save document storage.")
+
+    return normalize_save_document_record(save_document_registry.get(save_id))
+
+
+def list_save_documents_for_owner(owner_subject):
+    owner_subject = str(owner_subject or "").strip()
+    if not owner_subject:
+        return []
+
+    records = []
+    collection_ref = get_save_document_collection_ref()
+    if collection_ref is not None:
+        try:
+            for snapshot in collection_ref.where("ownerSubject", "==", owner_subject).stream():
+                normalized = normalize_save_document_record(snapshot.to_dict())
+                if normalized is not None:
+                    records.append(normalized)
+        except Exception as error:
+            log_firestore_warning(f"Firestore save document list failed ({type(error).__name__}). Falling back to in-memory save document storage.")
+
+    if not records:
+        for raw_record in save_document_registry.values():
+            normalized = normalize_save_document_record(raw_record)
+            if normalized is not None and normalized.get("ownerSubject") == owner_subject:
+                records.append(normalized)
+
+    records.sort(key=lambda item: item.get("updatedAtUnix", 0), reverse=True)
+    return records
+
+
+def write_save_document(record):
+    normalized = normalize_save_document_record(record)
+    if normalized is None:
+        raise ValueError("Save document is invalid.")
+
+    collection_ref = get_save_document_collection_ref()
+    if collection_ref is not None:
+        try:
+            collection_ref.document(normalized["saveId"]).set(normalized)
+            return normalized
+        except Exception as error:
+            log_firestore_warning(f"Firestore save document write failed ({type(error).__name__}). Falling back to in-memory save document storage.")
+
+    save_document_registry[normalized["saveId"]] = normalized
+    return normalized
+
+
+def create_save_document(owner_subject, lobby_code="", save_name=""):
+    owner_subject = str(owner_subject or "").strip()
+    if not owner_subject:
+        raise ValueError("Authenticated identity is required to create a save.")
+
+    now = int(time.time())
+    save_id = sanitize_save_id(f"save-{secrets.token_hex(8)}")
+    record = {
+        "saveId": save_id,
+        "ownerSubject": owner_subject,
+        "name": sanitize_save_name(save_name, build_default_save_name(lobby_code)),
+        "schemaVersion": SAVE_SCHEMA_VERSION,
+        "lobbyCode": sanitize_lobby_code(lobby_code),
+        "createdAtUnix": now,
+        "updatedAtUnix": now,
+        "lastExportedAtUnix": 0,
+        "hasUnexportedChanges": False,
+        "checkpoint": normalize_checkpoint_state({}),
+        "playerState": normalize_player_state({}),
+        "worldState": normalize_world_state({}),
+        "lastMutationSource": "created",
+    }
+
+    return write_save_document(record)
+
+
+def update_save_document(save_id, owner_subject, updates):
+    existing_record = get_save_document(save_id)
+    if existing_record is None:
+        raise ValueError("Save document was not found.")
+
+    if existing_record.get("ownerSubject") != str(owner_subject or "").strip():
+        raise ValueError("Save document is not owned by the authenticated user.")
+
+    updates = updates or {}
+    now = int(time.time())
+    updated_record = dict(existing_record)
+
+    if "name" in updates:
+        updated_record["name"] = sanitize_save_name(updates.get("name"), updated_record.get("name"))
+
+    if "lobbyCode" in updates:
+        updated_record["lobbyCode"] = sanitize_lobby_code(updates.get("lobbyCode"))
+
+    if "checkpoint" in updates:
+        checkpoint_state = normalize_checkpoint_state(updates.get("checkpoint"))
+        if checkpoint_state.get("checkpointId") and checkpoint_state.get("updatedAtUnix", 0) <= 0:
+            checkpoint_state["updatedAtUnix"] = now
+        updated_record["checkpoint"] = checkpoint_state
+
+    if "playerState" in updates:
+        updated_record["playerState"] = normalize_player_state(updates.get("playerState"))
+
+    if "worldState" in updates:
+        updated_record["worldState"] = normalize_world_state(updates.get("worldState"))
+
+    if "hasUnexportedChanges" in updates:
+        updated_record["hasUnexportedChanges"] = parse_bool(updates.get("hasUnexportedChanges"))
+    elif any(key in updates for key in ("checkpoint", "playerState", "worldState", "lobbyCode")):
+        updated_record["hasUnexportedChanges"] = True
+
+    if parse_bool(updates.get("markExported")):
+        updated_record["lastExportedAtUnix"] = now
+        updated_record["hasUnexportedChanges"] = False
+
+    if "lastMutationSource" in updates:
+        updated_record["lastMutationSource"] = str(updates.get("lastMutationSource") or "").strip()
+
+    updated_record["updatedAtUnix"] = now
+    return write_save_document(updated_record)
+
+
+def delete_save_document(save_id):
+    save_id = sanitize_save_id(save_id)
+    if not save_id:
+        return False
+
+    collection_ref = get_save_document_collection_ref()
+    if collection_ref is not None:
+        try:
+            collection_ref.document(save_id).delete()
+        except Exception as error:
+            log_firestore_warning(f"Firestore save document delete failed ({type(error).__name__}). Falling back to in-memory save document storage.")
+
+    return save_document_registry.pop(save_id, None) is not None or collection_ref is not None
+
+
+def resolve_requested_save_document(owner_subject, request_body=None, requested_lobby_code="", create_if_missing=False):
+    owner_subject = str(owner_subject or "").strip()
+    if not owner_subject:
+        raise ValueError("Authenticated identity is required to resolve a save.")
+
+    requested_save_id = sanitize_save_id(resolve_request_value(request_body, "saveId"))
+    if requested_save_id:
+        existing_record = get_save_document(requested_save_id)
+        if existing_record is None:
+            raise ValueError("Requested save document was not found.")
+
+        if existing_record.get("ownerSubject") != owner_subject:
+            raise ValueError("Requested save document is not owned by the authenticated user.")
+
+        return existing_record
+
+    if create_if_missing:
+        return create_save_document(
+            owner_subject=owner_subject,
+            lobby_code=requested_lobby_code,
+            save_name=sanitize_save_name(resolve_request_value(request_body, "saveName"), build_default_save_name(requested_lobby_code)),
+        )
+
+    return None
 
 
 def normalize_lobby_allocation_record(raw_record):

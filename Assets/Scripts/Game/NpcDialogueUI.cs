@@ -33,6 +33,7 @@ public class NpcDialogueUI : MonoBehaviour
     private bool isTyping;
     private bool showingChoices;
     private float lastClickTime;
+    private bool currentNodeCompletionHandled;
 
     public static NpcDialogueUI Instance
     {
@@ -320,6 +321,7 @@ public class NpcDialogueUI : MonoBehaviour
         currentLines = BuildNodeLines(node);
         currentLineIndex = 0;
         showingChoices = false;
+        currentNodeCompletionHandled = false;
         choiceContainer.gameObject.SetActive(false);
         ClearChoiceButtons();
         RefreshPortraits();
@@ -416,6 +418,8 @@ public class NpcDialogueUI : MonoBehaviour
             ShowCurrentLine();
             return;
         }
+
+        CompleteCurrentNodeIfNeeded();
 
         if (currentNode != null && currentNode.choices != null && currentNode.choices.Length > 0)
         {
@@ -524,6 +528,7 @@ public class NpcDialogueUI : MonoBehaviour
         showingChoices = false;
         choiceContainer.gameObject.SetActive(false);
         ClearChoiceButtons();
+        CompleteCurrentNodeIfNeeded();
 
         if (string.IsNullOrWhiteSpace(nextNodeId))
         {
@@ -572,6 +577,7 @@ public class NpcDialogueUI : MonoBehaviour
         currentNode = null;
         currentLines = new string[0];
         currentLineIndex = 0;
+        currentNodeCompletionHandled = false;
         isTyping = false;
         showingChoices = false;
         speakerText.text = string.Empty;
@@ -657,6 +663,17 @@ public class NpcDialogueUI : MonoBehaviour
         }
 
         return Resources.GetBuiltinResource<Font>(BuiltInFontName);
+    }
+
+    private void CompleteCurrentNodeIfNeeded()
+    {
+        if (currentNodeCompletionHandled || activeConversation == null || activePlayer == null || currentNode == null)
+        {
+            return;
+        }
+
+        activeConversation.CompleteNodeForPlayer(currentNode, activePlayer);
+        currentNodeCompletionHandled = true;
     }
 }
 

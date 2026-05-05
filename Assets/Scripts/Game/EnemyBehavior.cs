@@ -32,6 +32,9 @@ public class EnemyBehavior : NetworkBehaviour
     
     [Header("Animation Settings")]
     [SerializeField] protected bool alternateAttacks = true; // Whether to alternate between attack animations
+
+    [Header("Blocking")]
+    [SerializeField] protected bool attacksAreBlockable = true;
     
     [Header("Collision")]
     [SerializeField] protected LayerMask playerLayerMask = 1; // What layers count as player
@@ -583,8 +586,10 @@ public class EnemyBehavior : NetworkBehaviour
         bool shouldApplyPlayerDamage = NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening || NetworkManager.Singleton.IsServer;
         if (playerMovement != null && shouldApplyPlayerDamage)
         {
-            playerMovement.TakeDamageFromObject((int)attackDamage);
-            Debug.Log($"Enemy attacked player for {attackDamage} damage");
+            bool wasBlocked = playerMovement.ReceiveEnemyAttack((int)attackDamage, transform.position, attacksAreBlockable);
+            Debug.Log(wasBlocked
+                ? $"Enemy attack on player {playerMovement.name} was blocked"
+                : $"Enemy attacked player for {attackDamage} damage");
         }
     }
 
@@ -900,6 +905,7 @@ public class EnemyBehavior : NetworkBehaviour
         
         // Set that this should NOT damage enemies (only player)
         damageComponent.canDamageEnemies = false;
+        damageComponent.ConfigureAsEnemyAttack(attacksAreBlockable);
         
         // Also exclude Enemy layer and NPC layer to be extra safe
         int enemyLayer = LayerMask.NameToLayer("Enemy");

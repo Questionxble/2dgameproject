@@ -5,6 +5,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.Networking;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -47,6 +48,9 @@ public class ClientDebugger : MonoBehaviour
     [SerializeField] private string joinTicketEndpoint = "/server/join-token";
     [SerializeField] private float joinTicketTimeoutSeconds = 10f;
 
+    [Header("Save Documents")]
+    [SerializeField] private string saveDocumentsEndpoint = "/saves";
+
     [Header("Secure Transport")]
     [SerializeField] private bool enableSecureRelayTransport = true;
     [SerializeField] private string preferredRelayConnectionType = RelayTransportBootstrap.DefaultConnectionType;
@@ -85,8 +89,33 @@ public class ClientDebugger : MonoBehaviour
     private string cachedFirebaseUserId = string.Empty;
     private int remainingOrchestratedReconnectRetries;
     private bool lastConnectionUsedJoinTicket;
+    private string selectedSaveIdForCreateLobby = string.Empty;
+    private string activeSessionSaveId = string.Empty;
+    private bool activeSessionHasUnexportedChanges;
+    private string saveStatusMessage = string.Empty;
+    private string saveMenuStatusMessage = string.Empty;
+    private bool showQuitConfirmationDialog;
+    private bool showSaveMenuDialog;
+    private bool showRenameSaveDialog;
+    private bool allowImmediateQuit;
+    private bool isLoadingSaveDocuments;
+    private bool suppressNextCheckpointAutosave;
+    private int suppressedLocalPlayerStateAutosaveEvents;
+    private Coroutine checkpointAutosaveRoutine;
+    private Coroutine localPlayerStateAutosaveRoutine;
+    private Coroutine restorePendingSaveRoutine;
+    private SaveDocumentResponse[] cachedSaveDocuments = Array.Empty<SaveDocumentResponse>();
+    private SaveDocumentResponse pendingRestoreSaveDocument;
+    private string selectedSaveMenuSaveId = string.Empty;
+    private string renameSaveInput = string.Empty;
+    private Vector2 saveMenuScrollPosition;
+    private int lastObservedLocalSilverPennies;
+    private bool lastObservedLocalHasLockpickRelic;
+    private NpcDialogueProgressSaveEntry[] lastObservedNpcDialogueProgression = Array.Empty<NpcDialogueProgressSaveEntry>();
 
     private const int MaxLobbyCodeLength = 12;
+    private const float SaveShardRestorePositionTolerance = 0.25f;
+    private static readonly string[] WorldShardTags = { "ValorShard", "WhisperShard", "StormShard", "SoulShard" };
     private const string FirebaseAnonymousSignInEndpoint = "https://identitytoolkit.googleapis.com/v1/accounts:signUp";
     private const string FirebaseRefreshTokenEndpoint = "https://securetoken.googleapis.com/v1/token";
 
@@ -187,6 +216,11 @@ public class ClientDebugger : MonoBehaviour
         playerNameInput = GetInitialPlayerNameInput();
         
         InitializeUI();
+        MultiplayerGameManager.SessionCheckpointActivated += OnSessionCheckpointActivated;
+        PlayerMovement.LocalSilverPenniesChanged += OnLocalSilverPenniesChanged;
+        PlayerMovement.LocalLockpickRelicChanged += OnLocalLockpickRelicChanged;
+        NpcDialogueInteractable.LocalProgressionChanged += OnNpcDialogueProgressionChanged;
+        Application.wantsToQuit += HandleApplicationWantsToQuit;
         TryAutoConnectOnLaunch();
     }
 
@@ -230,6 +264,11 @@ public class ClientDebugger : MonoBehaviour
         if (string.IsNullOrWhiteSpace(joinTicketEndpoint))
         {
             joinTicketEndpoint = "/server/join-token";
+        }
+
+        if (string.IsNullOrWhiteSpace(saveDocumentsEndpoint))
+        {
+            saveDocumentsEndpoint = "/saves";
         }
 
         if (string.IsNullOrWhiteSpace(firebaseWebApiKeyEnvironmentVariable))
@@ -496,6 +535,12 @@ public class ClientDebugger : MonoBehaviour
     
     void OnDestroy()
     {
+        MultiplayerGameManager.SessionCheckpointActivated -= OnSessionCheckpointActivated;
+        PlayerMovement.LocalSilverPenniesChanged -= OnLocalSilverPenniesChanged;
+        PlayerMovement.LocalLockpickRelicChanged -= OnLocalLockpickRelicChanged;
+        NpcDialogueInteractable.LocalProgressionChanged -= OnNpcDialogueProgressionChanged;
+        Application.wantsToQuit -= HandleApplicationWantsToQuit;
+
         if (networkManager != null)
         {
             networkManager.OnClientConnectedCallback -= OnClientConnected;
@@ -512,6 +557,24 @@ public class ClientDebugger : MonoBehaviour
         {
             StopCoroutine(joinTicketConnectRoutine);
             joinTicketConnectRoutine = null;
+        }
+
+        if (checkpointAutosaveRoutine != null)
+        {
+            StopCoroutine(checkpointAutosaveRoutine);
+            checkpointAutosaveRoutine = null;
+        }
+
+        if (localPlayerStateAutosaveRoutine != null)
+        {
+            StopCoroutine(localPlayerStateAutosaveRoutine);
+            localPlayerStateAutosaveRoutine = null;
+        }
+
+        if (restorePendingSaveRoutine != null)
+        {
+            StopCoroutine(restorePendingSaveRoutine);
+            restorePendingSaveRoutine = null;
         }
 
         if (playerNameFieldBackground != null)
@@ -625,6 +688,9 @@ public class ClientDebugger : MonoBehaviour
             return;
         }
 
+        selectedSaveIdForCreateLobby = string.Empty;
+        pendingRestoreSaveDocument = null;
+
         createLobbyCodeInput = string.IsNullOrWhiteSpace(createLobbyCodeInput)
             ? SanitizeLobbyCode(joinLobbyCodeInput)
             : SanitizeLobbyCode(createLobbyCodeInput);
@@ -647,6 +713,49 @@ public class ClientDebugger : MonoBehaviour
         StartLobbyConnection(LobbyRequestAction.Create, sanitizedLobbyCode);
     }
 
+    private void OpenSaveMenu()
+    {
+        if (isConnecting || isConnected || !ShouldUseLobbyWorkflow())
+        {
+            return;
+        }
+
+        showSaveMenuDialog = true;
+        showRenameSaveDialog = false;
+        saveMenuStatusMessage = string.Empty;
+        StartCoroutine(LoadSaveDocuments());
+    }
+
+    private void BeginCreateLobbyFromSave(SaveDocumentResponse saveDocument)
+    {
+        if (saveDocument == null || isConnecting || isConnected)
+        {
+            return;
+        }
+
+        selectedSaveIdForCreateLobby = SanitizeSaveId(saveDocument.saveId);
+        pendingRestoreSaveDocument = CloneSaveDocument(saveDocument);
+        createLobbyCodeInput = string.IsNullOrWhiteSpace(saveDocument.lobbyCode)
+            ? SanitizeLobbyCode(joinLobbyCodeInput)
+            : SanitizeLobbyCode(saveDocument.lobbyCode);
+        showSaveMenuDialog = false;
+        showRenameSaveDialog = false;
+        saveMenuStatusMessage = string.Empty;
+        showCreateLobbyDialog = true;
+    }
+
+    private void OpenRenameSaveDialog(SaveDocumentResponse saveDocument)
+    {
+        if (saveDocument == null)
+        {
+            return;
+        }
+
+        selectedSaveMenuSaveId = SanitizeSaveId(saveDocument.saveId);
+        renameSaveInput = saveDocument.name ?? string.Empty;
+        showRenameSaveDialog = true;
+    }
+
     private void StartLobbyConnection(LobbyRequestAction action, string lobbyCode)
     {
         if (networkManager == null || transport == null)
@@ -663,12 +772,23 @@ public class ClientDebugger : MonoBehaviour
 
         ResetOrchestratedReconnectBudget();
 
+        if (action == LobbyRequestAction.Join)
+        {
+            ClearActiveSessionSaveState();
+            selectedSaveIdForCreateLobby = string.Empty;
+        }
+
         pendingLobbyRequestAction = action;
         pendingLobbyCode = SanitizeLobbyCode(lobbyCode);
         PlayerSessionSettings.LocalPlayerName = playerNameInput;
         serverStartupStatus = action == LobbyRequestAction.Create
             ? $"Creating lobby {pendingLobbyCode}..."
             : $"Joining lobby {pendingLobbyCode}...";
+
+        if (action == LobbyRequestAction.Create && pendingRestoreSaveDocument == null)
+        {
+            selectedSaveIdForCreateLobby = string.Empty;
+        }
 
         if (enableRemoteServerOrchestration && HasOrchestrationConfiguration())
         {
@@ -824,6 +944,7 @@ public class ClientDebugger : MonoBehaviour
                     orchestrationTargetId = latestTargetId;
                 }
 
+                ApplyActiveSaveState(latestResponse);
                 ApplyConnectionDataFromResponse(latestResponse);
                 serverStartupStatus = BuildServerStartupStatus(latestResponse);
                 LogOrchestrationStatusChanged(serverStartupStatus);
@@ -921,6 +1042,14 @@ public class ClientDebugger : MonoBehaviour
             string escapedLobbyCode = UnityWebRequest.EscapeURL(requestedLobbyCode);
             builder.Append(delimiter);
             builder.Append($"lobbyCode={escapedLobbyCode}");
+            delimiter = "&";
+        }
+
+        string requestedSaveId = ResolveRequestedSaveId();
+        if (!string.IsNullOrWhiteSpace(requestedSaveId))
+        {
+            builder.Append(delimiter);
+            builder.Append($"saveId={UnityWebRequest.EscapeURL(requestedSaveId)}");
         }
 
         return builder.ToString();
@@ -936,6 +1065,7 @@ public class ClientDebugger : MonoBehaviour
             instanceId = targetServerId,
             lobbyCode = requestedLobbyCode,
             lobbyAction = requestedLobbyAction,
+            saveId = ResolveRequestedSaveId(),
         };
 
         return JsonUtility.ToJson(requestPayload);
@@ -1103,6 +1233,7 @@ public class ClientDebugger : MonoBehaviour
             instanceId = targetServerId,
             lobbyCode = requestedLobbyCode,
             lobbyAction = requestedLobbyAction,
+            saveId = ResolveRequestedSaveId(),
         };
 
         string requestError = null;
@@ -1165,6 +1296,8 @@ public class ClientDebugger : MonoBehaviour
             playerNameInput = response.playerName;
             PlayerSessionSettings.LocalPlayerName = response.playerName;
         }
+
+        ApplyActiveSaveState(response);
 
         if (!string.IsNullOrWhiteSpace(response.lobbyCode))
         {
@@ -1276,6 +1409,13 @@ public class ClientDebugger : MonoBehaviour
         serverStartupStatus = "Disconnected";
         pendingLobbyRequestAction = LobbyRequestAction.None;
         pendingLobbyCode = string.Empty;
+        selectedSaveIdForCreateLobby = string.Empty;
+
+        if (checkpointAutosaveRoutine != null)
+        {
+            StopCoroutine(checkpointAutosaveRoutine);
+            checkpointAutosaveRoutine = null;
+        }
     }
     
     private void OnClientConnected(ulong clientId)
@@ -1293,6 +1433,20 @@ public class ClientDebugger : MonoBehaviour
 
         showCreateLobbyDialog = false;
         serverStartupStatus = "Connected to dedicated server.";
+
+        if (pendingLobbyRequestAction == LobbyRequestAction.Create && pendingRestoreSaveDocument != null)
+        {
+            if (restorePendingSaveRoutine != null)
+            {
+                StopCoroutine(restorePendingSaveRoutine);
+            }
+
+            restorePendingSaveRoutine = StartCoroutine(ApplyPendingSaveRestoreAfterConnect());
+        }
+        else if (pendingLobbyRequestAction == LobbyRequestAction.Create && !string.IsNullOrWhiteSpace(activeSessionSaveId))
+        {
+            QueueLocalPlayerStateAutosave("initial-player-state");
+        }
     }
     
     private void OnClientDisconnected(ulong clientId)
@@ -1326,6 +1480,19 @@ public class ClientDebugger : MonoBehaviour
 
         pendingLobbyRequestAction = LobbyRequestAction.None;
         pendingLobbyCode = string.Empty;
+        selectedSaveIdForCreateLobby = string.Empty;
+
+        if (checkpointAutosaveRoutine != null)
+        {
+            StopCoroutine(checkpointAutosaveRoutine);
+            checkpointAutosaveRoutine = null;
+        }
+
+        if (restorePendingSaveRoutine != null)
+        {
+            StopCoroutine(restorePendingSaveRoutine);
+            restorePendingSaveRoutine = null;
+        }
     }
     
     private void UpdateDebugInfo()
@@ -1375,6 +1542,13 @@ public class ClientDebugger : MonoBehaviour
             debugInfo += $"Lobby Code: {(string.IsNullOrWhiteSpace(currentLobbyCode) ? "(not set)" : currentLobbyCode)}\n";
             debugInfo += $"Lobby Action: {(string.IsNullOrWhiteSpace(currentLobbyAction) ? "(not selected)" : currentLobbyAction)}\n";
             debugInfo += $"Bearer Token Source: {lastResolvedBearerTokenSource}\n\n";
+            debugInfo += $"Active Save ID: {(string.IsNullOrWhiteSpace(activeSessionSaveId) ? "(none)" : activeSessionSaveId)}\n";
+            debugInfo += $"Has Unexported Changes: {(activeSessionHasUnexportedChanges ? "Yes" : "No")}\n\n";
+        }
+
+        if (!string.IsNullOrWhiteSpace(saveStatusMessage))
+        {
+            debugInfo += $"=== SAVE STATUS ===\n{saveStatusMessage}\n\n";
         }
         
         debugInfo += $"=== CONTROLS ===\n";
@@ -1435,6 +1609,23 @@ public class ClientDebugger : MonoBehaviour
         if (showCreateLobbyDialog)
         {
             DrawCreateLobbyDialog();
+        }
+
+        if (showSaveMenuDialog)
+        {
+            DrawSaveMenuDialog();
+        }
+
+        if (showRenameSaveDialog)
+        {
+            DrawRenameSaveDialog();
+        }
+
+        DrawExitGameButton();
+
+        if (showQuitConfirmationDialog)
+        {
+            DrawQuitConfirmationDialog();
         }
     }
     
@@ -1544,6 +1735,7 @@ public class ClientDebugger : MonoBehaviour
         Rect lobbyFieldRect = new Rect(centerButtonRect.x, centerButtonRect.y - 32f, centerButtonRect.width, 32f);
         Rect joinButtonRect = new Rect(centerButtonRect.x, centerButtonRect.y + 16f, centerButtonRect.width, buttonHeight);
         Rect createButtonRect = new Rect(centerButtonRect.x, centerButtonRect.y + 72f, centerButtonRect.width, buttonHeight);
+        Rect saveButtonRect = new Rect(centerButtonRect.x, centerButtonRect.y + 128f, centerButtonRect.width, buttonHeight);
 
         GUI.Label(nameLabelRect, "Player Name", playerNameLabelStyle);
         playerNameInput = DrawPlayerNameField(nameFieldRect, "CenterPlayerNameField");
@@ -1564,8 +1756,13 @@ public class ClientDebugger : MonoBehaviour
             OpenCreateLobbyDialog();
         }
 
+        if (GUI.Button(saveButtonRect, isLoadingSaveDocuments ? "LOADING SAVES..." : "SAVE MENU", centerButtonStyle))
+        {
+            OpenSaveMenu();
+        }
+
         GUI.enabled = previousEnabled;
-        DrawCenterConnectionInfo(createButtonRect.y + createButtonRect.height + 20f);
+        DrawCenterConnectionInfo(saveButtonRect.y + saveButtonRect.height + 20f);
     }
 
     private void DrawCenterConnectionInfo(float topY)
@@ -1592,6 +1789,11 @@ public class ClientDebugger : MonoBehaviour
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(saveStatusMessage))
+        {
+            connectionInfo += $"{saveStatusMessage}\n";
+        }
+
         connectionInfo += $"Player name: {PlayerSessionSettings.SanitizePlayerName(playerNameInput)}\n";
         connectionInfo += "Press F11 for debug info";
 
@@ -1615,14 +1817,18 @@ public class ClientDebugger : MonoBehaviour
     private void DrawCreateLobbyDialog()
     {
         Rect dialogRect = new Rect((Screen.width - 360f) / 2f, (Screen.height - 180f) / 2f, 360f, 180f);
-        GUI.Box(dialogRect, "CREATE LOBBY");
+        bool creatingFromSave = !string.IsNullOrWhiteSpace(selectedSaveIdForCreateLobby) && pendingRestoreSaveDocument != null;
+        GUI.Box(dialogRect, creatingFromSave ? "CREATE LOBBY FROM SAVE" : "CREATE LOBBY");
 
         Rect labelRect = new Rect(dialogRect.x + 20f, dialogRect.y + 38f, dialogRect.width - 40f, 24f);
         Rect fieldRect = new Rect(dialogRect.x + 20f, dialogRect.y + 68f, dialogRect.width - 40f, 32f);
         Rect createRect = new Rect(dialogRect.x + 20f, dialogRect.y + 118f, dialogRect.width - 120f, 36f);
         Rect cancelRect = new Rect(dialogRect.x + dialogRect.width - 90f, dialogRect.y + 118f, 70f, 36f);
 
-        GUI.Label(labelRect, "Enter Custom Lobby Code:", playerNameLabelStyle);
+        string dialogLabel = creatingFromSave && pendingRestoreSaveDocument != null
+            ? $"Enter Lobby Code for '{pendingRestoreSaveDocument.name}':"
+            : "Enter Custom Lobby Code:";
+        GUI.Label(labelRect, dialogLabel, playerNameLabelStyle);
         createLobbyCodeInput = DrawLobbyCodeField(fieldRect, "CreateLobbyCodeField", createLobbyCodeInput);
 
         bool previousEnabled = GUI.enabled;
@@ -1636,9 +1842,173 @@ public class ClientDebugger : MonoBehaviour
         if (GUI.Button(cancelRect, "CANCEL"))
         {
             showCreateLobbyDialog = false;
+            selectedSaveIdForCreateLobby = string.Empty;
+            pendingRestoreSaveDocument = null;
         }
 
         GUI.enabled = previousEnabled;
+    }
+
+    private void DrawSaveMenuDialog()
+    {
+        Rect dialogRect = new Rect((Screen.width - 620f) / 2f, (Screen.height - 430f) / 2f, 620f, 430f);
+        GUI.Box(dialogRect, "SAVE MENU");
+
+        Rect refreshRect = new Rect(dialogRect.x + dialogRect.width - 190f, dialogRect.y + 12f, 80f, 24f);
+        Rect closeRect = new Rect(dialogRect.x + dialogRect.width - 100f, dialogRect.y + 12f, 80f, 24f);
+        Rect messageRect = new Rect(dialogRect.x + 20f, dialogRect.y + 42f, dialogRect.width - 40f, 20f);
+        Rect listRect = new Rect(dialogRect.x + 20f, dialogRect.y + 70f, dialogRect.width - 40f, 320f);
+
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = !isLoadingSaveDocuments;
+        if (GUI.Button(refreshRect, "REFRESH"))
+        {
+            StartCoroutine(LoadSaveDocuments());
+        }
+        GUI.enabled = previousEnabled;
+
+        if (GUI.Button(closeRect, "CLOSE"))
+        {
+            showSaveMenuDialog = false;
+            showRenameSaveDialog = false;
+        }
+
+        string headerMessage = string.IsNullOrWhiteSpace(saveMenuStatusMessage)
+            ? (isLoadingSaveDocuments ? "Loading saves..." : "Select a save to create a lobby from it, rename it, or delete it.")
+            : saveMenuStatusMessage;
+        GUI.Label(messageRect, headerMessage, debugTextStyle ?? GUI.skin.label);
+
+        float contentHeight = 0f;
+        foreach (SaveDocumentResponse saveDocument in cachedSaveDocuments)
+        {
+            contentHeight += IsSaveMenuSelection(saveDocument) ? 118f : 78f;
+            contentHeight += 8f;
+        }
+        contentHeight = Mathf.Max(contentHeight, listRect.height - 8f);
+
+        Rect contentRect = new Rect(0f, 0f, listRect.width - 18f, contentHeight);
+        saveMenuScrollPosition = GUI.BeginScrollView(listRect, saveMenuScrollPosition, contentRect);
+
+        float itemY = 0f;
+        if (cachedSaveDocuments.Length == 0 && !isLoadingSaveDocuments)
+        {
+            GUI.Label(new Rect(0f, 0f, contentRect.width, 24f), "No cloud saves found yet.", debugTextStyle ?? GUI.skin.label);
+        }
+
+        foreach (SaveDocumentResponse saveDocument in cachedSaveDocuments)
+        {
+            bool isSelected = IsSaveMenuSelection(saveDocument);
+            float itemHeight = isSelected ? 118f : 78f;
+            Rect itemRect = new Rect(0f, itemY, contentRect.width, itemHeight);
+            if (GUI.Button(itemRect, string.Empty))
+            {
+                selectedSaveMenuSaveId = SanitizeSaveId(saveDocument.saveId);
+                saveMenuStatusMessage = string.Empty;
+            }
+
+            GUI.Label(new Rect(itemRect.x + 12f, itemRect.y + 8f, itemRect.width - 24f, 22f), saveDocument.name, playerNameLabelStyle ?? GUI.skin.label);
+            GUI.Label(new Rect(itemRect.x + 12f, itemRect.y + 30f, itemRect.width - 24f, 18f), $"Save ID: {saveDocument.saveId}", debugTextStyle ?? GUI.skin.label);
+            GUI.Label(new Rect(itemRect.x + 12f, itemRect.y + 48f, itemRect.width - 24f, 18f), $"Created: {FormatUnixTimestamp(saveDocument.createdAtUnix)}", debugTextStyle ?? GUI.skin.label);
+            GUI.Label(new Rect(itemRect.x + 260f, itemRect.y + 48f, itemRect.width - 272f, 18f), $"Updated: {FormatUnixTimestamp(saveDocument.updatedAtUnix)}", debugTextStyle ?? GUI.skin.label);
+            GUI.Label(new Rect(itemRect.x + 12f, itemRect.y + 64f, itemRect.width - 24f, 18f), saveDocument.hasUnexportedChanges ? "Unexported changes pending" : "Exported / clean", debugTextStyle ?? GUI.skin.label);
+
+            if (isSelected)
+            {
+                Rect createFromSaveRect = new Rect(itemRect.x + 12f, itemRect.y + 86f, 180f, 24f);
+                Rect renameRect = new Rect(itemRect.x + 204f, itemRect.y + 86f, 110f, 24f);
+                Rect deleteRect = new Rect(itemRect.x + 326f, itemRect.y + 86f, 110f, 24f);
+
+                if (GUI.Button(createFromSaveRect, "CREATE LOBBY FROM SAVE"))
+                {
+                    BeginCreateLobbyFromSave(saveDocument);
+                }
+
+                if (GUI.Button(renameRect, "RENAME"))
+                {
+                    OpenRenameSaveDialog(saveDocument);
+                }
+
+                if (GUI.Button(deleteRect, "DELETE"))
+                {
+                    StartCoroutine(DeleteSaveDocument(saveDocument.saveId));
+                }
+            }
+
+            itemY += itemHeight + 8f;
+        }
+
+        GUI.EndScrollView();
+    }
+
+    private void DrawRenameSaveDialog()
+    {
+        SaveDocumentResponse selectedSaveDocument = FindCachedSaveDocument(selectedSaveMenuSaveId);
+        if (selectedSaveDocument == null)
+        {
+            showRenameSaveDialog = false;
+            return;
+        }
+
+        Rect dialogRect = new Rect((Screen.width - 380f) / 2f, (Screen.height - 170f) / 2f, 380f, 170f);
+        GUI.Box(dialogRect, "RENAME SAVE");
+
+        Rect labelRect = new Rect(dialogRect.x + 20f, dialogRect.y + 36f, dialogRect.width - 40f, 22f);
+        Rect fieldRect = new Rect(dialogRect.x + 20f, dialogRect.y + 66f, dialogRect.width - 40f, 30f);
+        Rect saveRect = new Rect(dialogRect.x + 20f, dialogRect.y + 116f, 120f, 30f);
+        Rect cancelRect = new Rect(dialogRect.x + dialogRect.width - 140f, dialogRect.y + 116f, 120f, 30f);
+
+        GUI.Label(labelRect, $"Rename '{selectedSaveDocument.name}'", playerNameLabelStyle ?? GUI.skin.label);
+        renameSaveInput = GUI.TextField(fieldRect, renameSaveInput ?? string.Empty, 48, playerNameFieldStyle);
+
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = !isLoadingSaveDocuments;
+        if (GUI.Button(saveRect, "SAVE"))
+        {
+            StartCoroutine(RenameSaveDocument(selectedSaveDocument.saveId, renameSaveInput));
+        }
+        GUI.enabled = previousEnabled;
+
+        if (GUI.Button(cancelRect, "CANCEL"))
+        {
+            showRenameSaveDialog = false;
+        }
+    }
+
+    private void DrawExitGameButton()
+    {
+        Rect exitButtonRect = new Rect((Screen.width - 220f) / 2f, Screen.height - 62f, 220f, 36f);
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = !showQuitConfirmationDialog;
+
+        if (GUI.Button(exitButtonRect, "EXIT GAME"))
+        {
+            RequestQuitApplication();
+        }
+
+        GUI.enabled = previousEnabled;
+    }
+
+    private void DrawQuitConfirmationDialog()
+    {
+        Rect dialogRect = new Rect((Screen.width - 420f) / 2f, (Screen.height - 180f) / 2f, 420f, 180f);
+        GUI.Box(dialogRect, "EXIT GAME");
+
+        Rect messageRect = new Rect(dialogRect.x + 20f, dialogRect.y + 42f, dialogRect.width - 40f, 56f);
+        Rect quitRect = new Rect(dialogRect.x + 20f, dialogRect.y + dialogRect.height - 52f, 170f, 30f);
+        Rect cancelRect = new Rect(dialogRect.x + dialogRect.width - 190f, dialogRect.y + dialogRect.height - 52f, 170f, 30f);
+
+        GUI.Label(messageRect, "The current save has unexported changes. Quit anyway?", debugTextStyle ?? GUI.skin.label);
+
+        if (GUI.Button(quitRect, "QUIT WITHOUT EXPORT"))
+        {
+            showQuitConfirmationDialog = false;
+            PerformGracefulQuit();
+        }
+
+        if (GUI.Button(cancelRect, "CANCEL"))
+        {
+            showQuitConfirmationDialog = false;
+        }
     }
     
     private void DrawDebugWindow()
@@ -1692,6 +2062,11 @@ public class ClientDebugger : MonoBehaviour
                 if (GUILayout.Button("CREATE LOBBY", GUILayout.Height(30)))
                 {
                     OpenCreateLobbyDialog();
+                }
+
+                if (GUILayout.Button(isLoadingSaveDocuments ? "LOADING SAVES..." : "SAVES", GUILayout.Height(30)))
+                {
+                    OpenSaveMenu();
                 }
             }
             else if (isConnected)
@@ -1820,6 +2195,13 @@ public class ClientDebugger : MonoBehaviour
         return SanitizeLobbyCode(candidate);
     }
 
+    private string ResolveRequestedSaveId()
+    {
+        return pendingLobbyRequestAction == LobbyRequestAction.Create
+            ? SanitizeSaveId(selectedSaveIdForCreateLobby)
+            : string.Empty;
+    }
+
     private string ResolveRequestedLobbyAction()
     {
         switch (pendingLobbyRequestAction)
@@ -1831,6 +2213,91 @@ public class ClientDebugger : MonoBehaviour
             default:
                 return string.Empty;
         }
+    }
+
+    private string SanitizeSaveId(string rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return string.Empty;
+        }
+
+        StringBuilder builder = new StringBuilder(rawValue.Length);
+        foreach (char character in rawValue.Trim())
+        {
+            if (char.IsLetterOrDigit(character) || character == '-' || character == '_')
+            {
+                builder.Append(character);
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private void ApplyActiveSaveState(OrchestrationApiResponse response)
+    {
+        if (pendingLobbyRequestAction != LobbyRequestAction.Create || response == null)
+        {
+            return;
+        }
+
+        string saveId = SanitizeSaveId(response.saveId);
+        if (string.IsNullOrWhiteSpace(saveId))
+        {
+            return;
+        }
+
+        activeSessionSaveId = saveId;
+        selectedSaveIdForCreateLobby = saveId;
+        activeSessionHasUnexportedChanges = false;
+        if (string.IsNullOrWhiteSpace(saveStatusMessage))
+        {
+            saveStatusMessage = $"Active save: {activeSessionSaveId}";
+        }
+    }
+
+    private void ApplyActiveSaveState(JoinTicketApiResponse response)
+    {
+        if (pendingLobbyRequestAction != LobbyRequestAction.Create || response == null)
+        {
+            return;
+        }
+
+        string saveId = SanitizeSaveId(response.saveId);
+        if (string.IsNullOrWhiteSpace(saveId))
+        {
+            return;
+        }
+
+        activeSessionSaveId = saveId;
+        selectedSaveIdForCreateLobby = saveId;
+        saveStatusMessage = $"Active save: {activeSessionSaveId}";
+    }
+
+    private void ApplyActiveSaveState(SaveDocumentResponse saveRecord)
+    {
+        if (saveRecord == null)
+        {
+            return;
+        }
+
+        string saveId = SanitizeSaveId(saveRecord.saveId);
+        if (!string.IsNullOrWhiteSpace(saveId))
+        {
+            activeSessionSaveId = saveId;
+        }
+
+        activeSessionHasUnexportedChanges = saveRecord.hasUnexportedChanges;
+        lastObservedLocalSilverPennies = GetSavedSilverPennies(saveRecord);
+        lastObservedLocalHasLockpickRelic = GetSavedHasLockpickRelic(saveRecord);
+        lastObservedNpcDialogueProgression = GetSavedNpcDialogueProgression(saveRecord);
+    }
+
+    private void ClearActiveSessionSaveState()
+    {
+        activeSessionSaveId = string.Empty;
+        activeSessionHasUnexportedChanges = false;
+        saveStatusMessage = string.Empty;
     }
 
     private LobbyRequestAction ParseLobbyRequestAction(string rawValue)
@@ -1989,6 +2456,78 @@ public class ClientDebugger : MonoBehaviour
         }
     }
 
+    private IEnumerator SendSaveRequest(string method, string endpoint, string bodyJson, Action<SaveApiResponse> onSuccess, Action<string> onError)
+    {
+        string url = BuildOrchestrationUrl(endpoint);
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            onError?.Invoke("No save API URL is configured.");
+            yield break;
+        }
+
+        string resolvedBearerToken = string.Empty;
+        string authorizationError = null;
+
+        yield return EnsureAuthorizationBearerToken(
+            token => resolvedBearerToken = token,
+            error => authorizationError = error);
+
+        if (!string.IsNullOrWhiteSpace(authorizationError))
+        {
+            onError?.Invoke(authorizationError);
+            yield break;
+        }
+
+        using (UnityWebRequest request = new UnityWebRequest(url, method))
+        {
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = Mathf.CeilToInt(requestTimeoutSeconds);
+
+            if (method != UnityWebRequest.kHttpVerbGET)
+            {
+                byte[] bodyBytes = Encoding.UTF8.GetBytes(string.IsNullOrWhiteSpace(bodyJson) ? "{}" : bodyJson);
+                request.uploadHandler = new UploadHandlerRaw(bodyBytes);
+                request.SetRequestHeader("Content-Type", "application/json");
+            }
+
+            ApplyOrchestrationHeaders(request, resolvedBearerToken);
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                string statusCode = request.responseCode > 0 ? $"HTTP {request.responseCode}: " : string.Empty;
+                onError?.Invoke($"{statusCode}{request.error}");
+                yield break;
+            }
+
+            string json = request.downloadHandler.text;
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                onError?.Invoke("Save API returned an empty payload.");
+                yield break;
+            }
+
+            SaveApiResponse response;
+            try
+            {
+                response = JsonUtility.FromJson<SaveApiResponse>(json);
+            }
+            catch (Exception ex)
+            {
+                onError?.Invoke($"Invalid save API response: {ex.Message}");
+                yield break;
+            }
+
+            if (response == null)
+            {
+                onError?.Invoke("Save API returned an empty object.");
+                yield break;
+            }
+
+            onSuccess?.Invoke(response);
+        }
+    }
+
     private string BuildOrchestrationUrl(string endpoint)
     {
         if (string.IsNullOrWhiteSpace(orchestrationApiBaseUrl))
@@ -2008,6 +2547,17 @@ public class ClientDebugger : MonoBehaviour
         }
 
         return endpoint.StartsWith("/") ? $"{trimmedBaseUrl}{endpoint}" : $"{trimmedBaseUrl}/{endpoint}";
+    }
+
+    private string BuildSaveDocumentEndpoint(string saveId)
+    {
+        string sanitizedSaveId = SanitizeSaveId(saveId);
+        if (string.IsNullOrWhiteSpace(saveDocumentsEndpoint) || string.IsNullOrWhiteSpace(sanitizedSaveId))
+        {
+            return saveDocumentsEndpoint;
+        }
+
+        return $"{saveDocumentsEndpoint.TrimEnd('/')}/{UnityWebRequest.EscapeURL(sanitizedSaveId)}";
     }
 
     private void ApplyOrchestrationHeaders(UnityWebRequest request, string resolvedBearerToken)
@@ -2502,6 +3052,736 @@ public class ClientDebugger : MonoBehaviour
         return !string.IsNullOrWhiteSpace(response.targetId) ? response.targetId : response.instanceId;
     }
 
+    private void OnSessionCheckpointActivated(string checkpointId, Vector3 checkpointPosition)
+    {
+        if (suppressNextCheckpointAutosave)
+        {
+            suppressNextCheckpointAutosave = false;
+            return;
+        }
+
+        if (!isConnected || string.IsNullOrWhiteSpace(activeSessionSaveId))
+        {
+            return;
+        }
+
+        if (checkpointAutosaveRoutine != null)
+        {
+            StopCoroutine(checkpointAutosaveRoutine);
+        }
+
+        checkpointAutosaveRoutine = StartCoroutine(AutosaveCheckpointState(checkpointId, checkpointPosition));
+    }
+
+    private void OnLocalSilverPenniesChanged(int silverPennies)
+    {
+        lastObservedLocalSilverPennies = Math.Max(0, silverPennies);
+
+        if (suppressedLocalPlayerStateAutosaveEvents > 0)
+        {
+            suppressedLocalPlayerStateAutosaveEvents--;
+            return;
+        }
+
+        if (!isConnected || string.IsNullOrWhiteSpace(activeSessionSaveId))
+        {
+            return;
+        }
+
+        QueueLocalPlayerStateAutosave("silver-pennies-collected");
+    }
+
+    private void OnLocalLockpickRelicChanged(bool hasLockpickRelic)
+    {
+        lastObservedLocalHasLockpickRelic = hasLockpickRelic;
+
+        if (suppressedLocalPlayerStateAutosaveEvents > 0)
+        {
+            suppressedLocalPlayerStateAutosaveEvents--;
+            return;
+        }
+
+        if (!isConnected || string.IsNullOrWhiteSpace(activeSessionSaveId))
+        {
+            return;
+        }
+
+        QueueLocalPlayerStateAutosave(hasLockpickRelic ? "lockpick-relic-collected" : "lockpick-relic-removed");
+    }
+
+    private void OnNpcDialogueProgressionChanged()
+    {
+        lastObservedNpcDialogueProgression = NpcDialogueInteractable.CaptureAllProgressionState();
+
+        if (suppressedLocalPlayerStateAutosaveEvents > 0)
+        {
+            return;
+        }
+
+        if (!isConnected || string.IsNullOrWhiteSpace(activeSessionSaveId))
+        {
+            return;
+        }
+
+        QueueLocalPlayerStateAutosave("npc-dialogue-progression");
+    }
+
+    private void QueueLocalPlayerStateAutosave(string mutationSource)
+    {
+        if (localPlayerStateAutosaveRoutine != null)
+        {
+            StopCoroutine(localPlayerStateAutosaveRoutine);
+        }
+
+        localPlayerStateAutosaveRoutine = StartCoroutine(AutosaveLocalPlayerState(mutationSource));
+    }
+
+    private IEnumerator AutosaveCheckpointState(string checkpointId, Vector3 checkpointPosition)
+    {
+        string saveId = SanitizeSaveId(activeSessionSaveId);
+        if (string.IsNullOrWhiteSpace(saveId))
+        {
+            checkpointAutosaveRoutine = null;
+            yield break;
+        }
+
+        UpdateSaveDocumentRequestPayload payload = new UpdateSaveDocumentRequestPayload
+        {
+            lobbyCode = ResolveRequestedLobbyCode(),
+            hasUnexportedChanges = true,
+            lastMutationSource = "checkpoint-autosave",
+            checkpoint = new CheckpointSaveRequestPayload
+            {
+                checkpointId = checkpointId ?? string.Empty,
+                position = new Vector3SavePayload(checkpointPosition),
+                updatedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            },
+            playerState = CaptureLocalPlayerStatePayload(),
+            worldState = new WorldStateSaveRequestPayload
+            {
+                presentShards = CapturePresentWorldShards(),
+            },
+        };
+
+        string requestError = null;
+        SaveApiResponse response = null;
+
+        yield return SendSaveRequest(
+            "PATCH",
+            BuildSaveDocumentEndpoint(saveId),
+            JsonUtility.ToJson(payload),
+            saveResponse => response = saveResponse,
+            error => requestError = error);
+
+        checkpointAutosaveRoutine = null;
+
+        if (!string.IsNullOrWhiteSpace(requestError))
+        {
+            saveStatusMessage = $"Checkpoint autosave failed: {requestError}";
+            LogDebug(saveStatusMessage);
+            yield break;
+        }
+
+        if (response?.save != null)
+        {
+            ApplyActiveSaveState(response.save);
+        }
+
+        activeSessionHasUnexportedChanges = true;
+        saveStatusMessage = $"Autosaved checkpoint '{checkpointId}' to {activeSessionSaveId}";
+        LogDebug(saveStatusMessage);
+    }
+
+    private IEnumerator AutosaveLocalPlayerState(string mutationSource)
+    {
+        string saveId = SanitizeSaveId(activeSessionSaveId);
+        if (string.IsNullOrWhiteSpace(saveId))
+        {
+            localPlayerStateAutosaveRoutine = null;
+            yield break;
+        }
+
+        float deadline = Time.time + 10f;
+        PlayerMovement localPlayer = null;
+        while (Time.time < deadline)
+        {
+            localPlayer = FindLocalOwnerPlayerMovement();
+            if (localPlayer != null)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        UpdateSaveDocumentRequestPayload payload = new UpdateSaveDocumentRequestPayload
+        {
+            hasUnexportedChanges = true,
+            lastMutationSource = string.IsNullOrWhiteSpace(mutationSource) ? "player-state-autosave" : mutationSource,
+            playerState = CaptureLocalPlayerStatePayload(localPlayer),
+        };
+
+        string requestError = null;
+        SaveApiResponse response = null;
+
+        yield return SendSaveRequest(
+            "PATCH",
+            BuildSaveDocumentEndpoint(saveId),
+            JsonUtility.ToJson(payload),
+            saveResponse => response = saveResponse,
+            error => requestError = error);
+
+        localPlayerStateAutosaveRoutine = null;
+
+        if (!string.IsNullOrWhiteSpace(requestError))
+        {
+            saveStatusMessage = $"Player state autosave failed: {requestError}";
+            LogDebug(saveStatusMessage);
+            yield break;
+        }
+
+        if (response?.save != null)
+        {
+            ApplyActiveSaveState(response.save);
+        }
+
+        activeSessionHasUnexportedChanges = true;
+        saveStatusMessage = $"Autosaved local player state to {activeSessionSaveId}";
+        LogDebug(saveStatusMessage);
+    }
+
+    private WorldShardSavePayload[] CapturePresentWorldShards()
+    {
+        List<WorldShardSavePayload> presentShards = new List<WorldShardSavePayload>();
+
+        foreach (string shardTag in WorldShardTags)
+        {
+            try
+            {
+                GameObject[] taggedObjects = GameObject.FindGameObjectsWithTag(shardTag);
+                foreach (GameObject taggedObject in taggedObjects)
+                {
+                    if (taggedObject == null)
+                    {
+                        continue;
+                    }
+
+                    presentShards.Add(new WorldShardSavePayload
+                    {
+                        tag = shardTag,
+                        name = taggedObject.name,
+                        position = new Vector3SavePayload(taggedObject.transform.position),
+                    });
+                }
+            }
+            catch (UnityException)
+            {
+                // Ignore scenes that do not define every shard tag.
+            }
+        }
+
+        return presentShards.ToArray();
+    }
+
+    private IEnumerator ApplyPendingSaveRestoreAfterConnect()
+    {
+        SaveDocumentResponse restoreDocument = CloneSaveDocument(pendingRestoreSaveDocument);
+        if (restoreDocument == null)
+        {
+            restorePendingSaveRoutine = null;
+            yield break;
+        }
+
+        float deadline = Time.time + 10f;
+        MultiplayerGameManager gameManager = null;
+        WeaponClassController localWeaponController = null;
+        PlayerMovement localPlayerMovement = null;
+
+        while (Time.time < deadline)
+        {
+            gameManager = FindFirstObjectByType<MultiplayerGameManager>();
+            localWeaponController = FindLocalOwnerWeaponController();
+            localPlayerMovement = FindLocalOwnerPlayerMovement();
+
+            if (gameManager != null && gameManager.IsSpawned
+                && localWeaponController != null && localWeaponController.IsSpawned && localWeaponController.IsOwner
+                && localPlayerMovement != null && localPlayerMovement.IsSpawned && localPlayerMovement.IsOwner)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        if (gameManager == null || !gameManager.IsSpawned || localWeaponController == null || localPlayerMovement == null)
+        {
+            saveStatusMessage = "Connected, but save restore could not find the multiplayer session objects.";
+            restorePendingSaveRoutine = null;
+            yield break;
+        }
+
+        if (HasSavedCheckpoint(restoreDocument))
+        {
+            suppressNextCheckpointAutosave = true;
+            gameManager.ActivateCheckpointServerRpc(ToVector3(restoreDocument.checkpoint.position), new Unity.Collections.FixedString128Bytes(restoreDocument.checkpoint.checkpointId ?? string.Empty));
+        }
+
+        if (restoreDocument.worldState != null && restoreDocument.worldState.presentShards != null)
+        {
+            foreach (WorldShardSavePayload savedShard in restoreDocument.worldState.presentShards)
+            {
+                int shardTypeInt = GetShardTypeIntFromTag(savedShard.tag);
+                if (shardTypeInt > 0)
+                {
+                    localWeaponController.RestoreWorldShardFromSaveServerRpc(shardTypeInt, ToVector3(savedShard.position));
+                }
+            }
+        }
+
+        WorldShardSavePayload[] shardsToRemove = GetWorldShardsMissingFromSave(restoreDocument.worldState != null ? restoreDocument.worldState.presentShards : null);
+        foreach (WorldShardSavePayload missingShard in shardsToRemove)
+        {
+            int shardTypeInt = GetShardTypeIntFromTag(missingShard.tag);
+            if (shardTypeInt > 0)
+            {
+                localWeaponController.RestoreMissingWorldShardServerRpc(shardTypeInt, ToVector3(missingShard.position));
+            }
+        }
+
+        int savedSilverPennies = GetSavedSilverPennies(restoreDocument);
+        bool savedHasLockpickRelic = GetSavedHasLockpickRelic(restoreDocument);
+        NpcDialogueProgressSaveEntry[] savedNpcDialogueProgression = GetSavedNpcDialogueProgression(restoreDocument);
+        suppressedLocalPlayerStateAutosaveEvents = 2;
+        localPlayerMovement.ApplySavedSilverPennies(savedSilverPennies);
+        localPlayerMovement.ApplySavedLockpickRelic(savedHasLockpickRelic);
+        NpcDialogueInteractable.ApplyAllProgressionState(savedNpcDialogueProgression, suppressEvents: true);
+        lastObservedLocalSilverPennies = savedSilverPennies;
+        lastObservedLocalHasLockpickRelic = savedHasLockpickRelic;
+        lastObservedNpcDialogueProgression = savedNpcDialogueProgression ?? Array.Empty<NpcDialogueProgressSaveEntry>();
+
+        pendingRestoreSaveDocument = null;
+        restorePendingSaveRoutine = null;
+        activeSessionHasUnexportedChanges = restoreDocument.hasUnexportedChanges;
+        saveStatusMessage = $"Restored save '{restoreDocument.name}' into the new lobby.";
+    }
+
+    private WorldShardSavePayload[] GetWorldShardsMissingFromSave(WorldShardSavePayload[] savedPresentShards)
+    {
+        List<WorldShardSavePayload> missingShards = new List<WorldShardSavePayload>();
+        WorldShardSavePayload[] currentPresentShards = CapturePresentWorldShards();
+
+        foreach (WorldShardSavePayload currentShard in currentPresentShards)
+        {
+            if (!ContainsMatchingWorldShard(savedPresentShards, currentShard))
+            {
+                missingShards.Add(currentShard);
+            }
+        }
+
+        return missingShards.ToArray();
+    }
+
+    private bool ContainsMatchingWorldShard(WorldShardSavePayload[] savedPresentShards, WorldShardSavePayload currentShard)
+    {
+        if (savedPresentShards == null)
+        {
+            return false;
+        }
+
+        foreach (WorldShardSavePayload savedShard in savedPresentShards)
+        {
+            if (!string.Equals(savedShard.tag, currentShard.tag, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if ((ToVector3(savedShard.position) - ToVector3(currentShard.position)).sqrMagnitude <= SaveShardRestorePositionTolerance * SaveShardRestorePositionTolerance)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private WeaponClassController FindLocalOwnerWeaponController()
+    {
+        WeaponClassController[] controllers = FindObjectsByType<WeaponClassController>(FindObjectsSortMode.None);
+        foreach (WeaponClassController controller in controllers)
+        {
+            if (controller != null && controller.IsSpawned && controller.IsOwner)
+            {
+                return controller;
+            }
+        }
+
+        return null;
+    }
+
+    private PlayerMovement FindLocalOwnerPlayerMovement()
+    {
+        PlayerMovement[] players = FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None);
+        foreach (PlayerMovement player in players)
+        {
+            if (player != null && player.IsSpawned && player.IsOwner)
+            {
+                return player;
+            }
+        }
+
+        return null;
+    }
+
+    private PlayerStateSaveRequestPayload CaptureLocalPlayerStatePayload(PlayerMovement localPlayer = null)
+    {
+        PlayerMovement resolvedLocalPlayer = localPlayer ?? FindLocalOwnerPlayerMovement();
+        if (resolvedLocalPlayer != null)
+        {
+            lastObservedLocalSilverPennies = Math.Max(0, resolvedLocalPlayer.SilverPennies);
+            lastObservedLocalHasLockpickRelic = resolvedLocalPlayer.HasLockpickRelic;
+        }
+
+        lastObservedNpcDialogueProgression = NpcDialogueInteractable.CaptureAllProgressionState();
+
+        return new PlayerStateSaveRequestPayload
+        {
+            silverPennies = Math.Max(0, lastObservedLocalSilverPennies),
+            hasLockpickRelic = lastObservedLocalHasLockpickRelic,
+            npcDialogueProgression = lastObservedNpcDialogueProgression ?? Array.Empty<NpcDialogueProgressSaveEntry>(),
+        };
+    }
+
+    private int GetSavedSilverPennies(SaveDocumentResponse saveDocument)
+    {
+        if (saveDocument?.playerState == null)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, saveDocument.playerState.silverPennies);
+    }
+
+    private bool GetSavedHasLockpickRelic(SaveDocumentResponse saveDocument)
+    {
+        return saveDocument?.playerState != null && saveDocument.playerState.hasLockpickRelic;
+    }
+
+    private NpcDialogueProgressSaveEntry[] GetSavedNpcDialogueProgression(SaveDocumentResponse saveDocument)
+    {
+        if (saveDocument?.playerState?.npcDialogueProgression == null)
+        {
+            return Array.Empty<NpcDialogueProgressSaveEntry>();
+        }
+
+        return saveDocument.playerState.npcDialogueProgression;
+    }
+
+    private bool HasSavedCheckpoint(SaveDocumentResponse saveDocument)
+    {
+        return saveDocument != null
+            && saveDocument.checkpoint != null
+            && !string.IsNullOrWhiteSpace(saveDocument.checkpoint.checkpointId);
+    }
+
+    private Vector3 ToVector3(Vector3SavePayload payload)
+    {
+        return payload == null ? Vector3.zero : new Vector3(payload.x, payload.y, payload.z);
+    }
+
+    private int GetShardTypeIntFromTag(string shardTag)
+    {
+        switch (shardTag)
+        {
+            case "ValorShard":
+                return 1;
+            case "WhisperShard":
+                return 2;
+            case "StormShard":
+                return 3;
+            case "SoulShard":
+                return 4;
+            default:
+                return 0;
+        }
+    }
+
+    private IEnumerator LoadSaveDocuments()
+    {
+        if (isLoadingSaveDocuments)
+        {
+            yield break;
+        }
+
+        isLoadingSaveDocuments = true;
+        string requestError = null;
+        SaveApiResponse response = null;
+
+        yield return SendSaveRequest(
+            UnityWebRequest.kHttpVerbGET,
+            saveDocumentsEndpoint,
+            null,
+            saveResponse => response = saveResponse,
+            error => requestError = error);
+
+        isLoadingSaveDocuments = false;
+
+        if (!string.IsNullOrWhiteSpace(requestError))
+        {
+            saveMenuStatusMessage = $"Failed to load saves: {requestError}";
+            yield break;
+        }
+
+        cachedSaveDocuments = response?.saves ?? Array.Empty<SaveDocumentResponse>();
+        if (FindCachedSaveDocument(selectedSaveMenuSaveId) == null)
+        {
+            selectedSaveMenuSaveId = string.Empty;
+        }
+
+        saveMenuStatusMessage = cachedSaveDocuments.Length == 0
+            ? "No cloud saves are available yet."
+            : $"Loaded {cachedSaveDocuments.Length} save{(cachedSaveDocuments.Length == 1 ? string.Empty : "s")}.";
+    }
+
+    private IEnumerator RenameSaveDocument(string saveId, string newName)
+    {
+        string sanitizedSaveId = SanitizeSaveId(saveId);
+        if (string.IsNullOrWhiteSpace(sanitizedSaveId))
+        {
+            yield break;
+        }
+
+        isLoadingSaveDocuments = true;
+        string requestError = null;
+        SaveApiResponse response = null;
+
+        yield return SendSaveRequest(
+            "PATCH",
+            BuildSaveDocumentEndpoint(sanitizedSaveId),
+            JsonUtility.ToJson(new RenameSaveDocumentRequestPayload { name = (newName ?? string.Empty).Trim() }),
+            saveResponse => response = saveResponse,
+            error => requestError = error);
+
+        isLoadingSaveDocuments = false;
+
+        if (!string.IsNullOrWhiteSpace(requestError))
+        {
+            saveMenuStatusMessage = $"Failed to rename save: {requestError}";
+            yield break;
+        }
+
+        if (response?.save != null)
+        {
+            UpsertCachedSaveDocument(response.save);
+            if (pendingRestoreSaveDocument != null && SanitizeSaveId(pendingRestoreSaveDocument.saveId) == sanitizedSaveId)
+            {
+                pendingRestoreSaveDocument = CloneSaveDocument(response.save);
+            }
+        }
+
+        showRenameSaveDialog = false;
+        saveMenuStatusMessage = "Save renamed.";
+    }
+
+    private IEnumerator DeleteSaveDocument(string saveId)
+    {
+        string sanitizedSaveId = SanitizeSaveId(saveId);
+        if (string.IsNullOrWhiteSpace(sanitizedSaveId))
+        {
+            yield break;
+        }
+
+        isLoadingSaveDocuments = true;
+        string requestError = null;
+
+        yield return SendSaveRequest(
+            UnityWebRequest.kHttpVerbDELETE,
+            BuildSaveDocumentEndpoint(sanitizedSaveId),
+            null,
+            _ => { },
+            error => requestError = error);
+
+        isLoadingSaveDocuments = false;
+
+        if (!string.IsNullOrWhiteSpace(requestError))
+        {
+            saveMenuStatusMessage = $"Failed to delete save: {requestError}";
+            yield break;
+        }
+
+        RemoveCachedSaveDocument(sanitizedSaveId);
+        if (selectedSaveIdForCreateLobby == sanitizedSaveId)
+        {
+            selectedSaveIdForCreateLobby = string.Empty;
+            pendingRestoreSaveDocument = null;
+        }
+
+        if (activeSessionSaveId == sanitizedSaveId)
+        {
+            ClearActiveSessionSaveState();
+        }
+
+        showRenameSaveDialog = false;
+        saveMenuStatusMessage = "Save deleted.";
+    }
+
+    private bool IsSaveMenuSelection(SaveDocumentResponse saveDocument)
+    {
+        return saveDocument != null && SanitizeSaveId(saveDocument.saveId) == selectedSaveMenuSaveId;
+    }
+
+    private SaveDocumentResponse FindCachedSaveDocument(string saveId)
+    {
+        string sanitizedSaveId = SanitizeSaveId(saveId);
+        if (string.IsNullOrWhiteSpace(sanitizedSaveId))
+        {
+            return null;
+        }
+
+        foreach (SaveDocumentResponse saveDocument in cachedSaveDocuments)
+        {
+            if (saveDocument != null && SanitizeSaveId(saveDocument.saveId) == sanitizedSaveId)
+            {
+                return saveDocument;
+            }
+        }
+
+        return null;
+    }
+
+    private void UpsertCachedSaveDocument(SaveDocumentResponse updatedSaveDocument)
+    {
+        if (updatedSaveDocument == null)
+        {
+            return;
+        }
+
+        List<SaveDocumentResponse> updatedDocuments = new List<SaveDocumentResponse>(cachedSaveDocuments.Length + 1);
+        bool replaced = false;
+
+        foreach (SaveDocumentResponse existingSaveDocument in cachedSaveDocuments)
+        {
+            if (existingSaveDocument != null && SanitizeSaveId(existingSaveDocument.saveId) == SanitizeSaveId(updatedSaveDocument.saveId))
+            {
+                updatedDocuments.Add(updatedSaveDocument);
+                replaced = true;
+            }
+            else if (existingSaveDocument != null)
+            {
+                updatedDocuments.Add(existingSaveDocument);
+            }
+        }
+
+        if (!replaced)
+        {
+            updatedDocuments.Add(updatedSaveDocument);
+        }
+
+        updatedDocuments.Sort((left, right) => right.updatedAtUnix.CompareTo(left.updatedAtUnix));
+        cachedSaveDocuments = updatedDocuments.ToArray();
+    }
+
+    private void RemoveCachedSaveDocument(string saveId)
+    {
+        string sanitizedSaveId = SanitizeSaveId(saveId);
+        if (string.IsNullOrWhiteSpace(sanitizedSaveId))
+        {
+            return;
+        }
+
+        List<SaveDocumentResponse> remainingDocuments = new List<SaveDocumentResponse>();
+        foreach (SaveDocumentResponse saveDocument in cachedSaveDocuments)
+        {
+            if (saveDocument != null && SanitizeSaveId(saveDocument.saveId) != sanitizedSaveId)
+            {
+                remainingDocuments.Add(saveDocument);
+            }
+        }
+
+        cachedSaveDocuments = remainingDocuments.ToArray();
+        if (selectedSaveMenuSaveId == sanitizedSaveId)
+        {
+            selectedSaveMenuSaveId = string.Empty;
+        }
+    }
+
+    private SaveDocumentResponse CloneSaveDocument(SaveDocumentResponse source)
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        return JsonUtility.FromJson<SaveDocumentResponse>(JsonUtility.ToJson(source));
+    }
+
+    private string FormatUnixTimestamp(long unixTimestamp)
+    {
+        if (unixTimestamp <= 0)
+        {
+            return "Never";
+        }
+
+        try
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(unixTimestamp).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return "Invalid";
+        }
+    }
+
+    private void RequestQuitApplication()
+    {
+        if (ShouldWarnAboutUnexportedSaveChanges())
+        {
+            showQuitConfirmationDialog = true;
+            return;
+        }
+
+        PerformGracefulQuit();
+    }
+
+    private bool HandleApplicationWantsToQuit()
+    {
+        if (allowImmediateQuit)
+        {
+            return true;
+        }
+
+        if (ShouldWarnAboutUnexportedSaveChanges())
+        {
+            showQuitConfirmationDialog = true;
+            return false;
+        }
+
+        PerformGracefulShutdownForExit();
+        return true;
+    }
+
+    private bool ShouldWarnAboutUnexportedSaveChanges()
+    {
+        return !string.IsNullOrWhiteSpace(activeSessionSaveId) && activeSessionHasUnexportedChanges;
+    }
+
+    private void PerformGracefulQuit()
+    {
+        allowImmediateQuit = true;
+        PerformGracefulShutdownForExit();
+        Application.Quit();
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#endif
+    }
+
+    private void PerformGracefulShutdownForExit()
+    {
+        if (isConnected || isConnecting || isWaitingForServerAvailability)
+        {
+            AttemptDisconnection();
+        }
+    }
+
     private Texture2D CreateSolidTexture(Color color)
     {
         Texture2D texture = new Texture2D(1, 1);
@@ -2515,6 +3795,7 @@ public class ClientDebugger : MonoBehaviour
     {
         public string targetId;
         public string instanceId;
+        public string saveId;
         public string instanceState;
         public string publicIpAddress;
         public string publicDnsName;
@@ -2537,6 +3818,7 @@ public class ClientDebugger : MonoBehaviour
         public string instanceId;
         public string lobbyCode;
         public string lobbyAction;
+        public string saveId;
     }
 
     [Serializable]
@@ -2547,6 +3829,7 @@ public class ClientDebugger : MonoBehaviour
         public string instanceId;
         public string lobbyCode;
         public string lobbyAction;
+        public string saveId;
     }
 
     [Serializable]
@@ -2554,6 +3837,7 @@ public class ClientDebugger : MonoBehaviour
     {
         public string targetId;
         public string instanceId;
+        public string saveId;
         public string connectionAddress;
         public ushort port;
         public string transportMode;
@@ -2566,6 +3850,120 @@ public class ClientDebugger : MonoBehaviour
         public string joinToken;
         public long expiresAtUnix;
         public string message;
+    }
+
+    [Serializable]
+    private class SaveApiResponse
+    {
+        public bool ok;
+        public string message;
+        public int count;
+        public SaveDocumentResponse save;
+        public SaveDocumentResponse[] saves;
+    }
+
+    [Serializable]
+    private class SaveDocumentResponse
+    {
+        public string saveId;
+        public string ownerSubject;
+        public string name;
+        public string lobbyCode;
+        public long createdAtUnix;
+        public long updatedAtUnix;
+        public long lastExportedAtUnix;
+        public bool hasUnexportedChanges;
+        public CheckpointSaveResponse checkpoint;
+        public PlayerStateSaveResponse playerState;
+        public WorldStateSaveResponse worldState;
+        public string lastMutationSource;
+    }
+
+    [Serializable]
+    private class CheckpointSaveResponse
+    {
+        public string checkpointId;
+        public Vector3SavePayload position;
+        public long updatedAtUnix;
+    }
+
+    [Serializable]
+    private class WorldStateSaveResponse
+    {
+        public WorldShardSavePayload[] presentShards;
+    }
+
+    [Serializable]
+    private class UpdateSaveDocumentRequestPayload
+    {
+        public string name;
+        public string lobbyCode;
+        public bool hasUnexportedChanges;
+        public string lastMutationSource;
+        public CheckpointSaveRequestPayload checkpoint;
+        public PlayerStateSaveRequestPayload playerState;
+        public WorldStateSaveRequestPayload worldState;
+    }
+
+    [Serializable]
+    private class RenameSaveDocumentRequestPayload
+    {
+        public string name;
+    }
+
+    [Serializable]
+    private class CheckpointSaveRequestPayload
+    {
+        public string checkpointId;
+        public Vector3SavePayload position;
+        public long updatedAtUnix;
+    }
+
+    [Serializable]
+    private class PlayerStateSaveResponse
+    {
+        public int silverPennies;
+        public bool hasLockpickRelic;
+        public NpcDialogueProgressSaveEntry[] npcDialogueProgression;
+    }
+
+    [Serializable]
+    private class PlayerStateSaveRequestPayload
+    {
+        public int silverPennies;
+        public bool hasLockpickRelic;
+        public NpcDialogueProgressSaveEntry[] npcDialogueProgression;
+    }
+
+    [Serializable]
+    private class WorldStateSaveRequestPayload
+    {
+        public WorldShardSavePayload[] presentShards;
+    }
+
+    [Serializable]
+    private class WorldShardSavePayload
+    {
+        public string tag;
+        public string name;
+        public Vector3SavePayload position;
+    }
+
+    [Serializable]
+    private class Vector3SavePayload
+    {
+        public float x;
+        public float y;
+        public float z;
+
+        public Vector3SavePayload() {}
+
+        public Vector3SavePayload(Vector3 value)
+        {
+            x = value.x;
+            y = value.y;
+            z = value.z;
+        }
     }
 
     [Serializable]

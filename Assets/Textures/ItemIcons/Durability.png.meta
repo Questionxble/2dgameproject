@@ -1,0 +1,689 @@
+fileFormatVersion: 2
+guid: 300c3514791fa504a9bbf7a5017297b3
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 5004864422831713482
+    second: Durability_0
+  - first:
+      213: -1592471371362454459
+    second: Durability_1
+  - first:
+      213: 8697419272315007321
+    second: Durability_2
+  - first:
+      213: 2041343579961237584
+    second: Durability_3
+  - first:
+      213: 3174721725918191613
+    second: Durability_4
+  - first:
+      213: -4246748042878371337
+    second: Durability_5
+  - first:
+      213: 2837385023647356768
+    second: Durability_6
+  - first:
+      213: -4142228741518516529
+    second: Durability_7
+  - first:
+      213: 7884038124595079864
+    second: Durability_8
+  - first:
+      213: -3947233588640025250
+    second: Durability_9
+  - first:
+      213: 340855538268424185
+    second: Durability_10
+  - first:
+      213: 156120001328863279
+    second: Durability_11
+  - first:
+      213: 3925538590825445636
+    second: Durability_12
+  - first:
+      213: -4429445308414540306
+    second: Durability_13
+  - first:
+      213: -3102587044136808267
+    second: Durability_14
+  - first:
+      213: -8897979600755620764
+    second: Durability_15
+  - first:
+      213: -8750299198048979682
+    second: Durability_16
+  - first:
+      213: -1728313873696435134
+    second: Durability_17
+  - first:
+      213: 3812474444310078944
+    second: Durability_18
+  - first:
+      213: -1164380492896237892
+    second: Durability_19
+  - first:
+      213: 2628263041067620371
+    second: Durability_20
+  - first:
+      213: 400758842738578099
+    second: Durability_21
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: Durability_0
+      rect:
+        serializedVersion: 2
+        x: 38
+        y: 802
+        width: 118
+        height: 118
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: accefd7fca9d47540800000000000000
+      internalID: 5004864422831713482
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_1
+      rect:
+        serializedVersion: 2
+        x: 226
+        y: 802
+        width: 122
+        height: 122
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 54436fa99b766e9e0800000000000000
+      internalID: -1592471371362454459
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_2
+      rect:
+        serializedVersion: 2
+        x: 418
+        y: 802
+        width: 122
+        height: 122
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 951f8fc4fb073b870800000000000000
+      internalID: 8697419272315007321
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_3
+      rect:
+        serializedVersion: 2
+        x: 610
+        y: 798
+        width: 126
+        height: 126
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0502d14ab2f445c10800000000000000
+      internalID: 2041343579961237584
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_4
+      rect:
+        serializedVersion: 2
+        x: 806
+        y: 802
+        width: 118
+        height: 118
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dff911ed690ee0c20800000000000000
+      internalID: 3174721725918191613
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_5
+      rect:
+        serializedVersion: 2
+        x: 38
+        y: 610
+        width: 118
+        height: 118
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7f936adb7258015c0800000000000000
+      internalID: -4246748042878371337
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_6
+      rect:
+        serializedVersion: 2
+        x: 234
+        y: 614
+        width: 110
+        height: 110
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 067938955aa606720800000000000000
+      internalID: 2837385023647356768
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_7
+      rect:
+        serializedVersion: 2
+        x: 426
+        y: 618
+        width: 110
+        height: 106
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fce1063f7e8d386c0800000000000000
+      internalID: -4142228741518516529
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_8
+      rect:
+        serializedVersion: 2
+        x: 618
+        y: 614
+        width: 110
+        height: 110
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8ba602427eab96d60800000000000000
+      internalID: 7884038124595079864
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_9
+      rect:
+        serializedVersion: 2
+        x: 806
+        y: 614
+        width: 114
+        height: 114
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e55fe97e6fb9839c0800000000000000
+      internalID: -3947233588640025250
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_10
+      rect:
+        serializedVersion: 2
+        x: 38
+        y: 422
+        width: 114
+        height: 114
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9f7c63e5e46fab400800000000000000
+      internalID: 340855538268424185
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_11
+      rect:
+        serializedVersion: 2
+        x: 234
+        y: 422
+        width: 110
+        height: 110
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f285a856056aa2200800000000000000
+      internalID: 156120001328863279
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_12
+      rect:
+        serializedVersion: 2
+        x: 422
+        y: 422
+        width: 114
+        height: 110
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 409fc3acc805a7630800000000000000
+      internalID: 3925538590825445636
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_13
+      rect:
+        serializedVersion: 2
+        x: 614
+        y: 418
+        width: 118
+        height: 118
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ee54eefc5f27782c0800000000000000
+      internalID: -4429445308414540306
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_14
+      rect:
+        serializedVersion: 2
+        x: 806
+        y: 418
+        width: 118
+        height: 118
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5b01f75858561f4d0800000000000000
+      internalID: -3102587044136808267
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_15
+      rect:
+        serializedVersion: 2
+        x: 34
+        y: 226
+        width: 122
+        height: 122
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4640a4652b6048480800000000000000
+      internalID: -8897979600755620764
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_16
+      rect:
+        serializedVersion: 2
+        x: 226
+        y: 222
+        width: 126
+        height: 126
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e15b7ed8d31b09680800000000000000
+      internalID: -8750299198048979682
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_17
+      rect:
+        serializedVersion: 2
+        x: 418
+        y: 226
+        width: 122
+        height: 122
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 244d1f950bbc308e0800000000000000
+      internalID: -1728313873696435134
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_18
+      rect:
+        serializedVersion: 2
+        x: 614
+        y: 230
+        width: 114
+        height: 114
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0e56b58ce41a8e430800000000000000
+      internalID: 3812474444310078944
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_19
+      rect:
+        serializedVersion: 2
+        x: 806
+        y: 226
+        width: 118
+        height: 118
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cb686816c1a47dfe0800000000000000
+      internalID: -1164380492896237892
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_20
+      rect:
+        serializedVersion: 2
+        x: 34
+        y: 34
+        width: 122
+        height: 122
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3189f1b8f47797420800000000000000
+      internalID: 2628263041067620371
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Durability_21
+      rect:
+        serializedVersion: 2
+        x: 226
+        y: 34
+        width: 122
+        height: 122
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3b2970e4b08cf8500800000000000000
+      internalID: 400758842738578099
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      Durability_0: 5004864422831713482
+      Durability_1: -1592471371362454459
+      Durability_10: 340855538268424185
+      Durability_11: 156120001328863279
+      Durability_12: 3925538590825445636
+      Durability_13: -4429445308414540306
+      Durability_14: -3102587044136808267
+      Durability_15: -8897979600755620764
+      Durability_16: -8750299198048979682
+      Durability_17: -1728313873696435134
+      Durability_18: 3812474444310078944
+      Durability_19: -1164380492896237892
+      Durability_2: 8697419272315007321
+      Durability_20: 2628263041067620371
+      Durability_21: 400758842738578099
+      Durability_3: 2041343579961237584
+      Durability_4: 3174721725918191613
+      Durability_5: -4246748042878371337
+      Durability_6: 2837385023647356768
+      Durability_7: -4142228741518516529
+      Durability_8: 7884038124595079864
+      Durability_9: -3947233588640025250
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

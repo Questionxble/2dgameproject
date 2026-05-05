@@ -63,16 +63,16 @@ namespace Tests.PlayMode
         {
             // Test buff creation
             var attackBuff = new PlayerMovement.ActiveBuff(
-                PlayerMovement.BuffType.Attack, 
+                PlayerMovement.BuffType.Strength, 
                 10f, 
                 5f, 
-                "Test attack buff"
+                "Test melee buff"
             );
             
-            Assert.AreEqual(PlayerMovement.BuffType.Attack, attackBuff.type);
+            Assert.AreEqual(PlayerMovement.BuffType.Strength, attackBuff.type);
             Assert.AreEqual(10f, attackBuff.value);
             Assert.AreEqual(5f, attackBuff.duration);
-            Assert.AreEqual("Test attack buff", attackBuff.description);
+            Assert.AreEqual("Test melee buff", attackBuff.description);
         }
         
         [Test]

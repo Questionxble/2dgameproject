@@ -1,0 +1,81 @@
+{
+  "steps": [
+    {
+      "action": "MoveLeft",
+      "title": "Walk Left",
+      "soulText": "Let's begin with something even a breathing mortal can manage.",
+      "instruction": "Hold A or Left Arrow to walk left.",
+      "minDisplaySeconds": 2.4
+    },
+    {
+      "action": "MoveRight",
+      "title": "Walk Right",
+      "soulText": "Good. Now the other way, before I decide you are hopeless.",
+      "instruction": "Hold D or Right Arrow to walk right.",
+      "minDisplaySeconds": 2.4
+    },
+    {
+      "action": "Jump",
+      "title": "Jump",
+      "soulText": "Gravity is rude. Ignore it for a moment.",
+      "instruction": "Press Space, W, or Up Arrow to jump.",
+      "minDisplaySeconds": 2.6
+    },
+    {
+      "action": "Dash",
+      "title": "Dash",
+      "soulText": "A quick burst keeps you alive longer than confidence ever will.",
+      "instruction": "Press Q to dash.",
+      "minDisplaySeconds": 2.8
+    },
+    {
+      "action": "Block",
+      "title": "Block",
+      "soulText": "Raise your guard before something unpleasant reaches us.",
+      "instruction": "Hold Left Shift to block.",
+      "minDisplaySeconds": 2.8
+    },
+    {
+      "action": "Interact",
+      "title": "Interact",
+      "soulText": "Not every problem is solved by striking it.",
+      "instruction": "Press E to interact with nearby objects or pickups.",
+      "minDisplaySeconds": 2.8
+    },
+    {
+      "action": "EquipAnyShard",
+      "title": "Equip A Shard",
+      "soulText": "Find a shard and claim it. You are not much of a threat empty-handed.",
+      "instruction": "Pick up and equip any shard to unlock combat tutorials.",
+      "minDisplaySeconds": 3.0
+    },
+    {
+      "action": "OpenShardMenu",
+      "title": "Shard Switching",
+      "soulText": "Your shard controls sit on a hold, not a tap. Try to keep up.",
+      "instruction": "Hold R to open the shard switch menu.",
+      "minDisplaySeconds": 3.0
+    },
+    {
+      "action": "LeftClickAttack",
+      "title": "Primary Attack",
+      "soulText": "Now show me an attack worth commenting on.",
+      "instruction": "After equipping a shard, left click to use its primary attack.",
+      "minDisplaySeconds": 3.0
+    },
+    {
+      "action": "RightClickAttack",
+      "title": "Secondary Attack",
+      "soulText": "Every shard has another trick. Use it.",
+      "instruction": "Right click to use your shard's secondary attack.",
+      "minDisplaySeconds": 3.0
+    },
+    {
+      "action": "Ultimate",
+      "title": "Ultimate",
+      "soulText": "When your ultimate bar fills, spend it before the moment passes.",
+      "instruction": "When your ultimate is ready, press T to unleash it.",
+      "minDisplaySeconds": 3.2
+    }
+  ]
+}

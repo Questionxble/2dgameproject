@@ -10,11 +10,13 @@ public class FireBreathParticleSpawner : MonoBehaviour
     
     private float surfaceCheckInterval = 0.5f; // Check for surface every 0.5 seconds
     private DamageObject damageObject;
+    private Collider2D damageCollider;
     
     void Start()
     {
         // Get the DamageObject component
         damageObject = GetComponent<DamageObject>();
+        damageCollider = GetComponent<Collider2D>();
         
         // Subscribe to the damage object's player hit callback
         if (damageObject != null)
@@ -51,55 +53,58 @@ public class FireBreathParticleSpawner : MonoBehaviour
     void CheckForSurfaceCollision()
     {
         if (dragonBoss == null) return;
-        
-        Vector3 position = transform.position;
-        LayerMask surfaceLayerMask = dragonBoss.GetSurfaceLayerMask();
-        
-        Debug.Log($"FireBreathParticleSpawner: Checking surface collision from {position} with layerMask {surfaceLayerMask.value}");
-        
+
         // Get all colliders on this GameObject to exclude them from raycast
         Collider2D[] selfColliders = GetComponents<Collider2D>();
-        
-        // Raycast down to find surfaces (longer distance for flying attacks)
-        RaycastHit2D[] allGroundHits = Physics2D.RaycastAll(position, Vector2.down, 10f, surfaceLayerMask);
-        foreach (var hit in allGroundHits)
+
+        if (TryFindSurfaceHit(Vector2.down, 10f, selfColliders, out RaycastHit2D groundHit))
         {
-            if (hit.collider != null && !IsSelfCollider(hit.collider, selfColliders))
-            {
-                Debug.Log($"FireBreathParticleSpawner: Ground raycast hit {hit.collider.name} on layer {hit.collider.gameObject.layer}");
-                
-                // Additional check: make sure we're not hitting the dragon or other damage zones
-                if (!IsInvalidCollider(hit.collider))
-                {
-                    dragonBoss.HandleSurfaceFireHit(hit.point);
-                    Debug.Log($"FireBreathParticleSpawner: Valid ground hit at {hit.point} on {hit.collider.name}");
-                    break; // Only spawn one particle per direction
-                }
-            }
+            dragonBoss.HandleSurfaceFireHit(groundHit.point, groundHit.collider);
+            return;
         }
-        
-        // Check sides for wall collisions (shorter distance)
-        RaycastHit2D[] leftHits = Physics2D.RaycastAll(position, Vector2.left, 3f, surfaceLayerMask);
-        foreach (var hit in leftHits)
+
+        if (TryFindSurfaceHit(Vector2.left, 3f, selfColliders, out RaycastHit2D leftHit))
         {
-            if (hit.collider != null && !IsSelfCollider(hit.collider, selfColliders) && !IsInvalidCollider(hit.collider))
-            {
-                dragonBoss.HandleSurfaceFireHit(hit.point);
-                Debug.Log($"FireBreathParticleSpawner: Valid left wall hit at {hit.point} on {hit.collider.name}");
-                break;
-            }
+            dragonBoss.HandleSurfaceFireHit(leftHit.point, leftHit.collider);
+            return;
         }
-        
-        RaycastHit2D[] rightHits = Physics2D.RaycastAll(position, Vector2.right, 3f, surfaceLayerMask);
-        foreach (var hit in rightHits)
+
+        if (TryFindSurfaceHit(Vector2.right, 3f, selfColliders, out RaycastHit2D rightHit))
         {
-            if (hit.collider != null && !IsSelfCollider(hit.collider, selfColliders) && !IsInvalidCollider(hit.collider))
-            {
-                dragonBoss.HandleSurfaceFireHit(hit.point);
-                Debug.Log($"FireBreathParticleSpawner: Valid right wall hit at {hit.point} on {hit.collider.name}");
-                break;
-            }
+            dragonBoss.HandleSurfaceFireHit(rightHit.point, rightHit.collider);
         }
+    }
+
+    private bool TryFindSurfaceHit(Vector2 direction, float distance, Collider2D[] selfColliders, out RaycastHit2D resolvedHit)
+    {
+        LayerMask surfaceLayerMask = dragonBoss.GetSurfaceLayerMask();
+        Vector2 castOrigin = damageCollider != null ? damageCollider.bounds.center : (Vector2)transform.position;
+        Vector2 castSize = damageCollider != null ? damageCollider.bounds.size : Vector2.one * 0.25f;
+
+        if (direction.x != 0f)
+        {
+            castSize = new Vector2(Mathf.Max(0.1f, castSize.x * 0.3f), Mathf.Max(0.2f, castSize.y * 0.95f));
+        }
+        else
+        {
+            castSize = new Vector2(Mathf.Max(0.2f, castSize.x * 0.95f), Mathf.Max(0.1f, castSize.y * 0.3f));
+        }
+
+        RaycastHit2D[] hits = Physics2D.BoxCastAll(castOrigin, castSize, 0f, direction, distance, surfaceLayerMask);
+        for (int hitIndex = 0; hitIndex < hits.Length; hitIndex++)
+        {
+            RaycastHit2D hit = hits[hitIndex];
+            if (hit.collider == null || IsSelfCollider(hit.collider, selfColliders) || IsInvalidCollider(hit.collider))
+            {
+                continue;
+            }
+
+            resolvedHit = hit;
+            return true;
+        }
+
+        resolvedHit = default;
+        return false;
     }
     
     /// <summary>

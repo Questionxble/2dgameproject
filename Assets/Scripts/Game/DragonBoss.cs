@@ -1186,6 +1186,7 @@ public class DragonBoss : NetworkBehaviour
         damageComponent.damageRate = 0.3f;
         damageComponent.canDamageEnemies = false;
         damageComponent.excludeLayers = LayerMask.GetMask("Entities");
+        damageComponent.ConfigureAsEnemyAttack(blockable: false);
         
         // Add fire particle spawner component for flying fire breath
         FireBreathParticleSpawner particleSpawner = damageZone.AddComponent<FireBreathParticleSpawner>();
@@ -1299,6 +1300,7 @@ public class DragonBoss : NetworkBehaviour
         damageComponent.damageAmount = (int)damage;
         damageComponent.damageRate = 0.5f; // Damage every 0.5 seconds
         damageComponent.canDamageEnemies = false; // Boss attacks don't damage other enemies
+        damageComponent.ConfigureAsEnemyAttack(blockable: false);
         
         // Entities cannot damage other Entities (according to your layer system)
         damageComponent.excludeLayers = LayerMask.GetMask("Entities");
@@ -1375,6 +1377,7 @@ public class DragonBoss : NetworkBehaviour
         damageComponent.damageAmount = (int)damage;
         damageComponent.damageRate = 0.5f; // Damage every 0.5 seconds
         damageComponent.canDamageEnemies = false; // Boss attacks don't damage other enemies
+        damageComponent.ConfigureAsEnemyAttack();
         
         // Entities cannot damage other Entities
         damageComponent.excludeLayers = LayerMask.GetMask("Entities");
@@ -1459,6 +1462,7 @@ public class DragonBoss : NetworkBehaviour
         damageComponent.damageAmount = (int)damage;
         damageComponent.damageRate = 0.3f; // Faster damage rate for flying attack
         damageComponent.canDamageEnemies = false;
+        damageComponent.ConfigureAsEnemyAttack();
         
         // Entities cannot damage other Entities, but can damage Player
         // Only exclude other Entities, not the Player layer
@@ -1508,7 +1512,7 @@ public class DragonBoss : NetworkBehaviour
     /// <summary>
     /// Spawns fire particle emitter at a surface collision point
     /// </summary>
-    private void SpawnFireParticleAtSurface(Vector3 position)
+    private void SpawnFireParticleAtSurface(Vector3 position, Collider2D surfaceCollider = null)
     {
         if (fireParticleEmitterPrefab == null) return;
         
@@ -1539,41 +1543,44 @@ public class DragonBoss : NetworkBehaviour
         // Check if we already have a particle near this position
         if (recentParticlePositions.ContainsKey(roundedPosition)) return;
         
-        // Do a more careful raycast to find the actual ground surface
-        // Cast from above the position downwards to find solid ground
-        Vector3 rayStart = new Vector3(position.x, position.y + 5f, position.z);
-        RaycastHit2D hit = Physics2D.Raycast(rayStart, Vector2.down, 15f, surfaceLayerMask);
-        
         Vector3 spawnPosition;
-        if (hit.collider != null)
+        if (surfaceCollider != null)
         {
-            // Verify this isn't an invalid collider
-            bool isValid = true;
-            
-            // Check for dragon or damage objects
-            if (hit.collider.GetComponent<DragonBoss>() != null ||
-                hit.collider.GetComponent<DamageObject>() != null ||
-                hit.collider.name.Contains("Dragon"))
+            if (!IsValidFireSurface(surfaceCollider))
             {
-                isValid = false;
-            }
-            
-            if (isValid)
-            {
-                spawnPosition = hit.point;
-                Debug.Log($"DragonBoss: Found valid surface at {spawnPosition} on {hit.collider.name}");
-            }
-            else
-            {
-                Debug.Log($"DragonBoss: Skipped invalid surface: {hit.collider.name}");
                 return;
             }
+
+            spawnPosition = surfaceCollider.ClosestPoint(position);
+            Debug.Log($"DragonBoss: Using provided surface collider {surfaceCollider.name} for fire particle spawn at {spawnPosition}");
         }
         else
         {
-            // If no valid surface found, don't spawn
-            Debug.Log($"DragonBoss: No valid surface found near {position}");
-            return;
+            // Fallback to a raycast if a specific surface collider was not provided.
+            Vector3 rayStart = new Vector3(position.x, position.y + 5f, position.z);
+            RaycastHit2D[] hits = Physics2D.RaycastAll(rayStart, Vector2.down, 15f, surfaceLayerMask);
+            bool foundSurface = false;
+
+            spawnPosition = position;
+            for (int hitIndex = 0; hitIndex < hits.Length; hitIndex++)
+            {
+                RaycastHit2D hit = hits[hitIndex];
+                if (hit.collider == null || !IsValidFireSurface(hit.collider))
+                {
+                    continue;
+                }
+
+                spawnPosition = hit.point;
+                foundSurface = true;
+                Debug.Log($"DragonBoss: Found valid fallback surface at {spawnPosition} on {hit.collider.name}");
+                break;
+            }
+
+            if (!foundSurface)
+            {
+                Debug.Log($"DragonBoss: No valid surface found near {position}");
+                return;
+            }
         }
         
         GameObject fireParticle = Instantiate(fireParticleEmitterPrefab, spawnPosition, Quaternion.identity);
@@ -1586,6 +1593,32 @@ public class DragonBoss : NetworkBehaviour
         StartCoroutine(DestroyAfterTime(fireParticle, fireParticleDuration));
         
         Debug.Log($"DragonBoss: Spawned fire particle at surface: {spawnPosition}");
+    }
+
+    private bool IsValidFireSurface(Collider2D collider)
+    {
+        if (collider == null)
+        {
+            return false;
+        }
+
+        if (collider.GetComponent<DragonBoss>() != null || collider.GetComponent<DamageObject>() != null || collider.name.Contains("Dragon"))
+        {
+            return false;
+        }
+
+        if (collider.gameObject.layer == LayerMask.NameToLayer("Entities"))
+        {
+            return false;
+        }
+
+        if (collider.CompareTag("Player"))
+        {
+            return false;
+        }
+
+        int colliderMask = 1 << collider.gameObject.layer;
+        return (surfaceLayerMask.value & colliderMask) != 0;
     }
     
     /// <summary>
@@ -1681,6 +1714,11 @@ public class DragonBoss : NetworkBehaviour
     public void HandleSurfaceFireHit(Vector3 position)
     {
         SpawnFireParticleAtSurface(position);
+    }
+
+    public void HandleSurfaceFireHit(Vector3 position, Collider2D surfaceCollider)
+    {
+        SpawnFireParticleAtSurface(position, surfaceCollider);
     }
     
     /// <summary>

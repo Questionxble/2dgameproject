@@ -1,5 +1,6 @@
 using UnityEngine;
 using Unity.Netcode;
+using Unity.Collections;
 using UnityEngine.Rendering;
 using UnityEngine.Serialization;
 using System;
@@ -10,6 +11,8 @@ using System.Text;
 
 public class MultiplayerGameManager : NetworkBehaviour
 {
+    public static event Action<string, Vector3> SessionCheckpointActivated;
+
     [Header("Network Settings")]
     [SerializeField] private Transform player1SpawnPoint;
     [SerializeField] private Transform player2SpawnPoint;
@@ -58,6 +61,9 @@ public class MultiplayerGameManager : NetworkBehaviour
     private bool idleShutdownRequested;
     private string activeLobbyCode = string.Empty;
     private string activeLobbyOwnerSubject = string.Empty;
+    private bool hasActiveCheckpoint;
+    private Vector3 activeCheckpointPosition;
+    private string activeCheckpointId = string.Empty;
     
     private void Start()
     {
@@ -105,6 +111,7 @@ public class MultiplayerGameManager : NetworkBehaviour
         approvedJoinTicketClaims.Clear();
         activeLobbyCode = string.Empty;
         activeLobbyOwnerSubject = string.Empty;
+        ClearActiveCheckpointProgress();
         
         base.OnDestroy();
     }
@@ -490,6 +497,7 @@ public class MultiplayerGameManager : NetworkBehaviour
             if (GetConnectedPlayerCount() == 0)
             {
                 ClearActiveLobbyReservation("The last connected player left the session.");
+                ClearActiveCheckpointProgress("Checkpoint progress reset because the session is empty.");
             }
         }
 
@@ -620,6 +628,57 @@ public class MultiplayerGameManager : NetworkBehaviour
         RespawnPlayerForClient(clientId);
     }
 
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void ActivateCheckpointServerRpc(Vector3 checkpointPosition, FixedString128Bytes checkpointId)
+    {
+        SetActiveCheckpoint(checkpointPosition, checkpointId.ToString());
+    }
+
+    public void SetActiveCheckpoint(Vector3 checkpointPosition, string checkpointId)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        string resolvedCheckpointId = string.IsNullOrWhiteSpace(checkpointId)
+            ? "checkpoint"
+            : checkpointId.Trim();
+
+        bool checkpointChanged = !hasActiveCheckpoint
+            || !string.Equals(activeCheckpointId, resolvedCheckpointId, StringComparison.Ordinal)
+            || (activeCheckpointPosition - checkpointPosition).sqrMagnitude > 0.001f;
+
+        hasActiveCheckpoint = true;
+        activeCheckpointPosition = checkpointPosition;
+        activeCheckpointId = resolvedCheckpointId;
+
+        if (checkpointChanged)
+        {
+            Debug.Log($"[MultiplayerGameManager] Active checkpoint set to '{activeCheckpointId}' at {activeCheckpointPosition}.");
+            NotifyCheckpointActivatedClientRpc(new FixedString128Bytes(activeCheckpointId), activeCheckpointPosition);
+        }
+    }
+
+    [ClientRpc]
+    private void NotifyCheckpointActivatedClientRpc(FixedString128Bytes checkpointId, Vector3 checkpointPosition)
+    {
+        SessionCheckpointActivated?.Invoke(checkpointId.ToString(), checkpointPosition);
+    }
+
+    private void ClearActiveCheckpointProgress(string reason = null)
+    {
+        bool hadCheckpoint = hasActiveCheckpoint;
+        hasActiveCheckpoint = false;
+        activeCheckpointPosition = Vector3.zero;
+        activeCheckpointId = string.Empty;
+
+        if (hadCheckpoint && !string.IsNullOrWhiteSpace(reason))
+        {
+            Debug.Log($"[MultiplayerGameManager] {reason}");
+        }
+    }
+
     public void RespawnPlayerForClient(ulong clientId)
     {
         if (!IsServer) return;
@@ -658,6 +717,11 @@ public class MultiplayerGameManager : NetworkBehaviour
 
     private Vector3 GetSpawnPositionForSlot(int slotIndex)
     {
+        if (hasActiveCheckpoint)
+        {
+            return activeCheckpointPosition + GetFallbackSpawnOffsetForSlot(slotIndex);
+        }
+
         Vector3 origin = player1SpawnPoint != null ? player1SpawnPoint.position : Vector3.zero;
 
         switch (slotIndex)
@@ -665,13 +729,30 @@ public class MultiplayerGameManager : NetworkBehaviour
             case 0:
                 return player1SpawnPoint != null ? player1SpawnPoint.position : origin;
             case 1:
-                return player2SpawnPoint != null ? player2SpawnPoint.position : origin + Vector3.right * fallbackSpawnSpacing;
+                return player2SpawnPoint != null ? player2SpawnPoint.position : origin + GetFallbackSpawnOffsetForSlot(slotIndex);
             case 2:
-                return player3SpawnPoint != null ? player3SpawnPoint.position : origin + Vector3.left * fallbackSpawnSpacing;
+                return player3SpawnPoint != null ? player3SpawnPoint.position : origin + GetFallbackSpawnOffsetForSlot(slotIndex);
             case 3:
-                return player4SpawnPoint != null ? player4SpawnPoint.position : origin + Vector3.right * fallbackSpawnSpacing * 2f;
+                return player4SpawnPoint != null ? player4SpawnPoint.position : origin + GetFallbackSpawnOffsetForSlot(slotIndex);
             default:
-                return origin + Vector3.right * fallbackSpawnSpacing * slotIndex;
+                return origin + GetFallbackSpawnOffsetForSlot(slotIndex);
+        }
+    }
+
+    private Vector3 GetFallbackSpawnOffsetForSlot(int slotIndex)
+    {
+        switch (slotIndex)
+        {
+            case 0:
+                return Vector3.zero;
+            case 1:
+                return Vector3.right * fallbackSpawnSpacing;
+            case 2:
+                return Vector3.left * fallbackSpawnSpacing;
+            case 3:
+                return Vector3.right * fallbackSpawnSpacing * 2f;
+            default:
+                return Vector3.right * fallbackSpawnSpacing * slotIndex;
         }
     }
 }

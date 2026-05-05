@@ -16,6 +16,11 @@ public class WeaponClassController : NetworkBehaviour
     [Header("Interaction Settings")]
     [SerializeField] private float interactionRange = 2f;
     [SerializeField] private Vector3 promptOffset = new Vector3(0, 1.2f, 0); // Lower above shard
+
+    [Header("Input Settings")]
+    [SerializeField] private Key shardSwitchKey = Key.R;
+    [SerializeField] private float shardSwitchHoldActivationTime = 0.12f;
+    [SerializeField] private Key ultimateKey = Key.T;
     
     [Header("Player Animation Controllers")]
     [SerializeField] private RuntimeAnimatorController defaultPlayerAnimController = null; // Default animation when no shards equipped
@@ -216,6 +221,8 @@ public class WeaponClassController : NetworkBehaviour
     private ShardType[] equippedShards = new ShardType[2]; // Two slots
     private int activeSlotIndex = 0;
     private bool isWeaponMenuOpen = false;
+    private float shardSwitchKeyHoldStartTime = -1f;
+    private bool shardSwitchHoldConsumed = false;
     
     // ValorShard Charging System
     private bool isChargingValorAttack = false;
@@ -956,6 +963,8 @@ public class WeaponClassController : NetworkBehaviour
     public bool IsChargingValorAttack => isChargingValorAttack;
     public bool IsWhisperShardActive => equippedShards[activeSlotIndex] == ShardType.WhisperShard;
     public bool IsSoulShardActive => equippedShards[activeSlotIndex] == ShardType.SoulShard;
+    public event System.Action LocalShardMenuOpened;
+    public event System.Action LocalUltimateActivated;
     
     public override void OnNetworkSpawn()
     {
@@ -1686,23 +1695,50 @@ public class WeaponClassController : NetworkBehaviour
             HideSwapTargetIndicator();
         }
         
-        // Check for weapon switching using new Input System
-        bool qKeyHeld = Keyboard.current != null && Keyboard.current.qKey.isPressed;
-        if (qKeyHeld)
+        // Check for weapon switching using new Input System.
+        // A quick tap still activates ultimate, while holding the same key opens shard switching.
+        KeyControl shardSwitchControl = Keyboard.current != null ? Keyboard.current[shardSwitchKey] : null;
+        bool shardSwitchKeyPressed = shardSwitchControl != null && shardSwitchControl.wasPressedThisFrame;
+        bool shardSwitchKeyHeld = shardSwitchControl != null && shardSwitchControl.isPressed;
+        bool shardSwitchKeyReleased = shardSwitchControl != null && shardSwitchControl.wasReleasedThisFrame;
+
+        if (shardSwitchKeyPressed)
         {
-            // Disable player movement while in weapon menu
-            isWeaponMenuOpen = true;
-            
-            bool leftPressed = Keyboard.current.leftArrowKey.wasPressedThisFrame || Keyboard.current.aKey.wasPressedThisFrame;
-            bool rightPressed = Keyboard.current.rightArrowKey.wasPressedThisFrame || Keyboard.current.dKey.wasPressedThisFrame;
-            
-            if (leftPressed)
+            shardSwitchKeyHoldStartTime = Time.time;
+            shardSwitchHoldConsumed = false;
+        }
+
+        if (shardSwitchKeyHeld)
+        {
+            if (shardSwitchKeyHoldStartTime < 0f)
             {
-                SwitchToSlot(1); // Left arrow switches to left slot (slot 1)
+                shardSwitchKeyHoldStartTime = Time.time;
             }
-            else if (rightPressed)
+
+            bool shouldOpenShardMenu = Time.time - shardSwitchKeyHoldStartTime >= shardSwitchHoldActivationTime;
+            bool wasWeaponMenuOpen = isWeaponMenuOpen;
+            isWeaponMenuOpen = shouldOpenShardMenu;
+
+            if (!wasWeaponMenuOpen && shouldOpenShardMenu && (IsOwner || !IsSpawned))
             {
-                SwitchToSlot(0); // Right arrow switches to right slot (slot 0)
+                LocalShardMenuOpened?.Invoke();
+            }
+
+            if (shouldOpenShardMenu)
+            {
+                shardSwitchHoldConsumed = true;
+
+                bool leftPressed = Keyboard.current.leftArrowKey.wasPressedThisFrame || Keyboard.current.aKey.wasPressedThisFrame;
+                bool rightPressed = Keyboard.current.rightArrowKey.wasPressedThisFrame || Keyboard.current.dKey.wasPressedThisFrame;
+
+                if (leftPressed)
+                {
+                    SwitchToSlot(1); // Left arrow switches to left slot (slot 1)
+                }
+                else if (rightPressed)
+                {
+                    SwitchToSlot(0); // Right arrow switches to right slot (slot 0)
+                }
             }
         }
         else
@@ -1818,12 +1854,38 @@ public class WeaponClassController : NetworkBehaviour
                 isAutoFiring = false;
             }
             
-            // Handle Ultimate Activation (R key)
-            bool rKeyPressed = Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame;
-            if (rKeyPressed && playerMovement.HasFullUltimate())
+            // Handle ultimate activation.
+            // If ultimate and shard switching share the same key, use a quick tap for ultimate.
+            KeyControl ultimateControl = Keyboard.current != null ? Keyboard.current[ultimateKey] : null;
+            bool ultimateKeyTriggered = false;
+
+            if (ultimateControl != null)
+            {
+                if (ultimateKey == shardSwitchKey)
+                {
+                    bool isQuickTap = ultimateControl.wasReleasedThisFrame
+                        && !shardSwitchHoldConsumed
+                        && shardSwitchKeyHoldStartTime >= 0f
+                        && Time.time - shardSwitchKeyHoldStartTime < shardSwitchHoldActivationTime;
+                    ultimateKeyTriggered = isQuickTap;
+                }
+                else
+                {
+                    ultimateKeyTriggered = ultimateControl.wasPressedThisFrame;
+                }
+            }
+
+            if (ultimateKeyTriggered && playerMovement.HasFullUltimate())
             {
                 ActivateUltimate();
             }
+        }
+
+        if (shardSwitchKeyReleased)
+        {
+            shardSwitchKeyHoldStartTime = -1f;
+            shardSwitchHoldConsumed = false;
+            isWeaponMenuOpen = false;
         }
     }
     
@@ -1903,8 +1965,19 @@ public class WeaponClassController : NetworkBehaviour
     [ServerRpc]
     private void RemoveWorldShardServerRpc(int shardTypeInt, Vector3 shardPosition)
     {
-        RemoveWorldShard((ShardType)shardTypeInt, shardPosition);
-        RemoveWorldShardClientRpc(shardTypeInt, shardPosition);
+        RemoveWorldShardAcrossClients((ShardType)shardTypeInt, shardPosition);
+    }
+
+    [ServerRpc]
+    public void RestoreMissingWorldShardServerRpc(int shardTypeInt, Vector3 shardPosition)
+    {
+        RemoveWorldShardAcrossClients((ShardType)shardTypeInt, shardPosition);
+    }
+
+    [ServerRpc]
+    public void RestoreWorldShardFromSaveServerRpc(int shardTypeInt, Vector3 shardPosition)
+    {
+        RestoreWorldShardAcrossClients((ShardType)shardTypeInt, shardPosition);
     }
 
     [ClientRpc]
@@ -1916,6 +1989,17 @@ public class WeaponClassController : NetworkBehaviour
         }
 
         RemoveWorldShard((ShardType)shardTypeInt, shardPosition);
+    }
+
+    [ClientRpc]
+    private void RestoreWorldShardFromSaveClientRpc(int shardTypeInt, Vector3 shardPosition)
+    {
+        if (IsServer)
+        {
+            return;
+        }
+
+        RestoreWorldShardFromSave((ShardType)shardTypeInt, shardPosition);
     }
     
     private void SwapShard(ShardType newShardType, int slotToReplace)
@@ -2078,6 +2162,41 @@ public class WeaponClassController : NetworkBehaviour
 
         Destroy(shardObject);
         Debug.Log($"Removed {shardType} shard from world at {shardPosition}");
+    }
+
+    private void RemoveWorldShardAcrossClients(ShardType shardType, Vector3 shardPosition)
+    {
+        RemoveWorldShard(shardType, shardPosition);
+        RemoveWorldShardClientRpc((int)shardType, shardPosition);
+    }
+
+    private void RestoreWorldShardAcrossClients(ShardType shardType, Vector3 shardPosition)
+    {
+        RestoreWorldShardFromSave(shardType, shardPosition);
+        RestoreWorldShardFromSaveClientRpc((int)shardType, shardPosition);
+    }
+
+    private void RestoreWorldShardFromSave(ShardType shardType, Vector3 shardPosition)
+    {
+        GameObject existingShard = FindAnyShardObjectAtPosition(shardPosition);
+        if (existingShard != null)
+        {
+            ConvertShardObject(existingShard, shardType);
+            existingShard.transform.position = shardPosition;
+            existingShard.transform.rotation = Quaternion.identity;
+            existingShard.transform.localScale = Vector3.one;
+            return;
+        }
+
+        GameObject shardPrefab = GetShardPrefabByType(shardType);
+        if (shardPrefab == null)
+        {
+            return;
+        }
+
+        GameObject restoredShard = Instantiate(shardPrefab, shardPosition, Quaternion.identity);
+        restoredShard.name = GetShardObjectName(shardType);
+        restoredShard.tag = GetShardTag(shardType);
     }
 
     private void ConvertWorldShard(ShardType sourceShardType, ShardType replacementShardType, Vector3 shardPosition)
@@ -5157,6 +5276,19 @@ public class WeaponClassController : NetworkBehaviour
     {
         return equippedShards[0] == shardType || equippedShards[1] == shardType;
     }
+
+    public bool HasAnyEquippedShard()
+    {
+        for (int i = 0; i < equippedShards.Length; i++)
+        {
+            if (equippedShards[i] != ShardType.None)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
     
     private int GetEmptySlotIndex()
     {
@@ -6173,6 +6305,10 @@ public class WeaponClassController : NetworkBehaviour
         
         // Consume ultimate charge
         playerMovement.ConsumeUltimateCharge(100f);
+        if (IsOwner || !IsSpawned)
+        {
+            LocalUltimateActivated?.Invoke();
+        }
         Debug.Log($"Ultimate activated for {activeWeapon}! Ultimate charge consumed.");
     }
     
