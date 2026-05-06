@@ -34,7 +34,7 @@ Set up a proper CI/CD pipeline instead of manual integration and deployment whic
 
 ## Evidence
 # SonarQube and Trivy report: 
-https://github.com/Questionxble/2dgameproject/blob/multiplayer/Documentation/Sprint6/ChristianHenken/SonarQubeTrivyReports.pdf
+https://github.com/Questionxble/2dgameproject/blob/multiplayer/Documentation/Sprint6/ChristianHenken/SonarQubeTrivyReport.pdf
 
 ## Statement of Integrity
 This coverage was generated from automated tests executed during this sprint.
