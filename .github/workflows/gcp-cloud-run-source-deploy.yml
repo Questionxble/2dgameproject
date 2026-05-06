@@ -1,0 +1,71 @@
+name: GCP Cloud Run Source Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - multiplayer-release
+    paths:
+      - gcp/cloud_run/**
+      - .github/workflows/gcp-cloud-run-source-deploy.yml
+
+concurrency:
+  group: gcp-cloud-run-source-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-cloud-run:
+    name: Deploy Cloud Run Orchestrator Source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy Cloud Run source
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_CLOUD_RUN_REGION: ${{ vars.GCP_CLOUD_RUN_REGION }}
+          GCP_CLOUD_RUN_SERVICE: ${{ vars.GCP_CLOUD_RUN_SERVICE }}
+          JOIN_TICKET_SECRET_SECRET_NAME: ${{ vars.JOIN_TICKET_SECRET_SECRET_NAME }}
+          SERVER_REGISTRATION_TOKEN_SECRET_NAME: ${{ vars.SERVER_REGISTRATION_TOKEN_SECRET_NAME }}
+        run: |
+          set -euo pipefail
+
+          DEPLOY_ARGS=(
+            run deploy "${GCP_CLOUD_RUN_SERVICE}"
+            --project "${GCP_PROJECT_ID}"
+            --region "${GCP_CLOUD_RUN_REGION}"
+            --source "${GITHUB_WORKSPACE}/gcp/cloud_run"
+            --allow-unauthenticated
+            --quiet
+          )
+
+          if [ -n "${JOIN_TICKET_SECRET_SECRET_NAME}" ] && [ -n "${SERVER_REGISTRATION_TOKEN_SECRET_NAME}" ]; then
+            DEPLOY_ARGS+=(--update-secrets "JOIN_TICKET_SECRET=${JOIN_TICKET_SECRET_SECRET_NAME}:latest,SERVER_REGISTRATION_TOKEN=${SERVER_REGISTRATION_TOKEN_SECRET_NAME}:latest")
+          fi
+
+          gcloud "${DEPLOY_ARGS[@]}"
+
+      - name: Job summary
+        run: |
+          {
+            echo "## Cloud Run Source Deployment"
+            echo ""
+            echo "- Service: ${{ vars.GCP_CLOUD_RUN_SERVICE }}"
+            echo "- Region: ${{ vars.GCP_CLOUD_RUN_REGION }}"
+          } >> "$GITHUB_STEP_SUMMARY"
