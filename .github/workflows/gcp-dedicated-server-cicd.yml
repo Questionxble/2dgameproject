@@ -1,0 +1,150 @@
+name: GCP Dedicated Server CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_orchestrator_source:
+        description: Deploy the Cloud Run orchestrator source after rotating the VM template
+        required: false
+        default: false
+        type: boolean
+      stop_source_instance_after_deploy:
+        description: Stop the source VM again if this workflow had to start it
+        required: false
+        default: true
+        type: boolean
+  push:
+    branches:
+      - multiplayer-release
+    paths:
+      - Assets/**
+      - Packages/**
+      - ProjectSettings/**
+      - Assets/Editor/CommandLineBuild.cs
+      - install_server_service.sh
+      - server_run.sh
+      - server_start.sh
+      - sync_gce_instance_metadata.sh
+      - ci/gcp/**
+      - .github/workflows/gcp-dedicated-server-cicd.yml
+
+concurrency:
+  group: gcp-dedicated-server-cicd
+  cancel-in-progress: false
+
+jobs:
+  build-server:
+    name: Build Linux Dedicated Server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-StandaloneLinux64-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt', 'Assets/Editor/CommandLineBuild.cs') }}
+          restore-keys: |
+            Library-StandaloneLinux64-
+
+      - name: Build Linux dedicated server
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          unityVersion: 6000.2.5f1
+          targetPlatform: StandaloneLinux64
+          buildMethod: CommandLineBuild.BuildLinuxDedicatedServer
+          customParameters: -buildOutput /github/workspace/build/LinuxBuildFiles/LinuxServerBuild.x86_64
+
+      - name: Stage deployment bundle
+        run: |
+          set -euo pipefail
+          mkdir -p dist/LinuxBuildFiles
+          cp -R build/LinuxBuildFiles/. dist/LinuxBuildFiles/
+          cp server_run.sh server_start.sh install_server_service.sh sync_gce_instance_metadata.sh dist/LinuxBuildFiles/
+          tar -C dist -czf dist/dedicated-server-bundle.tgz LinuxBuildFiles
+
+      - name: Upload deployment bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: dedicated-server-bundle
+          path: dist/dedicated-server-bundle.tgz
+          if-no-files-found: error
+
+  deploy-template:
+    name: Roll VM Template And Switch Cloud Run
+    needs: build-server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download deployment bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: dedicated-server-bundle
+          path: dist
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy server bundle and rotate template
+        id: deploy
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_ZONE: ${{ vars.GCP_ZONE }}
+          GCP_SOURCE_INSTANCE_NAME: ${{ vars.GCP_SOURCE_INSTANCE_NAME }}
+          GCP_TARGET_INSTANCE_ID: ${{ vars.GCP_TARGET_INSTANCE_ID }}
+          GCP_TEMPLATE_NAME_PREFIX: ${{ vars.GCP_TEMPLATE_NAME_PREFIX }}
+          GCP_CLOUD_RUN_SERVICE: ${{ vars.GCP_CLOUD_RUN_SERVICE }}
+          GCP_CLOUD_RUN_REGION: ${{ vars.GCP_CLOUD_RUN_REGION }}
+          SERVER_BUNDLE_ARCHIVE: ${{ github.workspace }}/dist/dedicated-server-bundle.tgz
+          VM_SERVICE_USER: ${{ vars.VM_SERVICE_USER }}
+          GCP_SSH_USER: ${{ vars.GCP_SSH_USER }}
+          VM_WORKING_DIR: ${{ vars.VM_WORKING_DIR }}
+          VM_EXECUTABLE_PATH: ${{ vars.VM_EXECUTABLE_PATH }}
+          VM_SERVICE_NAME: ${{ vars.VM_SERVICE_NAME }}
+          SERVER_PORT: ${{ vars.SERVER_PORT }}
+          MAX_PLAYERS: ${{ vars.MAX_PLAYERS }}
+          IDLE_TIMEOUT_SECONDS: ${{ vars.IDLE_TIMEOUT_SECONDS }}
+          GAME_TRANSPORT_MODE: ${{ vars.GAME_TRANSPORT_MODE }}
+          RELAY_CONNECTION_TYPE: ${{ vars.RELAY_CONNECTION_TYPE }}
+          SERVER_RUNTIME_STATUS_ENDPOINT: ${{ vars.SERVER_RUNTIME_STATUS_ENDPOINT }}
+          JOIN_TICKET_SECRET_SECRET_NAME: ${{ vars.JOIN_TICKET_SECRET_SECRET_NAME }}
+          SERVER_REGISTRATION_TOKEN_SECRET_NAME: ${{ vars.SERVER_REGISTRATION_TOKEN_SECRET_NAME }}
+          STOP_SOURCE_INSTANCE_AFTER_DEPLOY: ${{ github.event.inputs.stop_source_instance_after_deploy || 'true' }}
+          DEPLOY_CLOUD_RUN_SOURCE: ${{ github.event.inputs.deploy_orchestrator_source || 'false' }}
+          CLOUD_RUN_SOURCE_DIR: ${{ github.workspace }}/gcp/cloud_run
+          ALLOW_UNAUTHENTICATED_CLOUD_RUN: "true"
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          chmod +x ./ci/gcp/deploy_server_template.sh
+          ./ci/gcp/deploy_server_template.sh
+
+      - name: Job summary
+        run: |
+          {
+            echo "## Dedicated Server Deployment"
+            echo ""
+            echo "- Template: ${{ steps.deploy.outputs.template_resource }}"
+            echo "- Cloud Run URL: ${{ steps.deploy.outputs.cloud_run_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"
