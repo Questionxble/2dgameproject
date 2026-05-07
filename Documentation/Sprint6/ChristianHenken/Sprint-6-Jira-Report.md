@@ -80,9 +80,9 @@ In Progress -> Done
 (If noticeable bugs arise, new issues will be made)
 
 Blockers and Scope Changes:
-- Christian Hernandez still doesn't have a ready-to-use starting map of our game yet because his map file got corrupted over the last sprint, so he had to start over. I was anticipating about moving my contributions onto his map, but that can wait for a later sprint, I suppose.
-- Nothing about the scope changed, my updates were successful, we're going to continue progress with our original development plans.
-- Almost everything that was added from the previous sprint onto this sprint has been carried to the next one due to me dedicating this sprint to reworking the weapon attack logic and planning out enemy types, storm shard and whisper shard ultimate abilities, and general weapon class responsibilities in battle. A lot of time was spent configuring the individual animation controllers (8 of them so far) to manage the animation processing on the enemies, including configuring enemy behavior parameters in the behavioral scripts on their gameobjects. Next sprint, I plan to complete a lot more issues since I spent this last sprint preparing the scripting/animations for this upcoming one.
+- The manual integration and deployment is the main blocker of development for this project at the moment. CI/CD pipeline integration plans after this sprint were made to address this issue.
+- The layout of the repository needs to be reformatted, especially considering that we need to add multiplayer integration and deployment workflows in the single-player main branch for them to work on the repo. After establishing the CI/CD pipeline for multiplayer, we will reformat the layout of the repository in a more professional manner. The main branch will be relocated to a protected single-player branch, and multiplayer will be merged on top of main. We'll also start using appropriate prefixes/suffixes on the branches so that they're more accurately labeled. This is the main scope change that both Christian Hernandez and Christian Henken have approved. 
+- Yes, a lot of things carried over still, but the complexity of their integrations/fixes are miniscule compared to the complexity of the tasks covered this sprint, like the VM allocator + lobby code system and game data save exporter/importer, which is a devops critical rated issue (Accessibility is the most important) compared to slightly annoying bugs or missing feature issues.
 
 Jira Evidence Links:
 Backlog: https://soulful-journey.atlassian.net/jira/software/projects/SJOURNEY/boards/1/backlog
